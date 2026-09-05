@@ -34,7 +34,27 @@ UnitBounds unitBounds(Iterable<HexCoord> coords) {
 /// Held back until solvability checking was solid, which it now thoroughly is.
 /// A whole campaign of the same ellipse is the most repetitive thing about a
 /// generated campaign, and a silhouette costs nothing to vary.
-enum FieldShape { ellipse, bone, fish, paw, crescent, diamond }
+enum FieldShape {
+  ellipse('Open ground'),
+  bone('Bone'),
+  fish('Fish'),
+  paw('Paw'),
+  crescent('Crescent'),
+  diamond('Diamond'),
+  dog('Dog'),
+  cat('Cat'),
+  star('Star'),
+  key('Key'),
+  tree('Tree'),
+  heart('Heart');
+
+  const FieldShape(this.label);
+
+  /// Shown on the level sheet. The outline was a silent flourish for a long
+  /// time — a board is cut to a bone and nothing ever says so, which makes the
+  /// work invisible to the one person it was done for.
+  final String label;
+}
 
 /// An elliptical blob [columns] hexes wide and [rows] tall.
 ///
@@ -145,6 +165,135 @@ const _masks = <FieldShape, List<String>>{
     '..XXXXXX...',
     '...XXXX....',
   ],
+  // Every feature is at least two cells thick, and that is a constraint rather
+  // than a style. A mask is sampled down onto roughly eleven hexes across and
+  // then passed through [_largestRegion]: a one-cell tail or leg either
+  // disappears in the sampling or survives detached and is thrown away, and a
+  // cat that renders as a blob is worse than no cat.
+  FieldShape.dog: [
+    '.XX.....XX.',
+    'XXXX...XXXX',
+    'XXXXX.XXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '.XXXXXXXXX.',
+    '..XXXXXXX..',
+    '...XXXXX...',
+    '...XXXXX...',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXX.XXX.XXX',
+    'XXX.XXX.XXX',
+  ],
+  FieldShape.cat: [
+    'XX.......XX',
+    'XXX.....XXX',
+    'XXXX...XXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '.XXXXXXXXX.',
+    '..XXXXXXX..',
+    '...XXXXX...',
+    '...XXXXX...',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+    '.XXXXXXXXX.',
+    '.XXXXXXXXX.',
+    '.XXXXXXXXXX',
+    '.XXXXXXX.XX',
+    '.XXXXXXX.XX',
+    '.XXXXXXXXXX',
+  ],
+  FieldShape.star: [
+    '....XXX....',
+    '....XXX....',
+    '....XXX....',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '.XXXXXXXXX.',
+    '..XXXXXXX..',
+    '..XXXXXXX..',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+    '.XXXXXXXXX.',
+    'XXXX...XXXX',
+    'XXX.....XXX',
+    'XXX.....XXX',
+    'XX.......XX',
+    'XX.......XX',
+    'XX.......XX',
+  ],
+  FieldShape.key: [
+    '...XXXXX...',
+    '..XXXXXXX..',
+    '.XXX...XXX.',
+    '.XX.....XX.',
+    '.XX.....XX.',
+    '.XXX...XXX.',
+    '..XXXXXXX..',
+    '...XXXXX...',
+    // The shaft is five wide rather than three. A key's outline wants to be
+    // thin, but the shaft is most of the board's height and at three cells it
+    // cut the playable field to barely half an ellipse — a corridor with no
+    // route choices in it, which is the one thing a level cannot be.
+    '...XXXXX...',
+    '...XXXXX...',
+    '...XXXXX...',
+    '...XXXXXXX.',
+    '...XXXXXXX.',
+    '...XXXXX...',
+    '...XXXXXXX.',
+    '...XXXXXXX.',
+    '...XXXXX...',
+    '...XXXXX...',
+  ],
+  FieldShape.tree: [
+    '....XXX....',
+    '...XXXXX...',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '.XXXXXXXXX.',
+    '..XXXXXXX..',
+    '....XXX....',
+    '....XXX....',
+    '....XXX....',
+    '...XXXXX...',
+    '..XXXXXXX..',
+    '.XXXXXXXXX.',
+  ],
+  FieldShape.heart: [
+    '.XXX...XXX.',
+    'XXXXX.XXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '.XXXXXXXXX.',
+    '.XXXXXXXXX.',
+    '..XXXXXXX..',
+    '..XXXXXXX..',
+    '...XXXXX...',
+    '...XXXXX...',
+    '....XXX....',
+    '....XXX....',
+    '....XXX....',
+    '....XXX....',
+    '.....X.....',
+  ],
   FieldShape.diamond: [
     '.....X.....',
     '....XXX....',
@@ -237,15 +386,27 @@ FieldShape shapeFor(int level, int seed, {int tutorialBand = 5}) {
   if (level <= tutorialBand) {
     return FieldShape.ellipse;
   }
+  // Every shape once, with the plain ellipse spaced through it rather than
+  // clustered: over a hundred levels a short cycle repeats often enough to
+  // notice, and the ellipse is the one that has to feel like the default
+  // rather than like another motif.
   const cycle = [
     FieldShape.ellipse,
     FieldShape.bone,
     FieldShape.diamond,
     FieldShape.fish,
+    FieldShape.star,
     FieldShape.ellipse,
     FieldShape.paw,
+    FieldShape.tree,
     FieldShape.crescent,
+    FieldShape.dog,
+    FieldShape.ellipse,
+    FieldShape.key,
     FieldShape.diamond,
+    FieldShape.cat,
+    FieldShape.heart,
+    FieldShape.ellipse,
   ];
   return cycle[(seed ~/ 7) % cycle.length];
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
+import '../gen/silhouette.dart';
 import '../l10n/strings.dart';
 import '../theme/palette.dart';
 
@@ -139,6 +140,25 @@ class _LevelDetailState extends State<LevelDetail> {
                     height: 1.35,
                   ),
                 ),
+                // The outline, said out loud.
+                //
+                // Boards have been cut to bones and fish for a long time and
+                // nothing ever mentioned it, which made the whole silhouette
+                // system invisible to the person it was built for — a player
+                // sees one board at a time and has no way to know the shape was
+                // chosen rather than incidental.
+                if (rules.shape != FieldShape.ellipse) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    'CUT TO A ${rules.shape.label.toUpperCase()}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.34),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
 

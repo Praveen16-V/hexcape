@@ -211,17 +211,52 @@ void main() {
     });
 
     test('boards grow rather than shrink as the campaign goes on', () {
-      var cells = 0;
-      for (final level in [1, 6, 12, 24, 40, 60]) {
+      // Measured on the field the campaign actually controls, not on the cells
+      // that survive it.
+      //
+      // This used to count `grid.length`, which conflates two independent
+      // things: how big a board the curve asks for, and which silhouette the
+      // seed happens to cut it to. With six similar shapes that was a fine
+      // proxy; with twelve spanning roughly 60% to 105% of a full ellipse it is
+      // not, and the test began failing for a level that had grown but drawn a
+      // leaner outline. The silhouette is deliberately varied — that is the
+      // point of it — so it cannot also be the yardstick.
+      var field = 0;
+      for (final level in [1, 6, 12, 24, 40, 60, 80, 100]) {
+        final rules = Campaign.rulesFor(level);
+        final size = rules.columns * rules.rows;
+        expect(
+          size,
+          greaterThanOrEqualTo(field),
+          reason: 'level $level asks for a smaller field than the one before',
+        );
+        field = size;
+      }
+    });
+
+    test('no silhouette cuts a level below a playable size', () {
+      // The floor the check above no longer provides. A shape may be lean, but
+      // a board with nowhere to route around anything is not a level.
+      //
+      // Past the tutorial only: those boards are deliberately small so a lesson
+      // is over in half a minute, and they are always the plain ellipse, so
+      // there is no silhouette to go wrong on them.
+      for (
+        var level = Campaign.tutorialBand + 1;
+        level <= Campaign.length;
+        level += 3
+      ) {
         final generated = LevelGenerator.generate(
           _specFor(Campaign.rulesFor(level)),
         );
         expect(
           generated.grid.length,
-          greaterThanOrEqualTo(cells),
-          reason: 'level $level is smaller than the one before it',
+          greaterThan(90),
+          reason:
+              'level $level was cut to '
+              '${Campaign.rulesFor(level).shape.name} and left '
+              '${generated.grid.length} cells',
         );
-        cells = generated.grid.length;
       }
     });
 
