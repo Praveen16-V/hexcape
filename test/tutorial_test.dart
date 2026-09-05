@@ -86,8 +86,23 @@ void main() {
         isTrue,
       );
 
-      script.onTapped(target, ctx.level.grid, ctx.dog, ctx.level.pickups);
-      expect(script.isGating, isFalse, reason: 'the gate should have opened');
+      ctx.level.grid.at(target)!.clear(0);
+      script.onTapped(
+        target,
+        ctx.level.grid,
+        ctx.dog,
+        ctx.level.pickups,
+        targetBeforeTap: target,
+      );
+      expect(
+        script.current!.prompt,
+        'Open the next tile to make a narrow path',
+      );
+      expect(
+        script.targetCell(ctx.level.grid, ctx.dog, ctx.level.pickups),
+        isNot(target),
+        reason: 'the next gate must ask for the next tile',
+      );
     });
 
     test('a gate always gives up eventually', () {

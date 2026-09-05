@@ -37,6 +37,7 @@ dependencies:
   flame: ^1.38.2
   flame_audio: ^2.12.2
   shared_preferences: ^2.5.5
+  in_app_purchase: ^3.3.0
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +65,7 @@ flutter:
   # any synthesis parameter; the WAVs are build artefacts, not hand-made assets.
   assets:
     - assets/audio/
+    - assets/icon/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

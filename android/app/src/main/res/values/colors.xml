@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Palette.background from lib/theme/palette.dart. The game is dark, and
+         the window behind it has to be the same dark or a cold start flashes
+         white before the first frame. -->
+    <color name="hexcapeBackground">#FF0A0E1A</color>
+</resources>

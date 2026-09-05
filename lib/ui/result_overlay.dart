@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/entitlements.dart';
 import '../game/hexcape_game.dart';
 import '../game/level_rules.dart';
 import '../l10n/strings.dart';
@@ -12,6 +13,8 @@ class ResultOverlay extends StatefulWidget {
   const ResultOverlay({
     required this.game,
     required this.onMap,
+    required this.onUnlock,
+    required this.owned,
     super.key,
   });
 
@@ -19,6 +22,12 @@ class ResultOverlay extends StatefulWidget {
 
   /// Back to the campaign map.
   final VoidCallback onMap;
+
+  /// Opens the offer, on finishing the last free level.
+  final VoidCallback onUnlock;
+
+  /// Whether the full campaign is bought.
+  final bool owned;
 
   @override
   State<ResultOverlay> createState() => _ResultOverlayState();
@@ -43,14 +52,37 @@ class _ResultOverlayState extends State<ResultOverlay>
     final won = game.phase == GamePhase.won;
 
     final endless = game.isEndless;
+    final zen = game.tuning.zenMode;
+    final clearedDepth = endless
+        ? (won ? game.depth : (game.depth > 1 ? game.depth - 1 : 0))
+        : 0;
+    final storedBest = _bestDepth(game);
+    final bestDepth = clearedDepth > storedBest ? clearedDepth : storedBest;
     final finishedCampaign = won && game.isFinalLevel;
+    // The end of the free game. Framed as a milestone reached rather than a
+    // wall hit — twenty levels is a whole game, and telling someone who just
+    // finished one that they have run out is the wrong note entirely.
+    final finishedFree =
+        won && !widget.owned && game.levelNumber == Entitlements.freeThrough;
 
     final (title, blurb) = switch (game.phase) {
+      GamePhase.won when zen => (
+        'Practice complete',
+        'Zen results are not saved. Play the scored version when you are ready.',
+      ),
+      GamePhase.won when endless => (
+        'Depth ${game.depth} cleared',
+        'Continue deeper, or begin a fresh run from depth one.',
+      ),
       // The one ending the game has. Sixty levels deserve more than the same
       // word that follows every other one of them.
       GamePhase.won when finishedCampaign => (
         Strings.campaignDone,
         Strings.campaignDoneHint,
+      ),
+      GamePhase.won when finishedFree => (
+        Strings.freeCampaignDone,
+        Strings.freeCampaignDoneHint,
       ),
       GamePhase.won => (Strings.levelComplete, null),
       // In endless a loss ends the *run*, which is the thing being scored.
@@ -58,7 +90,9 @@ class _ResultOverlayState extends State<ResultOverlay>
       // the player was actually playing for.
       _ when endless => (
         Strings.runEnded,
-        'She got to depth ${game.depth}.',
+        clearedDepth == 0
+            ? 'No depth cleared this run.'
+            : 'Cleared through depth $clearedDepth.',
       ),
       GamePhase.crushed => (Strings.crushed, Strings.crushedHint),
       GamePhase.starved => (Strings.starved, Strings.starvedHint),
@@ -69,6 +103,39 @@ class _ResultOverlayState extends State<ResultOverlay>
       _ => ('', null),
     };
 
+    late final String primaryLabel;
+    late final VoidCallback primaryAction;
+    String? secondaryLabel;
+    VoidCallback? secondaryAction;
+    if (zen) {
+      primaryLabel = 'Practice again';
+      primaryAction = game.retry;
+      secondaryLabel = 'Play for stars';
+      secondaryAction = game.startScoredRun;
+    } else if (endless) {
+      primaryLabel = won ? 'Continue' : Strings.newRun;
+      primaryAction = won ? game.nextLevel : game.startEndlessRun;
+      if (won) {
+        secondaryLabel = Strings.newRun;
+        secondaryAction = game.startEndlessRun;
+      }
+    } else {
+      primaryLabel = Strings.retry;
+      primaryAction = game.retry;
+      secondaryLabel = finishedFree
+          ? Strings.seeWhatIsNext
+          : finishedCampaign
+          ? Strings.enterEndless
+          : won
+          ? Strings.nextLevel
+          : Strings.newLevel;
+      secondaryAction = finishedFree
+          ? widget.onUnlock
+          : won
+          ? game.nextLevel
+          : game.regenerate;
+    }
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: SlideTransition(
@@ -78,6 +145,9 @@ class _ResultOverlayState extends State<ResultOverlay>
         ).animate(CurvedAnimation(parent: _slide, curve: Curves.easeOutCubic)),
         child: Container(
           width: double.infinity,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+          ),
           padding: const EdgeInsets.fromLTRB(24, 22, 24, 34),
           decoration: const BoxDecoration(
             color: Color(0xF2121826),
@@ -85,111 +155,122 @@ class _ResultOverlayState extends State<ResultOverlay>
           ),
           child: SafeArea(
             top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: won ? Palette.goalGlow : Palette.danger,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (blurb != null) ...[
-                  const SizedBox(height: 4),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    blurb,
-                    style: const TextStyle(color: Palette.hudDim, fontSize: 13),
+                    title,
+                    style: TextStyle(
+                      color: won ? Palette.goalGlow : Palette.danger,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ],
-                if (won) ...[
-                  const SizedBox(height: 14),
-                  _Stars(count: game.stars),
-                ],
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    if (endless)
-                      _Metric(
-                        label: Strings.reached,
-                        value: 'D${game.depth}',
-                      ),
-                    if (endless)
-                      _Metric(
-                        label: Strings.deepest,
-                        value: 'D${_bestDepth(game)}',
-                      ),
-                    _Metric(label: Strings.tapsUsed, value: '${game.taps}'),
-                    if (!endless) _Metric(label: Strings.par, value: '${game.par}'),
-                    _Metric(
-                      label: Strings.bestChain,
-                      value: '${game.streak.best}',
-                    ),
-                    _Metric(
-                      label: Strings.timeTaken,
-                      value: '${game.levelTime.toStringAsFixed(1)}s',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _Button(
-                        label: Strings.retry,
-                        primary: true,
-                        onPressed: game.retry,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _Button(
-                        // Onward on a win, reroll on a loss — the button that
-                        // moves you forward should never be the one you reach
-                        // for after failing. Endless is the exception: a run is
-                        // the unit there, so the way forward from a loss is a
-                        // fresh run rather than the same board again.
-                        label: finishedCampaign
-                            ? Strings.enterEndless
-                            : endless && !won
-                            ? Strings.newRun
-                            : won
-                            ? Strings.nextLevel
-                            : Strings.newLevel,
-                        onPressed: endless && !won
-                            ? game.startEndlessRun
-                            : won
-                            ? game.nextLevel
-                            : game.regenerate,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Quieter than the other two, and always present. Leaving is
-                // never the thing the panel is pushing you toward, but a player
-                // who wants out of a level they keep losing should not have to
-                // win it first.
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: widget.onMap,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white.withValues(alpha: 0.5),
-                    ),
-                    child: const Text(
-                      Strings.backToMap,
-                      style: TextStyle(
+                  if (blurb != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      blurb,
+                      style: const TextStyle(
+                        color: Palette.hudDim,
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                  if (zen || endless) ...[
+                    const SizedBox(height: 9),
+                    Text(
+                      zen
+                          ? 'ZEN PRACTICE · NOT SAVED'
+                          : 'ENDLESS RUN · NO STARS',
+                      style: TextStyle(
+                        color: zen ? Palette.freeze : Palette.goalGlow,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                  ],
+                  if (won && !zen && !endless) ...[
+                    const SizedBox(height: 14),
+                    _Stars(count: game.stars),
+                    const SizedBox(height: 6),
+                    Text(
+                      '3 stars at ${game.starTargets.three} taps or fewer · '
+                      '2 stars at ${game.starTargets.two} or fewer',
+                      style: const TextStyle(
+                        color: Palette.hudDim,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      if (endless)
+                        _Metric(label: 'Cleared', value: 'D$clearedDepth'),
+                      if (endless)
+                        _Metric(label: 'Best clear', value: 'D$bestDepth'),
+                      _Metric(label: Strings.tapsUsed, value: '${game.taps}'),
+                      if (!endless)
+                        _Metric(label: Strings.par, value: '${game.par}'),
+                      _Metric(
+                        label: Strings.bestChain,
+                        value: '${game.streak.best}',
+                      ),
+                      _Metric(
+                        label: Strings.timeTaken,
+                        value: '${game.levelTime.toStringAsFixed(1)}s',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _Button(
+                          label: primaryLabel,
+                          primary: true,
+                          onPressed: primaryAction,
+                        ),
+                      ),
+                      if (secondaryLabel != null &&
+                          secondaryAction != null) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _Button(
+                            label: secondaryLabel,
+                            onPressed: secondaryAction,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Quieter than the other two, and always present. Leaving is
+                  // never the thing the panel is pushing you toward, but a player
+                  // who wants out of a level they keep losing should not have to
+                  // win it first.
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: widget.onMap,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      child: const Text(
+                        Strings.backToMap,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

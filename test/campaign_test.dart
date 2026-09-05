@@ -9,8 +9,16 @@ LevelSpec _specFor(LevelRules r) => LevelSpec(
   rows: r.rows,
   anchorDensity: r.anchorDensity,
   heavyDensity: r.heavyDensity,
+  springDensity: r.springDensity,
+  guards: r.guards,
+  guardSpeed: r.guardSpeed,
   treats: r.treats,
   powerups: r.powerups,
+  treatSeconds: r.treatSeconds,
+  treatTaps: r.treatTaps,
+  offeredPowerups: r.offeredPowerups,
+  powerupRotation: r.powerupRotation,
+  shape: r.shape,
 );
 
 void main() {
@@ -101,35 +109,51 @@ void main() {
       }
     });
 
-    test('difficulty never goes backwards across the whole campaign', () {
+    test('challenge peaks keep climbing while the campaign breathes', () {
       var anchors = -1.0;
       var heavy = -1.0;
       var budget = 99.0;
+      var breathers = 0;
       for (
         var level = Campaign.tutorialBand + 1;
         level <= Campaign.length;
         level++
       ) {
         final r = Campaign.rulesFor(level);
+        if (r.pace == LevelPace.breather) {
+          breathers++;
+          final previous = Campaign.rulesFor(level - 1);
+          expect(previous.pace, LevelPace.challenge, reason: 'level $level');
+          expect(r.budgetMultiplier, greaterThan(previous.budgetMultiplier));
+          expect(
+            r.hungerSecondsPerCell,
+            greaterThan(previous.hungerSecondsPerCell),
+          );
+          expect(r.regrowDelay, greaterThan(previous.regrowDelay));
+        }
+        if (r.pace != LevelPace.challenge) {
+          continue;
+        }
         expect(
           r.anchorDensity,
           greaterThanOrEqualTo(anchors - 1e-9),
-          reason: 'anchors eased off at $level',
+          reason: 'challenge $level eased its walls',
         );
         expect(
           r.heavyDensity,
           greaterThanOrEqualTo(heavy - 1e-9),
-          reason: 'heavy eased off at $level',
+          reason: 'challenge $level eased its heavy tiles',
         );
         expect(
           r.budgetMultiplier,
           lessThanOrEqualTo(budget + 1e-9),
-          reason: 'the budget loosened at $level',
+          reason: 'challenge $level loosened its budget',
         );
         anchors = r.anchorDensity;
         heavy = r.heavyDensity;
         budget = r.budgetMultiplier;
       }
+      expect(breathers, greaterThanOrEqualTo(10));
     });
 
     test('endless keeps climbing but never past its floors', () {

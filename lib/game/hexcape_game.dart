@@ -63,7 +63,47 @@ class Overlays {
   static const hud = 'hud';
   static const debug = 'debug';
   static const result = 'result';
+  static const pause = 'pause';
 }
+
+/// The star rating, as a pure function of the three numbers it depends on.
+///
+/// Separated from the game so it can be checked across every level in the
+/// campaign without standing up a running game — which is how the old fixed
+/// bands were able to be wrong for thirty levels without anything noticing.
+///
+/// [budget] is null on a level that does not ration taps.
+int starsFor({required int taps, required int par, int? budget}) {
+  final used = math.max(0, taps - par);
+  if (used == 0) {
+    return 3;
+  }
+  // A level with no budget still has to rate, or the tutorial would hand out
+  // three stars for anything at all; it borrows a nominal allowance so the
+  // rating means the same thing everywhere.
+  final ceiling = budget ?? (par * 1.5).ceil();
+  final allowance = math.max(2, ceiling - par);
+  final fraction = used / allowance;
+  if (fraction <= threeStarShare) {
+    return 3;
+  }
+  if (fraction <= twoStarShare) {
+    return 2;
+  }
+  return 1;
+}
+
+/// Inclusive tap cutoffs for the two visible mastery bands.
+({int three, int two}) starTargetsFor({required int par, int? budget}) {
+  final ceiling = budget ?? (par * 1.5).ceil();
+  final allowance = math.max(2, ceiling - par);
+  int cutoff(double share) => par + (allowance * share + 1e-9).floor();
+  return (three: cutoff(threeStarShare), two: cutoff(twoStarShare));
+}
+
+/// The share of a level's allowance each band covers.
+const threeStarShare = 0.35;
+const twoStarShare = 0.75;
 
 class HexcapeGame extends FlameGame with TapCallbacks {
   HexcapeGame({required this.tuning});
@@ -218,21 +258,28 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   /// Stars from taps, never from the clock (§12.4).
   ///
-  /// Tightened after watching real play: a competent run lands between 1.04 and
-  /// 1.15 times par, and the old three-star band was everything under 1.15 — so
-  /// every single win scored full marks and there was nothing left to chase.
-  /// Three stars now means near-perfect routing, two means competent, and the
-  /// bands line up with the budget: three covers the first 84% of it, two the
-  /// rest.
-  int get stars {
-    if (taps <= (par * 1.05).ceil()) {
-      return 3;
-    }
-    if (taps <= (par * 1.25).ceil()) {
-      return 2;
-    }
-    return 1;
-  }
+  /// Measured against the **allowance the level granted** — the gap between par
+  /// and the budget — rather than against fixed multiples of par.
+  ///
+  /// Fixed multiples were quietly broken at both ends of the campaign. The
+  /// bands were 1.05x par for three stars and 1.25x for two, but the budget
+  /// falls to 1.06x par by level sixty: with par 30 the budget was 32 taps and
+  /// the three-star cutoff was also 32, so *every* win at level sixty scored
+  /// full marks, and one star had been unreachable since about level thirty-three
+  /// because you would have run out of taps before you could score that badly.
+  ///
+  /// Worse, a treat raises [tapBudget] but never par, so under the old rule
+  /// spending the taps a treat granted pushed you into a lower band. The reward
+  /// was wired to cost you a star.
+  ///
+  /// Scaling to the allowance fixes both: it fits a 1.70x band and a 1.06x band
+  /// without either collapsing, and a treat widens the allowance it is measured
+  /// against instead of eating into it.
+  int get stars =>
+      starsFor(taps: taps, par: par, budget: budgetLimited ? tapBudget : null);
+
+  ({int three, int two}) get starTargets =>
+      starTargetsFor(par: par, budget: budgetLimited ? tapBudget : null);
 
   /// Rolling frame time, in milliseconds.
   ///
@@ -257,8 +304,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// The reach a tap actually has right now, Radius+ included. Everything that
   /// asks about the tap radius must go through this, or the ring on screen and
   /// the rule being enforced would drift apart.
-  double get effectiveTapRadius =>
-      tuning.tapRadius * powerups.tapRadiusMultiplier;
+  double get effectiveTapRadius => baseTapRadius * powerups.tapRadiusMultiplier;
+
+  double get baseTapRadius => tuning.tapRadiusFor(layout.width);
+
+  EdgeInsets _hudInsets = const EdgeInsets.fromLTRB(14, 96, 14, 48);
+  EdgeInsets get hudInsets => _hudInsets;
+
+  /// The HUD reports its measured bounds, including safe areas and text scale.
+  void setHudInsets(EdgeInsets insets) {
+    if (_hudInsets == insets) return;
+    _hudInsets = insets;
+    if (_ready) _recomputeLayout();
+  }
 
   bool get isOver =>
       phase == GamePhase.won ||
@@ -282,7 +340,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // silently replaced by this line.
     startLevel(level: _requestedLevel ?? progress?.unlocked ?? 1);
     overlays.add(Overlays.hud);
-    overlays.add(Overlays.debug);
+    syncDeveloperTools();
   }
 
   /// Builds a level and resets everything that belongs to a run.
@@ -306,6 +364,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         guardSpeed: tuning.guardSpeed,
         treats: tuning.treatCount.round(),
         powerups: tuning.powerupCount.round(),
+        treatSeconds: tuning.treatSeconds,
+        treatTaps: tuning.treatTaps.round(),
         offeredPowerups: rules.offeredPowerups,
         powerupRotation: rules.powerupRotation,
         shape: rules.shape,
@@ -349,6 +409,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     tutorial = Tutorial.forLevel(levelNumber);
     tutorialTarget = null;
+    overlays.remove(Overlays.pause);
+    paused = false;
 
     phase = GamePhase.idle;
     elapsed = 0;
@@ -388,6 +450,36 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     }
     banner = text;
     bannerFor = seconds;
+  }
+
+  /// Whether the player has stopped the run themselves.
+  ///
+  /// Distinct from Flame's [paused], which the shell also sets when the map is
+  /// on screen. Only this one means "the player asked for a break", and only
+  /// this one puts an overlay up.
+  bool get isPausedByPlayer => overlays.isActive(Overlays.pause);
+
+  void pauseRun() {
+    if (!_ready || isOver || isPausedByPlayer) {
+      return;
+    }
+    paused = true;
+    overlays.add(Overlays.pause);
+  }
+
+  void resumeRun() {
+    overlays.remove(Overlays.pause);
+    paused = false;
+  }
+
+  /// Shows or hides the tuning panel to match the setting. Called on load and
+  /// whenever the setting changes, so turning it on does not require a restart.
+  void syncDeveloperTools() {
+    if (tuning.developerTools) {
+      overlays.add(Overlays.debug);
+    } else {
+      overlays.remove(Overlays.debug);
+    }
   }
 
   int? _requestedLevel;
@@ -433,6 +525,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// marathon by the last mile.
   void startEndlessRun() => startLevel(level: Campaign.length + 1);
 
+  /// Replays this authored level under its scored rules after Zen practice.
+  void startScoredRun() {
+    tuning.zenMode = false;
+    retry();
+  }
+
   /// Taps for a level that does not ration them. Large enough never to bind,
   /// small enough that arithmetic on it cannot overflow anything.
   static const _unlimitedTaps = 1 << 20;
@@ -473,12 +571,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     final unitWidth = (bounds.maxX - bounds.minX) + _sqrt3;
     final unitHeight = (bounds.maxY - bounds.minY) + 2.0;
 
-    const sideMargin = 14.0;
-    const topInset = 96.0;
-    const bottomInset = 28.0;
-
-    final availableWidth = math.max(1.0, size.x - sideMargin * 2);
-    final availableHeight = math.max(1.0, size.y - topInset - bottomInset);
+    final availableWidth = math.max(1.0, size.x - _hudInsets.horizontal);
+    final availableHeight = math.max(1.0, size.y - _hudInsets.vertical);
     final hexSize = math.min(
       availableWidth / unitWidth,
       availableHeight / unitHeight,
@@ -486,7 +580,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     final unitCentreX = (bounds.minX + bounds.maxX) / 2;
     final unitCentreY = (bounds.minY + bounds.maxY) / 2;
-    final screenCentre = Offset(size.x / 2, topInset + availableHeight / 2);
+    final screenCentre = Offset(
+      _hudInsets.left + availableWidth / 2,
+      _hudInsets.top + availableHeight / 2,
+    );
 
     layout = HexLayout(
       size: hexSize,
@@ -773,6 +870,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           dogCell: dog.cell,
           fieldVersion: fieldVersion,
           tapsLeft: tapsLeft,
+          pickups: pickups,
+          treatTaps: tuning.treatTaps.round(),
+          blastCharges: powerups.chargesOf(PickupKind.blast),
+          digCharges: powerups.chargesOf(PickupKind.dig),
         )) {
       lockedByBudget = Pathfinder.reachable(
         dog.cell,
@@ -828,8 +929,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     return best;
   }
 
-  double get revealRadius =>
-      RevealSystem.radiusFor(tuning.tapRadius, tuning.revealFactor);
+  double get revealRadius => math.max(
+    RevealSystem.radiusFor(baseTapRadius, tuning.revealFactor),
+    effectiveTapRadius * 1.2,
+  );
 
   void _revealAround() => RevealSystem.reveal(
     grid: grid,
@@ -842,12 +945,22 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   void _win() {
     phase = GamePhase.won;
     dog.velocity = Offset.zero;
-    progress?.recordWin(
-      level: levelNumber,
-      stars: stars,
-      taps: taps,
-      time: levelTime,
-    );
+    // Zen switches off regrowth, which is most of the pressure in the game. A
+    // Zen win recorded as a normal one would quietly devalue every star earned
+    // the hard way, so it is practice: nothing is written, nothing unlocks. The
+    // level detail sheet says so before the run starts.
+    if (!tuning.zenMode) {
+      if (isEndless) {
+        progress?.recordEndlessClear(level: levelNumber);
+      } else {
+        progress?.recordWin(
+          level: levelNumber,
+          stars: stars,
+          taps: taps,
+          time: levelTime,
+        );
+      }
+    }
     // The one moment in the game that has earned a freeze.
     juice.freeze(0.07);
     juice.shake(5);
@@ -939,7 +1052,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         // Charges wait for a tap, so they need to say so. Timed effects show
         // themselves as the ring closing round her and need no words.
         if (taken.kind.isCharge) {
-          announce(taken.kind.hint);
+          announce(taken.kind.readyHint);
         }
     }
     effects.shatter(
@@ -1052,16 +1165,33 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Spends a held charge, if one applies to what was just tapped. Returns
   /// whether it did, in which case the tap is finished.
   bool _spendCharge(TapOutcome outcome, HexCoord coord) {
-    if (outcome == TapOutcome.anchor && powerups.spend(PickupKind.dig)) {
+    if (outcome == TapOutcome.anchor &&
+        powerups.spendSelected(PickupKind.dig)) {
       _dig(coord);
       return true;
     }
     if ((outcome == TapOutcome.hit || outcome == TapOutcome.nothingToClear) &&
-        powerups.spend(PickupKind.blast)) {
+        powerups.spendSelected(PickupKind.blast)) {
       _blast(coord);
       return true;
     }
     return false;
+  }
+
+  /// Arms or puts away a held tool from the HUD. This is deliberately separate
+  /// from collection: picking something up must never change what the player's
+  /// next board tap does.
+  void toggleCharge(PickupKind kind) {
+    if (isOver) {
+      return;
+    }
+    final armed = powerups.toggleCharge(kind);
+    if (armed) {
+      announce(kind.hint);
+    } else if (powerups.has(kind)) {
+      announce('${kind.label} put away');
+    }
+    Haptics.light();
   }
 
   /// One tap, a cluster of hexes.
@@ -1099,7 +1229,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // A blast is not a carve, so it does not extend a chain. Letting it would
     // make the chain a measure of how many powerups were held rather than of
     // how well the board was read.
-    streak.register(grid: grid, tapped: centre, dogCell: dog.cell, carved: false);
+    streak.register(
+      grid: grid,
+      tapped: centre,
+      dogCell: dog.cell,
+      carved: false,
+    );
   }
 
   /// The only thing in the game that removes an anchor.
@@ -1123,7 +1258,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     sfx.play(Sound.crush);
     Haptics.heavy();
     tapRingFlash = 1;
-    streak.register(grid: grid, tapped: coord, dogCell: dog.cell, carved: false);
+    streak.register(
+      grid: grid,
+      tapped: coord,
+      dogCell: dog.cell,
+      carved: false,
+    );
   }
 
   void _crush() {
@@ -1199,6 +1339,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // so the lesson cannot be skimmed past. It costs nothing — a refused tap is
     // not a wasted one.
     final script = tutorial;
+    final targetBeforeTap = script?.targetCell(grid, dog, pickups);
     if (script != null &&
         result.coord != null &&
         !script.allowsTap(result.coord!, grid, dog, pickups)) {
@@ -1275,7 +1416,13 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           Haptics.medium();
         }
         tapRingFlash = 1;
-        script?.onTapped(result.coord!, grid, dog, pickups);
+        script?.onTapped(
+          result.coord!,
+          grid,
+          dog,
+          pickups,
+          targetBeforeTap: targetBeforeTap,
+        );
 
       case TapOutcome.anchor:
         // Reported honestly rather than redirected to a nearby plain hex, and

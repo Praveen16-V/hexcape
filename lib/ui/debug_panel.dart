@@ -339,13 +339,47 @@ class _DebugPanelState extends State<DebugPanel> {
           ),
           _step('›', () => game.startLevel(level: game.levelNumber + 1)),
           const SizedBox(width: 8),
-          _step('↺', () async {
-            await game.progress?.reset();
-            game.startLevel(level: 1);
-          }),
+          // Asks first. Every star, every best time and every unlocked level,
+          // gone on one tap of an unlabelled glyph, was not a defensible thing
+          // to leave lying around even in a developer tool.
+          _step('↺', _confirmReset),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmReset() async {
+    final game = widget.game;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Palette.background,
+        title: const Text('Erase all progress?'),
+        content: const Text(
+          'Every star, best time and unlocked level goes. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Palette.danger),
+            child: const Text('Erase'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await game.progress?.reset();
+    game.startLevel(level: 1);
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Widget _step(String glyph, VoidCallback onTap) => InkWell(

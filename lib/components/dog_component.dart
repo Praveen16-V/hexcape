@@ -7,6 +7,7 @@ import '../entities/dog.dart';
 import '../game/hexcape_game.dart';
 import '../game/pets.dart';
 import '../theme/palette.dart';
+import 'movement_cue.dart';
 
 /// The dog, her pawprints, and the warnings drawn around her.
 ///
@@ -47,6 +48,15 @@ class DogComponent extends Component {
     final r = Dog.dogRadius(game.layout);
 
     _renderPawprints(canvas, dog, r);
+    if (!game.isOver && !game.isPausedByPlayer) {
+      MovementCue.draw(
+        canvas,
+        position: dog.position,
+        aim: dog.movementAim,
+        grid: game.grid,
+        layout: game.layout,
+      );
+    }
     _renderPowerupRing(canvas, dog, r);
     _renderEnclosureWarning(canvas, dog, r);
 
@@ -115,9 +125,7 @@ class DogComponent extends Component {
     }
     vigour += alert * 0.5;
     _fill
-      ..color = _glow.withValues(
-        alpha: (_glow.a * vigour).clamp(0.0, 1.0),
-      )
+      ..color = _glow.withValues(alpha: (_glow.a * vigour).clamp(0.0, 1.0))
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.75);
     canvas.drawCircle(Offset.zero, r * (1.05 + alert * 0.3), _fill);
     _fill.maskFilter = null;
@@ -176,9 +184,7 @@ class DogComponent extends Component {
     final phase = dog.gaitPhase * math.pi * 2;
     // The far pair is darker and thinner, which is the whole trick for depth on
     // a flat drawing.
-    final colour = far
-        ? Color.lerp(_dark, Palette.background, 0.35)!
-        : _dark;
+    final colour = far ? Color.lerp(_dark, Palette.background, 0.35)! : _dark;
     final width = r * (far ? 0.21 : 0.25);
     final offset = far ? math.pi * 0.8 : 0.0;
     _leg(

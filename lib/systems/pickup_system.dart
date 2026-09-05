@@ -11,7 +11,7 @@ class PickupSystem {
   PickupSystem._();
 
   /// How far off the ideal route a pickup must sit to be worth a decision.
-  static const minDetour = 2;
+  static const minDetour = 1;
   static const maxDetour = 4;
 
   /// Keeps pickups from clustering into one lucky corner.
@@ -20,14 +20,17 @@ class PickupSystem {
   /// Drops pickups *beside* the cheapest route rather than on it.
   ///
   /// On the route they would be collected for free on the way past, which is
-  /// not a decision — it is just scenery. Two to four cells off, the player has
-  /// to weigh the detour's taps and seconds against what it pays back, and the
-  /// fog means they can see the prize without knowing what stands in the way.
+  /// not a decision — it is just scenery. One to four cells off, the player has
+  /// to weigh the detour's taps and seconds against what it pays back. The
+  /// actual cheapest route through each candidate is priced below, so a small
+  /// treat is kept close while a powerful charge may tempt a longer diversion.
   static List<Pickup> place({
     required HexGrid grid,
     required math.Random rng,
     required int treats,
     required int powerups,
+    double treatSeconds = 5,
+    int treatTaps = 2,
     List<PickupKind> offered = const [
       PickupKind.freeze,
       PickupKind.radiusPlus,
@@ -48,9 +51,10 @@ class PickupSystem {
       return const [];
     }
 
-    final detour = _distanceFromRoute(grid, route);
+    final routeDistance = _distanceFromRoute(grid, route);
+    final economics = detourCosts(grid);
     final candidates = [
-      for (final entry in detour.entries)
+      for (final entry in routeDistance.entries)
         if (entry.value >= minDetour &&
             entry.value <= maxDetour &&
             entry.key != grid.start &&
@@ -74,13 +78,26 @@ class PickupSystem {
 
     final placed = <Pickup>[];
     final taken = <HexCoord>[];
-    var attempts = 0;
     final maxAttempts = math.max(60, wanted.length * 30);
 
     for (final kind in wanted) {
+      final fair = [
+        for (final coord in candidates)
+          if (_isWorthDetour(
+            kind,
+            economics[coord],
+            treatSeconds: treatSeconds,
+            treatTaps: treatTaps,
+          ))
+            coord,
+      ];
+      if (fair.isEmpty) {
+        continue;
+      }
+      var attempts = 0;
       while (attempts < maxAttempts) {
         attempts++;
-        final coord = candidates[rng.nextInt(candidates.length)];
+        final coord = fair[rng.nextInt(fair.length)];
         if (taken.any((t) => t.distanceTo(coord) < minSpacing)) {
           continue;
         }
@@ -98,6 +115,111 @@ class PickupSystem {
       }
     }
     return placed;
+  }
+
+  /// The extra taps and walking steps required by the cheapest route that
+  /// visits each cell, compared with going straight to the exit. Zero means an
+  /// equally cheap alternate route; candidates still have to sit off the one
+  /// route shown by the pathfinder, so even those require a visible choice.
+  static Map<HexCoord, ({int taps, int steps})> detourCosts(HexGrid grid) {
+    final tapsFromStart = _weightedFrom(grid, grid.start);
+    final tapsToExit = _weightedTo(grid, grid.exit);
+    final stepsFromStart = _stepsFrom(grid, grid.start);
+    final stepsToExit = _stepsFrom(grid, grid.exit);
+    final directTaps = tapsFromStart[grid.exit];
+    final directSteps = stepsFromStart[grid.exit];
+    if (directTaps == null || directSteps == null) {
+      return const {};
+    }
+    return {
+      for (final coord in grid.cells.keys)
+        if (tapsFromStart[coord] != null &&
+            tapsToExit[coord] != null &&
+            stepsFromStart[coord] != null &&
+            stepsToExit[coord] != null)
+          coord: (
+            taps: math.max(
+              0,
+              tapsFromStart[coord]! + tapsToExit[coord]! - directTaps,
+            ),
+            steps: math.max(
+              0,
+              stepsFromStart[coord]! + stepsToExit[coord]! - directSteps,
+            ),
+          ),
+    };
+  }
+
+  static bool _isWorthDetour(
+    PickupKind kind,
+    ({int taps, int steps})? cost, {
+    required double treatSeconds,
+    required int treatTaps,
+  }) {
+    if (cost == null) return false;
+    return switch (kind) {
+      PickupKind.treat =>
+        cost.taps <= math.max(0, treatTaps) &&
+            cost.steps <= math.max(0, treatSeconds.floor()),
+      PickupKind.freeze => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.radiusPlus => cost.taps <= 5 && cost.steps <= 6,
+      PickupKind.sprint => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.scent => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.blast => cost.taps <= 6 && cost.steps <= 6,
+      PickupKind.dig => cost.taps <= 4 && cost.steps <= 6,
+    };
+  }
+
+  static Map<HexCoord, int> _stepsFrom(HexGrid grid, HexCoord start) {
+    final distance = <HexCoord, int>{start: 0};
+    final queue = Queue<HexCoord>()..add(start);
+    while (queue.isNotEmpty) {
+      final current = queue.removeFirst();
+      final next = distance[current]! + 1;
+      for (final n in current.neighbours) {
+        if (distance.containsKey(n) || !grid.isTraversableInPrinciple(n)) {
+          continue;
+        }
+        distance[n] = next;
+        queue.add(n);
+      }
+    }
+    return distance;
+  }
+
+  static Map<HexCoord, int> _weightedFrom(HexGrid grid, HexCoord start) =>
+      _weighted(grid, start, (current, next) => grid.remainingCost(next));
+
+  /// Reverse Dijkstra. Moving from the exit to a predecessor charges the cell
+  /// being left, which is the cell that forward travel would enter. This makes
+  /// the resulting value the cost from any cell to the exit, excluding that
+  /// starting cell and including the exit.
+  static Map<HexCoord, int> _weightedTo(HexGrid grid, HexCoord exit) =>
+      _weighted(grid, exit, (current, next) => grid.remainingCost(current));
+
+  static Map<HexCoord, int> _weighted(
+    HexGrid grid,
+    HexCoord start,
+    int Function(HexCoord current, HexCoord next) edgeCost,
+  ) {
+    final best = <HexCoord, int>{start: 0};
+    final frontier = SplayTreeMap<int, List<HexCoord>>()
+      ..putIfAbsent(0, () => []).add(start);
+    while (frontier.isNotEmpty) {
+      final key = frontier.firstKey()!;
+      final bucket = frontier[key]!;
+      final current = bucket.removeLast();
+      if (bucket.isEmpty) frontier.remove(key);
+      if (key != best[current]) continue;
+      for (final next in current.neighbours) {
+        if (!grid.isTraversableInPrinciple(next)) continue;
+        final candidate = key + edgeCost(current, next);
+        if (candidate >= (best[next] ?? 1 << 30)) continue;
+        best[next] = candidate;
+        frontier.putIfAbsent(candidate, () => []).add(next);
+      }
+    }
+    return best;
   }
 
   /// Steps from every cell to the nearest cell on [route], routed around

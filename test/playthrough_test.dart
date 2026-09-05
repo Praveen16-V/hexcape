@@ -35,6 +35,7 @@ void main() {
           regrowth: true,
           budgetMultiplier: 6,
           hungerKills: false,
+          pickups: false,
         );
         if (result.won) {
           times.add(result.seconds);
@@ -76,7 +77,11 @@ void main() {
       var won = 0;
       var starved = 0;
       for (var seed = 0; seed < 25; seed++) {
-        final result = playSeed(seed: seed, regrowth: true, budgetMultiplier: 6);
+        final result = playSeed(
+          seed: seed,
+          regrowth: true,
+          budgetMultiplier: 6,
+        );
         if (result.won) {
           won++;
         }
@@ -141,7 +146,11 @@ void main() {
       // generator or the drift has gone wrong and the budget will be a lie.
       for (var seed = 0; seed < 10; seed++) {
         final level = LevelGenerator.generate(LevelSpec(seed: seed));
-        final result = playSeed(seed: seed, regrowth: true, budgetMultiplier: 6);
+        final result = playSeed(
+          seed: seed,
+          regrowth: true,
+          budgetMultiplier: 6,
+        );
         if (!result.won) {
           continue;
         }

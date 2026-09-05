@@ -136,6 +136,11 @@ void main() {
     test('charges are held until spent, not run down by time', () {
       final effects = ActiveEffects()..grant(PickupKind.blast);
       expect(effects.has(PickupKind.blast), isTrue);
+      expect(
+        effects.selectedCharge,
+        isNull,
+        reason: 'collecting a tool must not hijack the next ordinary tap',
+      );
       expect(effects.leading, isNull, reason: 'a charge has no time to show');
 
       // Any amount of time passing leaves it untouched.
@@ -145,6 +150,36 @@ void main() {
       expect(effects.spend(PickupKind.blast), isTrue);
       expect(effects.has(PickupKind.blast), isFalse);
       expect(effects.spend(PickupKind.blast), isFalse);
+    });
+
+    test('one charge is explicitly armed and only that charge can fire', () {
+      final effects = ActiveEffects()
+        ..grant(PickupKind.blast)
+        ..grant(PickupKind.dig)
+        ..grant(PickupKind.dig);
+
+      expect(effects.spendSelected(PickupKind.blast), isFalse);
+      expect(effects.toggleCharge(PickupKind.blast), isTrue);
+      expect(effects.selectedCharge, PickupKind.blast);
+      expect(effects.spendSelected(PickupKind.dig), isFalse);
+
+      // Choosing Dig puts Blast away. One Dig remains armed after the first is
+      // spent, then the selection clears with the last charge.
+      expect(effects.toggleCharge(PickupKind.dig), isTrue);
+      expect(effects.selectedCharge, PickupKind.dig);
+      expect(effects.spendSelected(PickupKind.dig), isTrue);
+      expect(effects.selectedCharge, PickupKind.dig);
+      expect(effects.spendSelected(PickupKind.dig), isTrue);
+      expect(effects.selectedCharge, isNull);
+      expect(effects.chargesOf(PickupKind.blast), 1);
+    });
+
+    test('tapping the armed HUD tool again puts it away', () {
+      final effects = ActiveEffects()..grant(PickupKind.blast);
+      expect(effects.toggleCharge(PickupKind.blast), isTrue);
+      expect(effects.toggleCharge(PickupKind.blast), isFalse);
+      expect(effects.selectedCharge, isNull);
+      expect(effects.chargesOf(PickupKind.blast), 1);
     });
 
     test('charges stack and are spent one at a time', () {
@@ -287,6 +322,52 @@ void main() {
       expect(powerups.length, 2);
       // Cycling the kinds keeps a level from offering the same thing twice.
       expect(powerups.map((p) => p.kind).toSet().length, 2);
+    });
+
+    test('treat detours never cost more than the treat pays back', () {
+      var placed = 0;
+      for (var seed = 0; seed < 60; seed++) {
+        final level = LevelGenerator.generate(
+          LevelSpec(
+            seed: seed,
+            treats: 3,
+            powerups: 0,
+            treatTaps: 1,
+            treatSeconds: 2,
+          ),
+        );
+        final costs = PickupSystem.detourCosts(level.grid);
+        for (final pickup in level.pickups) {
+          placed++;
+          final cost = costs[pickup.coord]!;
+          expect(cost.taps, lessThanOrEqualTo(1), reason: 'seed $seed');
+          expect(cost.steps, lessThanOrEqualTo(2), reason: 'seed $seed');
+        }
+      }
+      expect(placed, greaterThan(0), reason: 'the fair filter placed nothing');
+    });
+
+    test('powerup detours are capped by what each tool can recover', () {
+      const limits = <PickupKind, ({int taps, int steps})>{
+        PickupKind.freeze: (taps: 4, steps: 5),
+        PickupKind.radiusPlus: (taps: 5, steps: 6),
+        PickupKind.sprint: (taps: 4, steps: 6),
+        PickupKind.scent: (taps: 4, steps: 5),
+        PickupKind.blast: (taps: 6, steps: 6),
+        PickupKind.dig: (taps: 4, steps: 6),
+      };
+      for (var seed = 0; seed < 40; seed++) {
+        final level = LevelGenerator.generate(
+          LevelSpec(seed: seed, treats: 0, powerups: 6),
+        );
+        final costs = PickupSystem.detourCosts(level.grid);
+        for (final pickup in level.pickups) {
+          final cost = costs[pickup.coord]!;
+          final limit = limits[pickup.kind]!;
+          expect(cost.taps, lessThanOrEqualTo(limit.taps));
+          expect(cost.steps, lessThanOrEqualTo(limit.steps));
+        }
+      }
     });
 
     test('collecting takes a pickup once and only once', () {

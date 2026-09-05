@@ -14,6 +14,9 @@ enum TutorialTarget {
   /// The next cell she needs opened, on the cheapest route to the bone.
   nextOnRoute,
 
+  /// A side tile next to the dog, adding space without extending the corridor.
+  widenPath,
+
   /// The nearest wall, to point at while explaining it.
   nearestAnchor,
 
@@ -106,6 +109,7 @@ class Tutorial {
     return switch (step.target) {
       TutorialTarget.none => null,
       TutorialTarget.nextOnRoute => _nextOnRoute(grid, dog),
+      TutorialTarget.widenPath => _widenPath(grid, dog),
       TutorialTarget.nearestAnchor => _nearest(
         grid,
         dog,
@@ -134,6 +138,14 @@ class Tutorial {
       if (grid.isClearable(coord)) {
         return coord;
       }
+    }
+    return null;
+  }
+
+  static HexCoord? _widenPath(HexGrid grid, Dog dog) {
+    final forward = _nextOnRoute(grid, dog);
+    for (final c in dog.cell.neighbours) {
+      if (c != forward && grid.isClearable(c)) return c;
     }
     return null;
   }
@@ -186,12 +198,23 @@ class Tutorial {
   }
 
   /// Call after a tap has actually landed.
-  void onTapped(HexCoord coord, HexGrid grid, Dog dog, List<Pickup> pickups) {
+  void onTapped(
+    HexCoord coord,
+    HexGrid grid,
+    Dog dog,
+    List<Pickup> pickups, {
+    HexCoord? targetBeforeTap,
+  }) {
     final step = current;
     if (step == null || step.advance != TutorialAdvance.onTap) {
       return;
     }
-    final target = targetCell(grid, dog, pickups);
+    // Clearing the highlighted tile changes dynamic target resolution. Match
+    // against the target captured before the game applied the tap.
+    final target = targetBeforeTap ?? targetCell(grid, dog, pickups);
+    if (step.target == TutorialTarget.widenPath && !grid.isPassable(coord)) {
+      return;
+    }
     if (target == null || target == coord) {
       _next();
     }
@@ -238,8 +261,30 @@ class Tutorial {
         gate: true,
         seconds: 4,
       ),
-      TutorialStep(prompt: 'She walks into whatever opens up', seconds: 3.5),
-      TutorialStep(prompt: 'Carve her a way to the bone', seconds: 3.5),
+      TutorialStep(
+        prompt: 'Open the next tile to make a narrow path',
+        target: TutorialTarget.nextOnRoute,
+        advance: TutorialAdvance.onTap,
+        gate: true,
+        seconds: 1.5,
+      ),
+      TutorialStep(prompt: 'Narrow paths keep her pace gentle', seconds: 1.5),
+      TutorialStep(
+        prompt: 'Open a tile beside her to widen the path',
+        target: TutorialTarget.widenPath,
+        advance: TutorialAdvance.onTap,
+        seconds: 1.5,
+      ),
+      TutorialStep(
+        prompt: 'Widen it once more for more speed',
+        target: TutorialTarget.widenPath,
+        advance: TutorialAdvance.onTap,
+        seconds: 1.5,
+      ),
+      TutorialStep(
+        prompt: 'More open space, more speed. Find the bone!',
+        seconds: 3.5,
+      ),
     ]),
     2 => Tutorial(const [
       TutorialStep(

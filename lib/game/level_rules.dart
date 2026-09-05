@@ -34,6 +34,7 @@ class LevelRules {
     this.hunger = false,
     this.hungerSecondsPerCell = 1.3,
     this.teaches,
+    this.pace = LevelPace.learning,
   });
 
   final int level;
@@ -94,6 +95,14 @@ class LevelRules {
   /// The single idea this level exists to teach. Null past the tutorial.
   final String? teaches;
 
+  /// The role this level plays in the campaign's difficulty rhythm.
+  final LevelPace pace;
+
+  /// Its authored name and dominant gameplay idea. Generation still supplies
+  /// the exact board, but this is what makes the level recognizable before and
+  /// after the seed has done its work.
+  LevelIdentity get identity => Campaign.identityFor(level);
+
   /// The outline this board is cut to. Fixed by seed, so a level's shape is as
   /// much a part of it as its layout.
   FieldShape get shape =>
@@ -101,6 +110,60 @@ class LevelRules {
 
   bool get isEndless => level > Campaign.length;
   bool get isTutorial => level <= Campaign.tutorialBand;
+}
+
+/// A level's job in the difficulty curve. The campaign climbs through harder
+/// bands, but within each band these beats create room to learn and recover.
+enum LevelPace {
+  learning('Learning', 'A guided lesson with room to experiment.'),
+  introduction('New idea', 'Meet one new hazard with extra time and taps.'),
+  practice('Practice', 'Use the latest ideas with forgiving pressure.'),
+  combination('Mixed', 'Several familiar pressures work together.'),
+  challenge('Challenge', 'The band\'s full pressure, with little wasted room.'),
+  breather('Breather', 'A lighter run before the climb resumes.'),
+  endless('Endless', 'Pressure rises gradually with no final level.');
+
+  const LevelPace(this.label, this.description);
+
+  final String label;
+  final String description;
+}
+
+/// A recurring gameplay shape with a clear promise to the player.
+enum LevelSignature {
+  lesson('Guided lesson', 'One rule is introduced with room to learn it.'),
+  openTrail('Open trail', 'Sparse walls reward decisive, wide carving.'),
+  closingTrail(
+    'Closing trail',
+    'Regrowth is the main pressure; Freeze buys breathing room.',
+  ),
+  heavyGround(
+    'Heavy ground',
+    'More two-hit tiles make every choice of route matter.',
+  ),
+  springLine(
+    'Spring line',
+    'Springs dominate the route; carve where their momentum will land.',
+  ),
+  nightWatch(
+    'Night watch',
+    'Patrol lanes make timing and Scent more valuable.',
+  ),
+  supplyRun('Supply run', 'Extra rewards invite a profitable side route.'),
+  breach('Breach', 'Riveted walls dominate; a Dig can rewrite the route.'),
+  gauntlet('Gauntlet', 'Every unlocked pressure is active at full strength.');
+
+  const LevelSignature(this.label, this.description);
+
+  final String label;
+  final String description;
+}
+
+class LevelIdentity {
+  const LevelIdentity({required this.title, required this.signature});
+
+  final String title;
+  final LevelSignature signature;
 }
 
 /// The four stretches of the campaign, plus what lies past it.
@@ -166,6 +229,81 @@ class Campaign {
   ];
   static const _masteryPowerups = [..._pressurePowerups, PickupKind.dig];
 
+  /// Authored names turn stable generated boards into places a player can
+  /// remember and discuss. Their mechanics still come from the signatures
+  /// below, so the name is backed by a different play pattern rather than
+  /// being decorative copy.
+  static const _titles = [
+    'First Footsteps',
+    'Closing Ground',
+    'Rivets and Rings',
+    'The Long Way',
+    'Into the Fog',
+    'Open Trail',
+    'Narrow Promise',
+    'Stone Teeth',
+    'First Spring',
+    'Follow Through',
+    'Hard Shell',
+    'The Pinch',
+    'Breathing Room',
+    'Spring Arc',
+    'Tipping Point',
+    'Supply Pocket',
+    'Backfill',
+    'Fault Line',
+    'Loose Earth',
+    'Foundation Edge',
+    'First Patrol',
+    'Shadow Step',
+    'Closing Lane',
+    'Searchlights',
+    'Safe Pocket',
+    'Double Weight',
+    'Noon Watch',
+    'Supply Gap',
+    'Long Throw',
+    'Crossing Lines',
+    'Open Window',
+    'Night Route',
+    'Crossfire',
+    'Hidden Cache',
+    'Backtrack',
+    'No Safe Line',
+    'Second Wind',
+    'Iron Floor',
+    'Last Light',
+    'Pressure Edge',
+    'The First Breach',
+    'Broken Wall',
+    'Iron Garden',
+    'Deep Cache',
+    'Collapse',
+    'Hot Trail',
+    'Clear Ground',
+    'Spring Trap',
+    'Rivet Clock',
+    'Found Time',
+    'Dark Crossing',
+    'Triple Watch',
+    'Spare Breath',
+    'Second Breach',
+    'Black Ice',
+    'Last Cache',
+    'Heavy Silence',
+    'Closing Net',
+    'Calm Before',
+    'Final Hex',
+  ];
+
+  static const _openTrailLevels = {6, 13, 19, 25, 31, 37, 47, 53, 59};
+  static const _closingTrailLevels = {7, 17, 23, 35, 45};
+  static const _heavyGroundLevels = {11, 26, 38, 57};
+  static const _springLineLevels = {9, 10, 14, 29, 48};
+  static const _nightWatchLevels = {21, 22, 32, 51};
+  static const _supplyRunLevels = {16, 28, 34, 44, 50, 56};
+  static const _breachLevels = {41, 42, 54};
+
   /// The seed for a level, from its number, by an explicit mixer.
   ///
   /// Deliberately **not** `hashCode`, which Dart does not guarantee to be stable
@@ -200,6 +338,31 @@ class Campaign {
       return CampaignBand.mastery;
     }
     return CampaignBand.endless;
+  }
+
+  static LevelIdentity identityFor(int level) {
+    final n = math.max(1, level);
+    if (n > length) {
+      return LevelIdentity(
+        title: 'Depth ${n - length}',
+        signature: LevelSignature.gauntlet,
+      );
+    }
+    return LevelIdentity(title: _titles[n - 1], signature: signatureFor(n));
+  }
+
+  static LevelSignature signatureFor(int level) {
+    if (level <= tutorialBand) return LevelSignature.lesson;
+    if (_openTrailLevels.contains(level)) return LevelSignature.openTrail;
+    if (_closingTrailLevels.contains(level)) {
+      return LevelSignature.closingTrail;
+    }
+    if (_heavyGroundLevels.contains(level)) return LevelSignature.heavyGround;
+    if (_springLineLevels.contains(level)) return LevelSignature.springLine;
+    if (_nightWatchLevels.contains(level)) return LevelSignature.nightWatch;
+    if (_supplyRunLevels.contains(level)) return LevelSignature.supplyRun;
+    if (_breachLevels.contains(level)) return LevelSignature.breach;
+    return LevelSignature.gauntlet;
   }
 
   /// The first level of each band, for the map's section headings.
@@ -323,12 +486,10 @@ class Campaign {
   // The rest, as band endpoints the level number interpolates between.
   // -------------------------------------------------------------------------
 
-  /// Every value moves monotonically toward harder, and each band picks up where
-  /// the last left off — a band starting easier than the one before it would
-  /// read as the game going backwards.
-  ///
-  /// Steeper at the top than the first cut of this curve, which could be
-  /// finished comfortably at level 60.
+  /// These are the challenge ceilings. Each band picks up where the last one
+  /// ended, while [LevelPace] selectively relieves pressure between peaks.
+  /// The result still climbs toward the harder endpoint without asking every
+  /// consecutive level to be harsher than the last.
   static const _foundation = (
     columns: (10, 11),
     rows: (19, 23),
@@ -403,37 +564,109 @@ class Campaign {
     band,
   ) {
     final t = span <= 1 ? 0.0 : index / (span - 1);
+    final pace = paceFor(level);
+    final signature = signatureFor(level);
+    final baseAnchor = _lerp(band.anchor, t);
+    final baseHeavy = _lerp(band.heavy, t);
+    final baseSpring = _lerp(band.spring, t);
+    final baseGuards = _lerpInt(band.guards, t);
+    final baseGuardSpeed = _lerp(band.guardSpeed, t);
+    final baseRegrow = _lerp(band.regrow, t);
+    final baseBudget = _lerp(band.budget, t);
+    final baseHunger = _lerp(band.hunger, t);
     return LevelRules(
       level: level,
       seed: seedFor(level),
       columns: _lerpInt(band.columns, t),
       rows: _lerpInt(band.rows, t),
-      anchorDensity: _lerp(band.anchor, t),
-      heavyDensity: _lerp(band.heavy, t),
+      anchorDensity: math.max(
+        0,
+        baseAnchor - pace.anchorRelief + signature.anchorDelta,
+      ),
+      heavyDensity: math.max(
+        0,
+        baseHeavy - pace.heavyRelief + signature.heavyDelta,
+      ),
       // Floored, not merely interpolated. The band's own curve starts at zero,
       // so the level that *announces* springs would generate one on a
       // 143-cell board — a banner promising a mechanic the player then never
       // meets. An introduction has to be dense enough to actually happen.
       springDensity: level >= springsFrom
-          ? math.max(_springIntroDensity, _lerp(band.spring, t))
+          ? math.max(
+              _springIntroDensity,
+              baseSpring * pace.obstacleMultiplier * signature.springMultiplier,
+            )
           : 0,
-      guards: level >= guardsFrom ? _lerpInt(band.guards, t) : 0,
-      guardSpeed: _lerp(band.guardSpeed, t),
-      treats: _lerpInt(band.treats, t),
-      powerups: _lerpInt(band.powerups, t),
-      offeredPowerups: poolFor(level),
+      guards: level >= guardsFrom
+          ? math.max(
+              1,
+              baseGuards -
+                  pace.guardRelief +
+                  (pace == LevelPace.combination ? signature.guardBonus : 0),
+            )
+          : 0,
+      guardSpeed: math.max(0.75, baseGuardSpeed - pace.guardSpeedRelief),
+      treats: _lerpInt(band.treats, t) + signature.extraTreats,
+      powerups: _lerpInt(band.powerups, t) + signature.extraPowerups,
+      offeredPowerups: _powerupsFor(signature, level),
       powerupRotation: level,
       introduces: introductionAt(level),
       treatSeconds: _lerp(band.treatSeconds, t),
       treatTaps: _lerpInt(band.treatTaps, t),
       regrowth: true,
-      regrowDelay: _lerp(band.regrow, t),
+      regrowDelay: math.max(
+        3.2,
+        baseRegrow + pace.regrowRelief + signature.regrowDelta,
+      ),
       fog: true,
       budget: true,
-      budgetMultiplier: _lerp(band.budget, t),
+      budgetMultiplier: baseBudget + pace.budgetRelief,
       hunger: true,
-      hungerSecondsPerCell: _lerp(band.hunger, t),
+      hungerSecondsPerCell: baseHunger + pace.hungerRelief,
+      pace: pace,
     );
+  }
+
+  /// Authored beats around the three mechanic introductions and the three band
+  /// finales. The repeated mixed/challenge/breather cadence keeps later levels
+  /// readable without turning the campaign into a flat sawtooth.
+  static LevelPace paceFor(int level) {
+    if (level <= tutorialBand) return LevelPace.learning;
+    if (level > length) return LevelPace.endless;
+    if (level == springsFrom || level == guardsFrom || level == 41) {
+      return LevelPace.introduction;
+    }
+    if (level == 6 ||
+        level == springsFrom + 1 ||
+        level == guardsFrom + 1 ||
+        level == 42) {
+      return LevelPace.practice;
+    }
+    if (level == foundationEnd || level == pressureEnd || level == length) {
+      return LevelPace.challenge;
+    }
+    const breathers = {13, 16, 19, 25, 28, 31, 34, 37, 44, 47, 50, 53, 56, 59};
+    if (breathers.contains(level)) return LevelPace.breather;
+    const challenges = {
+      8,
+      12,
+      15,
+      18,
+      24,
+      27,
+      30,
+      33,
+      36,
+      39,
+      43,
+      46,
+      49,
+      52,
+      55,
+      58,
+    };
+    if (challenges.contains(level)) return LevelPace.challenge;
+    return LevelPace.combination;
   }
 
   /// Past sixty, Mastery's slope keeps going — but every value has a floor.
@@ -468,6 +701,7 @@ class Campaign {
       budgetMultiplier: math.max(1.03, 1.06 - 0.03 * t),
       hunger: true,
       hungerSecondsPerCell: math.max(0.78, 0.85 - 0.07 * t),
+      pace: LevelPace.endless,
     );
   }
 
@@ -487,12 +721,148 @@ class Campaign {
   static String? introductionAt(int level) => switch (level) {
     springsFrom => 'Springs throw her the way she was already walking',
     guardsFrom => 'Patrols sweep the field. She will not walk into the light',
+    41 => 'DIG breaks one riveted tile. Arm it from the HUD',
     _ => null,
   };
+
+  static List<PickupKind> _powerupsFor(LevelSignature signature, int level) {
+    final pool = poolFor(level);
+    final preferred = switch (signature) {
+      LevelSignature.openTrail => const [
+        PickupKind.sprint,
+        PickupKind.radiusPlus,
+      ],
+      LevelSignature.closingTrail => const [
+        PickupKind.freeze,
+        PickupKind.radiusPlus,
+      ],
+      LevelSignature.heavyGround =>
+        level <= foundationEnd
+            ? const [PickupKind.radiusPlus, PickupKind.freeze]
+            : const [PickupKind.blast, PickupKind.radiusPlus],
+      LevelSignature.springLine => const [PickupKind.sprint, PickupKind.freeze],
+      LevelSignature.nightWatch => const [PickupKind.scent, PickupKind.freeze],
+      LevelSignature.supplyRun ||
+      LevelSignature.gauntlet ||
+      LevelSignature.lesson => pool,
+      LevelSignature.breach => const [
+        PickupKind.dig,
+        PickupKind.blast,
+        PickupKind.scent,
+      ],
+    };
+    return [
+      for (final kind in preferred)
+        if (pool.contains(kind)) kind,
+    ];
+  }
 
   static double _lerp((double, double) range, double t) =>
       range.$1 + (range.$2 - range.$1) * t;
 
   static int _lerpInt((int, int) range, double t) =>
       (range.$1 + (range.$2 - range.$1) * t).round();
+}
+
+extension on LevelSignature {
+  double get anchorDelta => switch (this) {
+    LevelSignature.openTrail => -0.03,
+    LevelSignature.heavyGround => -0.012,
+    LevelSignature.breach => 0.025,
+    _ => 0,
+  };
+
+  double get heavyDelta => switch (this) {
+    LevelSignature.openTrail => -0.02,
+    LevelSignature.heavyGround => 0.045,
+    _ => 0,
+  };
+
+  double get springMultiplier => switch (this) {
+    LevelSignature.springLine => 1.65,
+    _ => 1,
+  };
+
+  int get guardBonus => switch (this) {
+    LevelSignature.nightWatch => 1,
+    _ => 0,
+  };
+
+  int get extraTreats => switch (this) {
+    LevelSignature.supplyRun => 1,
+    _ => 0,
+  };
+
+  int get extraPowerups => switch (this) {
+    LevelSignature.supplyRun => 1,
+    _ => 0,
+  };
+
+  double get regrowDelta => switch (this) {
+    LevelSignature.closingTrail => -0.65,
+    _ => 0,
+  };
+}
+
+extension on LevelPace {
+  double get budgetRelief => switch (this) {
+    LevelPace.introduction => 0.16,
+    LevelPace.practice => 0.11,
+    LevelPace.combination => 0.035,
+    LevelPace.breather => 0.15,
+    _ => 0,
+  };
+
+  double get hungerRelief => switch (this) {
+    LevelPace.introduction => 0.16,
+    LevelPace.practice => 0.11,
+    LevelPace.combination => 0.035,
+    LevelPace.breather => 0.15,
+    _ => 0,
+  };
+
+  double get regrowRelief => switch (this) {
+    LevelPace.introduction => 0.9,
+    LevelPace.practice => 0.65,
+    LevelPace.combination => 0.2,
+    LevelPace.breather => 0.85,
+    _ => 0,
+  };
+
+  double get anchorRelief => switch (this) {
+    LevelPace.introduction => 0.03,
+    LevelPace.practice => 0.02,
+    LevelPace.combination => 0.006,
+    LevelPace.breather => 0.025,
+    _ => 0,
+  };
+
+  double get heavyRelief => switch (this) {
+    LevelPace.introduction => 0.02,
+    LevelPace.practice => 0.015,
+    LevelPace.combination => 0.005,
+    LevelPace.breather => 0.02,
+    _ => 0,
+  };
+
+  double get obstacleMultiplier => switch (this) {
+    LevelPace.introduction => 0.65,
+    LevelPace.practice => 0.75,
+    LevelPace.breather => 0.72,
+    LevelPace.combination => 0.92,
+    _ => 1,
+  };
+
+  int get guardRelief => switch (this) {
+    LevelPace.practice || LevelPace.breather => 1,
+    _ => 0,
+  };
+
+  double get guardSpeedRelief => switch (this) {
+    LevelPace.introduction => 0.10,
+    LevelPace.practice => 0.08,
+    LevelPace.breather => 0.08,
+    LevelPace.combination => 0.02,
+    _ => 0,
+  };
 }

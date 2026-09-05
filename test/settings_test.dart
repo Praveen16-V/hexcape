@@ -28,6 +28,7 @@ void main() {
       await p.setHaptics(false);
       await p.setReducedMotion(true);
       await p.setHints(false);
+      await p.setDeveloperTools(true);
 
       final reopened = await Progress.load();
       expect(reopened.volume, 0.25);
@@ -35,6 +36,7 @@ void main() {
       expect(reopened.haptics, isFalse);
       expect(reopened.reducedMotion, isTrue);
       expect(reopened.hints, isFalse);
+      expect(reopened.developerTools, isTrue);
     });
 
     test('resetting progress does not reset settings', () async {
@@ -69,6 +71,37 @@ void main() {
         Haptics.selection();
       }, returnsNormally);
       Haptics.enabled = true;
+    });
+
+    test('the tuning panel is never shown without the setting', () {
+      // It used to be added unconditionally, so every player got twenty sliders
+      // and a button that erases their save. Same enforcement as the haptics
+      // gate: the rule lives here rather than in a comment above the call.
+      final offenders = <String>[];
+      for (final entity in Directory('lib').listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) {
+          continue;
+        }
+        final source = entity.readAsStringSync();
+        var index = source.indexOf('overlays.add(Overlays.debug)');
+        while (index != -1) {
+          // The guard has to be close by — inside the same short method.
+          final before = source.substring(
+            index < 240 ? 0 : index - 240,
+            index,
+          );
+          if (!before.contains('developerTools')) {
+            offenders.add('${entity.path} @ $index');
+          }
+          index = source.indexOf('overlays.add(Overlays.debug)', index + 1);
+        }
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'the debug overlay is added unguarded at: '
+            '${offenders.join(", ")}',
+      );
     });
 
     test('nothing bypasses the haptics gate', () {

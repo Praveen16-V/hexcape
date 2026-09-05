@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
 import '../hex/hex_coord.dart';
@@ -58,16 +59,21 @@ class MapLayout {
 class LevelMap extends StatefulWidget {
   const LevelMap({
     required this.progress,
-    required this.onPlay,
+    required this.onSelect,
     required this.onPets,
     required this.onSettings,
+    required this.onReference,
     super.key,
   });
 
   final Progress progress;
-  final void Function(int level) onPlay;
+
+  /// A tile was chosen. Locked levels are passed through too — the sheet is
+  /// where a locked level explains itself, and silence taught nobody anything.
+  final void Function(int level) onSelect;
   final VoidCallback onPets;
   final VoidCallback onSettings;
+  final VoidCallback onReference;
 
   @override
   State<LevelMap> createState() => _LevelMapState();
@@ -103,8 +109,10 @@ class _LevelMapState extends State<LevelMap>
             _Header(
               stars: progress.totalStars,
               maxStars: Campaign.length * 3,
+              mastered: progress.masteredLevels,
               onPets: widget.onPets,
               onSettings: widget.onSettings,
+              onReference: widget.onReference,
             ),
             Expanded(
               child: LayoutBuilder(
@@ -119,12 +127,14 @@ class _LevelMapState extends State<LevelMap>
                     origin: Offset(hex * 0.85, hex * 0.85),
                   );
                   final height =
-                      layout.toPixel(
-                        MapLayout.coordFor(MapLayout.tiles),
-                      ).dy +
+                      layout.toPixel(MapLayout.coordFor(MapLayout.tiles)).dy +
                       hex * 1.6;
 
-                  _scrollToFrontierOnce(layout, frontier, constraints.maxHeight);
+                  _scrollToFrontierOnce(
+                    layout,
+                    frontier,
+                    constraints.maxHeight,
+                  );
 
                   return SingleChildScrollView(
                     controller: _scroll,
@@ -138,8 +148,8 @@ class _LevelMapState extends State<LevelMap>
                             details.localPosition,
                             layout,
                           );
-                          if (level != null && progress.isUnlocked(level)) {
-                            widget.onPlay(level);
+                          if (level != null) {
+                            widget.onSelect(level);
                           }
                         },
                         child: AnimatedBuilder(
@@ -150,6 +160,7 @@ class _LevelMapState extends State<LevelMap>
                               progress: progress,
                               frontier: frontier,
                               phase: _pulse.value,
+                              owned: progress.ownsFullGame,
                             ),
                           ),
                         ),
@@ -164,7 +175,7 @@ class _LevelMapState extends State<LevelMap>
               bestDepth: progress.endlessBest > Campaign.length
                   ? progress.endlessBest - Campaign.length
                   : 0,
-              onPlay: () => widget.onPlay(frontier),
+              onPlay: () => widget.onSelect(frontier),
             ),
           ],
         ),
@@ -203,12 +214,17 @@ class _MapPainter extends CustomPainter {
     required this.progress,
     required this.frontier,
     required this.phase,
+    required this.owned,
   });
 
   final HexLayout layout;
   final Progress progress;
   final int frontier;
   final double phase;
+
+  /// Passed in rather than read off [progress] so [shouldRepaint] can see it
+  /// change — buying the game has to repaint forty tiles.
+  final bool owned;
 
   final Paint _fill = Paint()..style = PaintingStyle.fill;
   final Paint _stroke = Paint()..style = PaintingStyle.stroke;
@@ -253,9 +269,16 @@ class _MapPainter extends CustomPainter {
 
   void _paintTile(Canvas canvas, int level) {
     final centre = layout.toPixel(MapLayout.coordFor(level));
-    final unlocked = progress.isUnlocked(level);
+    final access = Entitlements.accessTo(
+      level,
+      unlocked: progress.unlocked,
+      owned: progress.ownsFullGame,
+    );
+    final unlocked = access == LevelAccess.open;
+    final forSale = access == LevelAccess.needsPurchase;
     final record = progress.recordFor(level);
     final isEndless = level > Campaign.length;
+    final campaignPlayed = !isEndless && record.played;
     final band = Campaign.bandOf(level);
     final colour = Palette.forBand(band);
     final isFrontier = level == frontier;
@@ -275,14 +298,21 @@ class _MapPainter extends CustomPainter {
       _fill.maskFilter = null;
     }
 
+    // A tile you have not bought keeps its band colour. The grey plate says
+    // "not yet"; this has to say "more", and a padlock over forty levels of
+    // game reads as a wall rather than an offer.
     _fill.color = unlocked
-        ? colour.withValues(alpha: record.played ? 0.24 : 0.13)
+        ? colour.withValues(alpha: campaignPlayed ? 0.24 : 0.13)
+        : forSale
+        ? colour.withValues(alpha: 0.07)
         : Palette.lockedTile;
     canvas.drawPath(hex, _fill);
 
     _stroke
       ..color = unlocked
           ? colour.withValues(alpha: isFrontier ? 0.95 : 0.6)
+          : forSale
+          ? colour.withValues(alpha: 0.34)
           : Palette.lockedEdge
       ..strokeWidth = isFrontier ? 2.6 : 1.5
       ..strokeCap = StrokeCap.butt
@@ -290,41 +320,49 @@ class _MapPainter extends CustomPainter {
     canvas.drawPath(hex, _stroke);
 
     if (!unlocked) {
-      _paintLock(canvas, centre);
+      _paintLock(canvas, centre, forSale ? colour : Palette.lockedEdge);
       return;
     }
 
     _paintLabel(
       canvas,
-      centre.translate(0, record.played ? -layout.size * 0.16 : 0),
+      centre.translate(0, campaignPlayed ? -layout.size * 0.16 : 0),
       isEndless ? '∞' : '$level',
       colour: isEndless ? colour : Colors.white.withValues(alpha: 0.92),
       size: isEndless ? layout.size * 0.85 : layout.size * 0.58,
       weight: FontWeight.w700,
     );
 
-    if (record.played) {
+    if (campaignPlayed) {
       _paintStars(canvas, centre, record.stars, colour);
     }
   }
 
-  void _paintLock(Canvas canvas, Offset centre) {
+  void _paintLock(Canvas canvas, Offset centre, Color colour) {
     final s = layout.size * 0.22;
     _stroke
-      ..color = Palette.lockedEdge
+      ..color = colour
       ..strokeWidth = 2;
     // A shackle over a body: small, and deliberately unemphatic.
     canvas.drawArc(
-      Rect.fromCenter(center: centre.translate(0, -s * 0.75), width: s * 1.1, height: s * 1.1),
+      Rect.fromCenter(
+        center: centre.translate(0, -s * 0.75),
+        width: s * 1.1,
+        height: s * 1.1,
+      ),
       math.pi,
       math.pi,
       false,
       _stroke,
     );
-    _fill.color = Palette.lockedEdge;
+    _fill.color = colour;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: centre.translate(0, s * 0.25), width: s * 1.6, height: s * 1.2),
+        Rect.fromCenter(
+          center: centre.translate(0, s * 0.25),
+          width: s * 1.6,
+          height: s * 1.2,
+        ),
         Radius.circular(s * 0.25),
       ),
       _fill,
@@ -379,6 +417,7 @@ class _MapPainter extends CustomPainter {
   bool shouldRepaint(_MapPainter old) =>
       old.phase != phase ||
       old.frontier != frontier ||
+      old.owned != owned ||
       old.layout.size != layout.size;
 }
 
@@ -386,56 +425,114 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.stars,
     required this.maxStars,
+    required this.mastered,
     required this.onPets,
     required this.onSettings,
+    required this.onReference,
   });
 
   final int stars;
   final int maxStars;
+  final int mastered;
   final VoidCallback onPets;
   final VoidCallback onSettings;
+  final VoidCallback onReference;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
+      padding: const EdgeInsets.fromLTRB(20, 12, 6, 4),
       child: Row(
         children: [
-          const Text(
-            'HEXCAPE',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 3,
+          // Shrinks rather than collides. Three icon buttons plus a star count
+          // left the title no room, and the fixed 22pt wordmark ran straight
+          // into the number beside it.
+          const Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'HEXCAPE',
+                maxLines: 1,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 3,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Semantics(
+            label:
+                'Campaign mastery: $stars of $maxStars stars, '
+                '$mastered levels mastered',
+            child: Row(
+              children: [
+                Icon(Icons.circle, size: 9, color: Palette.treat),
+                const SizedBox(width: 5),
+                Text(
+                  '$stars/$maxStars',
+                  style: TextStyle(
+                    color: Palette.treat,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ),
           const Spacer(),
-          Text(
-            '$stars / $maxStars',
-            style: TextStyle(
-              color: Palette.treat,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Icon(Icons.circle, size: 10, color: Palette.treat),
-          IconButton(
+          _HeaderButton(
             onPressed: onPets,
-            icon: const Icon(Icons.pets),
-            color: Palette.dogBody,
+            icon: Icons.pets,
+            colour: Palette.dogBody,
             tooltip: 'Pets',
           ),
-          IconButton(
+          _HeaderButton(
+            onPressed: onReference,
+            icon: Icons.help_outline,
+            colour: Colors.white70,
+            tooltip: 'How it works',
+          ),
+          _HeaderButton(
             onPressed: onSettings,
-            icon: const Icon(Icons.tune),
-            color: Colors.white70,
+            icon: Icons.tune,
+            colour: Colors.white70,
             tooltip: 'Settings',
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Compact enough that three of them fit beside a wordmark.
+class _HeaderButton extends StatelessWidget {
+  const _HeaderButton({
+    required this.onPressed,
+    required this.icon,
+    required this.colour,
+    required this.tooltip,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final Color colour;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 21),
+      color: colour,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
     );
   }
 }
@@ -459,6 +556,7 @@ class _PlayBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final endless = level > Campaign.length;
     final band = Campaign.bandOf(level);
+    final identity = Campaign.identityFor(level);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: SizedBox(
@@ -473,14 +571,18 @@ class _PlayBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
           ),
-          child: Text(
-            endless
-                ? (bestDepth > 0 ? 'ENDLESS  ·  BEST D$bestDepth' : 'ENDLESS')
-                : '${band.label.toUpperCase()}  ·  LEVEL $level',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.6,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              endless
+                  ? (bestDepth > 0 ? 'ENDLESS  ·  BEST D$bestDepth' : 'ENDLESS')
+                  : 'LEVEL $level  ·  ${identity.title.toUpperCase()}',
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+              ),
             ),
           ),
         ),

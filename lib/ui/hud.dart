@@ -20,6 +20,26 @@ class Hud extends StatefulWidget {
 }
 
 class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
+  final _headerKey = GlobalKey();
+  final _hintKey = GlobalKey();
+
+  void _measure(EdgeInsets safe) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final header = _headerKey.currentContext?.size;
+      final hint = _hintKey.currentContext?.size;
+      if (header == null || hint == null) return;
+      widget.game.setHudInsets(
+        EdgeInsets.fromLTRB(
+          safe.left + 14,
+          safe.top + 12 + header.height + 12,
+          safe.right + 14,
+          safe.bottom + 20 + hint.height + 12,
+        ),
+      );
+    });
+  }
+
   late final AnimationController _ticker = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 1),
@@ -37,73 +57,135 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
       animation: _ticker,
       builder: (context, _) {
         final game = widget.game;
+        _measure(MediaQuery.paddingOf(context));
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Reserve room on the right for the floating debug button so
-                // the two never overlap.
-                Padding(
-                  padding: const EdgeInsets.only(right: 40),
-                  child: Row(
-                    children: [
-                      // Taps *remaining*, not taps used. The number that
-                      // creates tension is the one running out.
-                      _Stat(
-                        // Past the campaign the number restarts as a depth.
-                        // "Level 78" says nothing; "depth 18" is a score, and
-                        // it is the thing endless is actually played for.
-                        label: game.isEndless ? Strings.depth : Strings.level,
-                        value: game.isEndless
-                            ? '${game.depth}'
-                            : '${game.levelNumber}',
+                Column(
+                  key: _headerKey,
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Reserve room on the right for the floating debug button, but
+                    // only when there is one. Holding the gap open for a button
+                    // players never see cost the HUD 40 logical pixels of every
+                    // screen.
+                    Padding(
+                      padding: EdgeInsets.only(
+                        right: game.tuning.developerTools ? 40 : 0,
                       ),
-                      const SizedBox(width: 22),
-                      // A level that does not ration taps counts them up
-                      // instead of down: a budget readout on a level with no
-                      // budget is a rule the player is being asked to obey for
-                      // no reason.
-                      if (game.budgetLimited)
-                        _Stat(
-                          label: Strings.tapsLeft,
-                          value: '${game.tapsLeft}',
-                          trailing: '/ ${game.tapBudget}',
-                          alert: game.tapsLeft <= game.tapBudget * 0.25,
-                        )
-                      else
-                        _Stat(label: Strings.taps, value: '${game.taps}'),
-                      const SizedBox(width: 26),
-                      _Stat(
-                        label: Strings.time,
-                        value: _formatTime(game.levelTime),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final scale =
+                                    MediaQuery.textScalerOf(context).scale(22) /
+                                    22;
+                                final compact =
+                                    constraints.maxWidth < 390 * scale;
+                                final statWidth = compact
+                                    ? (constraints.maxWidth - 12) / 2
+                                    : null;
+                                return Wrap(
+                                  spacing: compact ? 12 : 18,
+                                  runSpacing: 10,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    // Taps *remaining*, not taps used. The number that
+                                    // creates tension is the one running out.
+                                    SizedBox(
+                                      width: statWidth,
+                                      child: _Stat(
+                                        // Past the campaign the number restarts as a depth.
+                                        // "Level 78" says nothing; "depth 18" is a score, and
+                                        // it is the thing endless is actually played for.
+                                        label: game.isEndless
+                                            ? Strings.depth
+                                            : Strings.level,
+                                        value: game.isEndless
+                                            ? '${game.depth}'
+                                            : '${game.levelNumber}',
+                                      ),
+                                    ),
+                                    // A level that does not ration taps counts them up
+                                    // instead of down: a budget readout on a level with no
+                                    // budget is a rule the player is being asked to obey for
+                                    // no reason.
+                                    if (game.budgetLimited)
+                                      SizedBox(
+                                        width: statWidth,
+                                        child: _Stat(
+                                          label: Strings.tapsLeft,
+                                          value: '${game.tapsLeft}',
+                                          trailing: compact
+                                              ? null
+                                              : '/ ${game.tapBudget}',
+                                          alert:
+                                              game.tapsLeft <=
+                                              game.tapBudget * 0.25,
+                                        ),
+                                      )
+                                    else
+                                      SizedBox(
+                                        width: statWidth,
+                                        child: _Stat(
+                                          label: Strings.taps,
+                                          value: '${game.taps}',
+                                        ),
+                                      ),
+                                    if (!compact)
+                                      _Stat(
+                                        label: Strings.time,
+                                        value: _formatTime(game.levelTime),
+                                      ),
+                                    // The openness meter used to live here. It was a
+                                    // playtesting readout for the speed curve, and with a
+                                    // level number and a chain to show as well there is no
+                                    // longer room for a number only I ever read.
+                                    if (game.tuning.zenMode)
+                                      const _Chip(label: 'ZEN PRACTICE')
+                                    else if (!compact)
+                                      _ChainPips(streak: game.streak.streak),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          // The only button on the HUD, and the only way off a
+                          // level that is not winning or losing it.
+                          const SizedBox(width: 6),
+                          _PauseButton(onPressed: game.pauseRun),
+                        ],
                       ),
-                      const Spacer(),
-                      // The openness meter used to live here. It was a
-                      // playtesting readout for the speed curve, and with a
-                      // level number and a chain to show as well there is no
-                      // longer room for a number only I ever read.
-                      if (game.tuning.zenMode)
-                        const _Chip(label: 'ZEN')
-                      else
-                        _ChainPips(streak: game.streak.streak),
+                    ),
+                    if (game.tuning.hungerEnabled) ...[
+                      const SizedBox(height: 10),
+                      _HungerBar(
+                        fraction: game.hunger.fraction,
+                        seconds: game.hunger.remaining,
+                      ),
                     ],
-                  ),
+                    if (game.powerups.heldCharges.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _Charges(
+                        held: game.powerups.heldCharges,
+                        selected: game.powerups.selectedCharge,
+                        onToggle: game.toggleCharge,
+                      ),
+                    ],
+                  ],
                 ),
-                if (game.tuning.hungerEnabled) ...[
-                  const SizedBox(height: 10),
-                  _HungerBar(
-                    fraction: game.hunger.fraction,
-                    seconds: game.hunger.remaining,
-                  ),
-                ],
-                if (game.powerups.heldCharges.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _Charges(held: game.powerups.heldCharges),
-                ],
                 const Spacer(),
-                _Hint(text: _hintFor(game)),
+                GameHint(
+                  key: _hintKey,
+                  text: _hintFor(game),
+                  reducedMotion: game.tuning.reducedMotion,
+                ),
               ],
             ),
           ),
@@ -122,6 +204,10 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
     final script = game.tutorial;
     if (script != null && !script.isDone) {
       return script.prompt;
+    }
+
+    if (game.dog.waitingForPatrol && !game.dog.isLaunched) {
+      return 'Patrol ahead — she avoids the light';
     }
 
     // Something just happened that needs words — a charge waiting to be spent,
@@ -161,6 +247,30 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
   }
 }
 
+/// Stop the run.
+///
+/// Deliberately small and unemphatic. It has to be reachable at all times, and
+/// it must never compete for attention with the board — the game is played by
+/// looking at the field, not at the chrome.
+class _PauseButton extends StatelessWidget {
+  const _PauseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      visualDensity: VisualDensity.standard,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      icon: const Icon(Icons.pause_rounded, size: 22),
+      color: Palette.hudDim,
+      tooltip: 'Pause game',
+    );
+  }
+}
+
 /// Charges in hand.
 ///
 /// Unlike the timed powerups — which show themselves as a ring closing round
@@ -168,38 +278,74 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
 /// sits there until it is spent, so it needs a place on the HUD or the player
 /// forgets they have it.
 class _Charges extends StatelessWidget {
-  const _Charges({required this.held});
+  const _Charges({
+    required this.held,
+    required this.selected,
+    required this.onToggle,
+  });
 
   final List<({PickupKind kind, int count})> held;
+  final PickupKind? selected;
+  final ValueChanged<PickupKind> onToggle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        for (final entry in held) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: Palette.forPickup(entry.kind).withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: Palette.forPickup(entry.kind).withValues(alpha: 0.55),
-              ),
-            ),
-            child: Text(
-              entry.count > 1
-                  ? '${entry.kind.label} x${entry.count}'
-                  : entry.kind.label,
-              style: TextStyle(
-                color: Palette.forPickup(entry.kind),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.1,
-              ),
-            ),
+        for (final entry in held)
+          Builder(
+            builder: (context) {
+              final armed = selected == entry.kind;
+              final colour = Palette.forPickup(entry.kind);
+              return Semantics(
+                button: true,
+                selected: armed,
+                label: '${entry.kind.label}, ${entry.count} held',
+                child: Tooltip(
+                  message: '${armed ? 'Disarm' : 'Arm'} ${entry.kind.label}',
+                  child: OutlinedButton(
+                    onPressed: () => onToggle(entry.kind),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      foregroundColor: colour,
+                      backgroundColor: colour.withValues(
+                        alpha: armed ? 0.3 : 0.12,
+                      ),
+                      side: BorderSide(
+                        color: colour.withValues(alpha: armed ? 1 : 0.55),
+                        width: armed ? 2 : 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (armed) ...[
+                          const Icon(Icons.check_rounded, size: 15),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          entry.count > 1
+                              ? '${entry.kind.label} x${entry.count}'
+                              : entry.kind.label,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-          const SizedBox(width: 8),
-        ],
       ],
     );
   }
@@ -234,6 +380,7 @@ class _ChainPips extends StatelessWidget {
         ),
         const SizedBox(height: 7),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             for (var i = 0; i < shown; i++)
               Padding(
@@ -297,16 +444,13 @@ class _HungerBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        SizedBox(
-          width: 34,
-          child: Text(
-            '${seconds.ceil()}s',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color: low ? Palette.danger : Palette.hudDim,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
+        Text(
+          '${seconds.ceil()}s',
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            color: low ? Palette.danger : Palette.hudDim,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -343,9 +487,8 @@ class _Stat extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
           children: [
             Text(
               value,
@@ -400,24 +543,28 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _Hint extends StatelessWidget {
-  const _Hint({required this.text});
+/// Wrapping instruction shared by the HUD and rendering checks.
+class GameHint extends StatelessWidget {
+  const GameHint({required this.text, this.reducedMotion = false, super.key});
 
   final String? text;
+  final bool reducedMotion;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 260),
+      duration: reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 260),
       child: text == null
           ? const SizedBox(height: 20, width: double.infinity)
           : SizedBox(
               key: ValueKey(text),
-              height: 20,
               width: double.infinity,
               child: Center(
                 child: Text(
                   text!,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Palette.hudDim,
                     fontSize: 13,

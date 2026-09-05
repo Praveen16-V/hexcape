@@ -14,6 +14,7 @@ class SettingsSheet extends StatefulWidget {
   const SettingsSheet({
     required this.progress,
     required this.onChanged,
+    required this.onRestore,
     super.key,
   });
 
@@ -22,6 +23,11 @@ class SettingsSheet extends StatefulWidget {
   /// Called after every change, so the live game picks it up immediately
   /// rather than at the next level.
   final VoidCallback onChanged;
+
+  /// Re-checks the purchase with the store. Null when billing is unavailable on
+  /// this device, in which case the row is not shown at all rather than offered
+  /// and then failing.
+  final Future<void> Function()? onRestore;
 
   @override
   State<SettingsSheet> createState() => _SettingsSheetState();
@@ -106,6 +112,34 @@ class _SettingsSheetState extends State<SettingsSheet> {
               blurb: 'An arrow points the way when you have been stuck a while.',
               value: _p.hints,
               onChanged: (v) => _apply(() => _p.setHints(v)),
+            ),
+            if (widget.onRestore != null) ...[
+              const SizedBox(height: 4),
+              // Someone who reinstalls, or picks up a second device, needs a way
+              // to get back what they paid for that does not involve paying
+              // again. It is required policy on iOS and simply correct here.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: widget.onRestore,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Restore purchase'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Palette.dogBody,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Divider(color: Palette.lockedEdge, height: 1),
+            const SizedBox(height: 10),
+            _Toggle(
+              label: 'Developer tools',
+              blurb: 'The tuning panel: sliders, a level jump, and a button '
+                  'that erases your progress. Off unless you mean it.',
+              value: _p.developerTools,
+              onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
             ),
           ],
         ),

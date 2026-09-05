@@ -26,25 +26,17 @@ void main() {
       final p = await Progress.load();
       expect(p.endlessBest, 0);
 
-      await p.recordWin(
-        level: Campaign.length + 5,
-        stars: 1,
-        taps: 10,
-        time: 5,
-      );
+      await p.recordEndlessClear(level: Campaign.length + 5);
       expect(_depth(p.endlessBest), 5);
 
       // A shallower run afterwards must not overwrite it.
-      await p.recordWin(
-        level: Campaign.length + 2,
-        stars: 1,
-        taps: 10,
-        time: 5,
-      );
+      await p.recordEndlessClear(level: Campaign.length + 2);
       expect(_depth(p.endlessBest), 5);
 
       final reopened = await Progress.load();
       expect(_depth(reopened.endlessBest), 5);
+      expect(reopened.totalStars, 0);
+      expect(reopened.recordFor(Campaign.length + 5).played, isFalse);
     });
 
     test('campaign levels never touch the endless record', () async {

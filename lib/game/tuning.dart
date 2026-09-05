@@ -3,9 +3,8 @@ import 'package:flutter/foundation.dart';
 /// The numbers §16 lists as unresolved, exposed as live sliders.
 ///
 /// Speeds are in **hex widths per second** rather than pixels, so the game
-/// feels identical on a small phone and a tablet. The tap radius is the one
-/// value deliberately kept in absolute logical pixels: §2.1 anchors it to a
-/// thumb, and a thumb does not get bigger on a bigger screen.
+/// feels identical on a small phone and a tablet. Reach uses the same board
+/// scale; tap snapping remains a separate responsibility of InputSystem.
 class TuningConfig extends ChangeNotifier {
   static const tapRadiusRange = (40.0, 160.0);
   static const driftRange = (0.2, 6.0);
@@ -23,8 +22,15 @@ class TuningConfig extends ChangeNotifier {
   static const volumeRange = (0.0, 1.0);
   static const shakeRange = (0.0, 2.5);
 
-  /// How far from the dog a tap may edit the field, in logical pixels.
+  /// Reach calibrated at the original simulation's 23.7-pixel hex radius.
+  /// Retain the existing tuning range while scaling its physical size with
+  /// the board. The default reaches approximately 1.9 hex widths.
   double tapRadius = 78;
+
+  static const referenceHexWidth = 23.7 * 1.7320508075688772;
+
+  double tapRadiusFor(double hexWidth) =>
+      tapRadius * hexWidth / referenceHexWidth;
 
   /// Drift speed in a single-hex channel — the safe, slow end of §2.2.
   double driftMin = 0.75;
@@ -45,6 +51,10 @@ class TuningConfig extends ChangeNotifier {
   double anchorDensity = 0.22;
 
   bool hintsEnabled = true;
+
+  /// Whether the tuning panel is reachable at all. See [Progress.developerTools]
+  /// for why this is a setting rather than a compile-time flag.
+  bool developerTools = false;
 
   /// Player setting: no shake, no hit-stop, no fade to grey. Distinct from
   /// [juiceScale], which is a tuning slider — this is the one the player owns,

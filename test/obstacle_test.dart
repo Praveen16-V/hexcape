@@ -342,6 +342,7 @@ void main() {
     test('a mechanic is announced on the level it appears, and only there', () {
       expect(Campaign.rulesFor(Campaign.springsFrom).introduces, isNotNull);
       expect(Campaign.rulesFor(Campaign.guardsFrom).introduces, isNotNull);
+      expect(Campaign.rulesFor(Campaign.pressureEnd + 1).introduces, isNotNull);
       // Announced anywhere else, the banner becomes noise the player learns to
       // ignore before it says something that matters.
       var announced = 0;
@@ -350,7 +351,7 @@ void main() {
           announced++;
         }
       }
-      expect(announced, 2);
+      expect(announced, 3);
     });
 
     test('the powerup pool only ever widens', () {

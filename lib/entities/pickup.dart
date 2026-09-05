@@ -75,11 +75,19 @@ enum PickupKind {
     PickupKind.dig => 'DIG',
   };
 
-  /// What the player has to do next, for the charges. Empty for the rest,
-  /// which need no instruction because they simply happen.
+  /// What the player has to do after explicitly arming a charge. Empty for the
+  /// rest, which need no instruction because they simply happen.
   String get hint => switch (this) {
-    PickupKind.blast => 'Tap anywhere in reach to blow a hole',
-    PickupKind.dig => 'Tap a riveted tile to break it',
+    PickupKind.blast => 'BLAST armed — tap a tile in reach',
+    PickupKind.dig => 'DIG armed — tap a riveted tile',
+    _ => '',
+  };
+
+  /// Pickup copy for charges. A newly collected tool stays safely put away so
+  /// an ordinary carving tap can never spend it by surprise.
+  String get readyHint => switch (this) {
+    PickupKind.blast => 'BLAST ready — tap it above to arm',
+    PickupKind.dig => 'DIG ready — tap it above to arm',
     _ => '',
   };
 }
@@ -105,6 +113,7 @@ class ActiveEffects {
   final Map<PickupKind, double> _remaining = {};
   final Map<PickupKind, double> _total = {};
   final Map<PickupKind, int> _charges = {};
+  PickupKind? _selectedCharge;
 
   static const radiusMultiplier = 1.6;
 
@@ -142,6 +151,7 @@ class ActiveEffects {
     _remaining.clear();
     _total.clear();
     _charges.clear();
+    _selectedCharge = null;
   }
 
   bool isActive(PickupKind kind) => (_remaining[kind] ?? 0) > 0;
@@ -149,6 +159,24 @@ class ActiveEffects {
   int chargesOf(PickupKind kind) => _charges[kind] ?? 0;
 
   bool has(PickupKind kind) => chargesOf(kind) > 0;
+
+  /// The tool the player has deliberately armed. Collecting a charge never
+  /// selects it; selection is a separate HUD action.
+  PickupKind? get selectedCharge => _selectedCharge;
+
+  /// Arms [kind], or puts it away when it is already armed. Arming one tool
+  /// puts the other away, leaving exactly one predictable meaning for a tap.
+  bool toggleCharge(PickupKind kind) {
+    if (!kind.isCharge || !has(kind)) {
+      return false;
+    }
+    if (_selectedCharge == kind) {
+      _selectedCharge = null;
+      return false;
+    }
+    _selectedCharge = kind;
+    return true;
+  }
 
   /// Spends one charge. Returns false when there was none, so callers can use
   /// this as the whole decision rather than checking and then spending.
@@ -159,10 +187,21 @@ class ActiveEffects {
     }
     if (held == 1) {
       _charges.remove(kind);
+      if (_selectedCharge == kind) {
+        _selectedCharge = null;
+      }
     } else {
       _charges[kind] = held - 1;
     }
     return true;
+  }
+
+  /// Spends [kind] only when the player armed that exact tool.
+  bool spendSelected(PickupKind kind) {
+    if (_selectedCharge != kind) {
+      return false;
+    }
+    return spend(kind);
   }
 
   bool get regrowthPaused => isActive(PickupKind.freeze);

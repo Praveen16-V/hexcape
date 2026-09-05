@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'level_rules.dart';
+
 /// What a player has done with one level.
 class LevelRecord {
   const LevelRecord({this.stars = 0, this.bestTaps = 0, this.bestTime = 0});
@@ -35,6 +37,8 @@ class Progress {
   static const _hapticsKey = 'opt_haptics';
   static const _reducedMotionKey = 'opt_reduced_motion';
   static const _hintsKey = 'opt_hints';
+  static const _developerKey = 'opt_developer';
+  static const _ownedKey = 'owns_full';
 
   final Map<int, LevelRecord> _records = {};
 
@@ -88,8 +92,30 @@ class Progress {
 
   LevelRecord recordFor(int level) => _records[level] ?? const LevelRecord();
 
-  int get totalStars =>
-      _records.values.fold(0, (sum, record) => sum + record.stars);
+  /// Stars belong to the authored campaign. Old builds wrote ordinary level
+  /// records for endless depths; filtering here keeps those legacy records
+  /// from becoming an unlimited source of pet unlocks.
+  int get totalStars => _records.entries
+      .where((entry) => entry.key >= 1 && entry.key <= Campaign.length)
+      .fold(0, (sum, entry) => sum + entry.value.stars);
+
+  int get completedLevels => _records.entries
+      .where(
+        (entry) =>
+            entry.key >= 1 &&
+            entry.key <= Campaign.length &&
+            entry.value.played,
+      )
+      .length;
+
+  int get masteredLevels => _records.entries
+      .where(
+        (entry) =>
+            entry.key >= 1 &&
+            entry.key <= Campaign.length &&
+            entry.value.stars == 3,
+      )
+      .length;
 
   bool isUnlocked(int level) => level <= unlocked;
 
@@ -105,6 +131,10 @@ class Progress {
     required int taps,
     required double time,
   }) async {
+    if (level > Campaign.length) {
+      await recordEndlessClear(level: level);
+      return;
+    }
     final existing = recordFor(level);
     final merged = LevelRecord(
       stars: stars > existing.stars ? stars : existing.stars,
@@ -125,9 +155,16 @@ class Progress {
     if (level + 1 > unlocked) {
       await _prefs.setInt(_unlockedKey, level + 1);
     }
-    if (level > endlessBest) {
-      await _prefs.setInt(_endlessKey, level);
+  }
+
+  /// Records only the deepest endless board cleared. Endless has no stars,
+  /// per-level records or unlock chain: every new run starts at depth one and
+  /// the single score is how far that run got.
+  Future<void> recordEndlessClear({required int level}) async {
+    if (level <= Campaign.length || level <= endlessBest) {
+      return;
     }
+    await _prefs.setInt(_endlessKey, level);
   }
 
   Future<void> choosePet(String name) => _prefs.setString(_petKey, name);
@@ -158,13 +195,41 @@ class Progress {
   bool get hints => _prefs.getBool(_hintsKey) ?? true;
   Future<void> setHints(bool on) => _prefs.setBool(_hintsKey, on);
 
+  /// The tuning panel.
+  ///
+  /// **Off by default, and it has to stay that way.** The panel is a developer
+  /// tool — twenty sliders that can make the game unwinnable and a button that
+  /// erases every star the player has earned. It was shipping to players
+  /// unconditionally, one tap from their save.
+  ///
+  /// A setting rather than `kDebugMode`, because every playtest of this project
+  /// has been a *release* build and the panel's level jump is how the later
+  /// levels get reached. Compiling it out would take the tool away from the one
+  /// person using it. Nobody turns this on by accident.
+  bool get developerTools => _prefs.getBool(_developerKey) ?? false;
+  Future<void> setDeveloperTools(bool on) => _prefs.setBool(_developerKey, on);
+
+  /// Whether the full campaign has been bought.
+  ///
+  /// A **cache**, not the record. Google's purchase stream is the record; this
+  /// exists so a player who has paid can still play on a plane. It is refreshed
+  /// from `restorePurchases()` on every launch, so a stale true survives at most
+  /// until the next time the device can reach Play — and a stale *false* is
+  /// corrected the moment it can.
+  ///
+  /// Forgeable on a rooted device, and deliberately so: engineering against that
+  /// for a single-player puzzle game costs more than it protects.
+  bool get ownsFullGame => _prefs.getBool(_ownedKey) ?? false;
+  Future<void> setOwnsFullGame(bool owned) => _prefs.setBool(_ownedKey, owned);
+
   /// Wipes everything. Only reachable from the debug panel.
   Future<void> reset() async {
     _records.clear();
     for (final key in _prefs.getKeys().toList()) {
-      // Settings are deliberately not wiped. Reset is for progress; someone
-      // who has turned the sound off does not expect that to come back on
-      // because they cleared their levels.
+      // Settings and the purchase are deliberately not wiped. Reset is for
+      // progress: someone who turned the sound off does not expect it back on
+      // because they cleared their levels, and erasing progress is emphatically
+      // not un-buying the game.
       if (key.startsWith('lvl_') ||
           key == _unlockedKey ||
           key == _endlessKey ||

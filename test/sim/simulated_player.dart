@@ -15,6 +15,7 @@ import 'package:hexcape/systems/input_system.dart';
 import 'package:hexcape/systems/pickup_system.dart';
 import 'package:hexcape/systems/regrowth_system.dart';
 import 'package:hexcape/systems/reveal_system.dart';
+import 'package:hexcape/systems/softlock_system.dart';
 
 /// Roughly the hex size the game lands on for a 480x1056 logical phone.
 const layout = HexLayout(size: 23.7, origin: Offset.zero);
@@ -92,10 +93,14 @@ SimResult play({
     layout: layout,
     dogPosition: layout.toPixel(grid.start),
     dogCell: grid.start,
-    radius: RevealSystem.radiusFor(tuning.tapRadius, tuning.revealFactor),
+    radius: RevealSystem.radiusFor(
+      tuning.tapRadiusFor(layout.width),
+      tuning.revealFactor,
+    ),
   );
 
   final regrowthSystem = RegrowthSystem();
+  final softlock = SoftlockSystem();
   final hunger = HungerSystem()
     ..reset(par: level.par, secondsPerCell: tuning.hungerSecondsPerCell);
   final powerups = ActiveEffects();
@@ -138,7 +143,8 @@ SimResult play({
         grid: grid,
         layout: layout,
         dogPosition: dog.position,
-        tapRadius: tuning.tapRadius * powerups.tapRadiusMultiplier,
+        tapRadius:
+            tuning.tapRadiusFor(layout.width) * powerups.tapRadiusMultiplier,
       ).toList();
 
       // Carve locally toward the bone. The player can only edit within a
@@ -284,7 +290,13 @@ SimResult play({
       layout: layout,
       dogPosition: dog.position,
       dogCell: dog.cell,
-      radius: RevealSystem.radiusFor(tuning.tapRadius, tuning.revealFactor),
+      radius: math.max(
+        RevealSystem.radiusFor(
+          tuning.tapRadiusFor(layout.width),
+          tuning.revealFactor,
+        ),
+        tuning.tapRadiusFor(layout.width) * powerups.tapRadiusMultiplier * 1.2,
+      ),
     );
 
     // Progress means closing the gap along a route that actually exists, so
@@ -322,14 +334,22 @@ SimResult play({
     // The budget-aware soft-lock, checked every frame exactly as the game does.
     // Only testing it once the taps ran out let a stalled run spin to the time
     // limit and report as a timeout, which hides whether it was a real loss.
-    final affordable = Pathfinder.cheapestCost(
-      dog.cell,
-      grid.exit,
-      grid.isTraversableInPrinciple,
-      grid.remainingCost,
-    );
-    if (affordable == null || affordable > budget - taps) {
-      return finish(false, affordable == null ? 'no route' : 'out of taps');
+    if (softlock.check(
+      grid: grid,
+      dogCell: dog.cell,
+      fieldVersion: fieldVersion,
+      tapsLeft: budget - taps,
+      pickups: pickups,
+      treatTaps: tuning.treatTaps.round(),
+      blastCharges: powerups.chargesOf(PickupKind.blast),
+      digCharges: powerups.chargesOf(PickupKind.dig),
+    )) {
+      final reachable = Pathfinder.reachable(
+        dog.cell,
+        grid.exit,
+        grid.isTraversableInPrinciple,
+      );
+      return finish(false, reachable ? 'out of taps' : 'no route');
     }
   }
   return finish(false, 'stalled');
@@ -347,6 +367,7 @@ SimResult playSeed({
   double? budgetMultiplier,
   bool hungerKills = true,
   double? hungerPerCell,
+  bool pickups = true,
 }) {
   final tuning = TuningConfig();
   if (budgetMultiplier != null) {
@@ -356,7 +377,11 @@ SimResult playSeed({
     tuning.hungerSecondsPerCell = hungerPerCell;
   }
   return play(
-    spec: LevelSpec(seed: seed),
+    spec: LevelSpec(
+      seed: seed,
+      treats: pickups ? 3 : 0,
+      powerups: pickups ? 2 : 0,
+    ),
     tuning: tuning,
     regrowth: regrowth,
     tapInterval: tapInterval,
@@ -395,6 +420,8 @@ LevelSpec specFor(LevelRules r) => LevelSpec(
   guardSpeed: r.guardSpeed,
   treats: r.treats,
   powerups: r.powerups,
+  treatSeconds: r.treatSeconds,
+  treatTaps: r.treatTaps,
   offeredPowerups: r.offeredPowerups,
   powerupRotation: r.powerupRotation,
   shape: r.shape,

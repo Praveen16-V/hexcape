@@ -82,15 +82,31 @@ void main() {
       await progress.recordWin(level: 2, stars: 2, taps: 10, time: 8.0);
       await progress.recordWin(level: 3, stars: 1, taps: 10, time: 8.0);
       expect(progress.totalStars, 6);
+      expect(progress.completedLevels, 3);
+      expect(progress.masteredLevels, 1);
     });
 
-    test('the furthest endless run is remembered', () async {
+    test('the furthest endless clear is the only endless progress', () async {
       final progress = await Progress.load();
-      await progress.recordWin(level: 74, stars: 1, taps: 40, time: 30.0);
+      await progress.recordEndlessClear(level: 74);
       expect(progress.endlessBest, 74);
 
-      await progress.recordWin(level: 70, stars: 3, taps: 30, time: 20.0);
+      await progress.recordEndlessClear(level: 70);
       expect(progress.endlessBest, 74, reason: 'the furthest still stands');
+      expect(progress.recordFor(74).played, isFalse);
+      expect(progress.totalStars, 0);
+      expect(progress.unlocked, 1);
+    });
+
+    test('legacy endless records cannot add campaign stars', () async {
+      SharedPreferences.setMockInitialValues({
+        'lvl_2_stars': 2,
+        'lvl_74_stars': 3,
+      });
+      final progress = await Progress.load();
+      expect(progress.totalStars, 2);
+      expect(progress.completedLevels, 1);
+      expect(progress.masteredLevels, 0);
     });
 
     test('reset clears everything', () async {

@@ -63,6 +63,13 @@ class Dog {
   /// to go, which is the idle state before the player's first tap.
   HexCoord? steerTarget;
 
+  /// The same local aim used by steering, exposed for the movement cue.
+  Offset? get movementAim => isLaunched ? null : _movementAim;
+  Offset? _movementAim;
+
+  /// Distinguishes a patrol stopping her from a corridor that needs opening.
+  bool waitingForPatrol = false;
+
   /// Every cell she has stood in this run. Used only to stop the "take any
   /// opening" fallback from walking her back and forth over old ground.
   final Set<HexCoord> _visited = {};
@@ -96,6 +103,7 @@ class Dog {
       return;
     }
     velocity = (direction / length) * speed;
+    _movementAim = null;
     launchFor = duration;
   }
 
@@ -213,6 +221,7 @@ class Dog {
   /// cavern instead. Otherwise head for the deepest reachable cell, biased
   /// toward the exit, which reads as "flows into whatever just opened".
   void _recomputeRoute(HexGrid grid, Set<HexCoord> blocked) {
+    waitingForPatrol = false;
     // Her own cell is never excluded. Standing in the light is a thing that
     // happens to her; treating it as impassable would leave the flood with no
     // source at all and freeze her exactly when she most needs to move.
@@ -222,6 +231,9 @@ class Dog {
       maxDepth: _lookaheadRings,
     );
     if (depths.length <= 1) {
+      waitingForPatrol = cell.neighbours.any(
+        (c) => grid.isPassable(c) && blocked.contains(c),
+      );
       steerTarget = null;
       _route = const [];
       return;
@@ -338,6 +350,7 @@ class Dog {
     double speedMultiplier,
   ) {
     final aim = _aimPoint(grid, layout);
+    _movementAim = aim;
     final hexWidth = layout.width;
 
     double targetSpeed;

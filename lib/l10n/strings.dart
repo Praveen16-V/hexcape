@@ -19,11 +19,21 @@ class Strings {
   static const bestChain = 'Best chain';
   static const timeTaken = 'Time';
   static const backToMap = 'BACK TO MAP';
+  static const paused = 'Paused';
+  static const resume = 'Resume';
+  static const restart = 'Restart level';
+  static const reference = 'How it works';
+  static const leaveLevel = 'Leave level';
   static const retry = 'Retry';
   static const newLevel = 'New level';
   static const nextLevel = 'Next level';
   static const level = 'LEVEL';
   static const endless = 'ENDLESS';
+  static const freeCampaignDone = 'Twenty levels, all of them cleared';
+  static const freeCampaignDoneHint =
+      'That is the whole free campaign. What follows gets faster, tighter, '
+      'and starts putting patrols in her way.';
+  static const seeWhatIsNext = 'See what is next';
   static const campaignDone = 'Every level cleared';
   static const campaignDoneHint =
       'Sixty levels, and she found the bone in all of them. '

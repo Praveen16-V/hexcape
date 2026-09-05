@@ -22,6 +22,8 @@ class LevelSpec {
     this.guardSpeed = 0.85,
     this.treats = 3,
     this.powerups = 2,
+    this.treatSeconds = 5,
+    this.treatTaps = 2,
     this.powerupRotation = 0,
     this.offeredPowerups = PickupKind.values,
     this.shape = FieldShape.ellipse,
@@ -59,6 +61,11 @@ class LevelSpec {
   final int treats;
   final int powerups;
 
+  /// What a treat returns, also used while placing it so the generator never
+  /// asks the player to spend more taps or time reaching it than it pays back.
+  final double treatSeconds;
+  final int treatTaps;
+
   /// Where in the powerup cycle this level starts, so the campaign does not
   /// open every board with the same one.
   final int powerupRotation;
@@ -79,6 +86,8 @@ class LevelSpec {
     int? guards,
     int? treats,
     int? powerups,
+    double? treatSeconds,
+    int? treatTaps,
     FieldShape? shape,
   }) => LevelSpec(
     seed: seed ?? this.seed,
@@ -91,6 +100,8 @@ class LevelSpec {
     guardSpeed: guardSpeed,
     treats: treats ?? this.treats,
     powerups: powerups ?? this.powerups,
+    treatSeconds: treatSeconds ?? this.treatSeconds,
+    treatTaps: treatTaps ?? this.treatTaps,
     powerupRotation: powerupRotation,
     offeredPowerups: offeredPowerups,
     shape: shape ?? this.shape,
@@ -184,6 +195,8 @@ class LevelGenerator {
       rng: rng,
       treats: spec.treats,
       powerups: spec.powerups,
+      treatSeconds: spec.treatSeconds,
+      treatTaps: spec.treatTaps,
       offered: [
         for (final k in spec.offeredPowerups)
           if (k.isPowerup) k,
