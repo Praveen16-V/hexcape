@@ -265,6 +265,16 @@ const allReferenceEntries = <ReferenceEntry>[
     unlocksAt: Campaign.pressureEnd + 1,
   ),
   ReferenceEntry(
+    section: ReferenceSection.pickups,
+    name: 'Stake',
+    blurb:
+        'Held until you spend it. Tap STAKE above to arm it, then tap an open '
+        'tile to hold it open for the rest of the run — no regrowth, no crack. '
+        'One tile, so choose the one that must not close.',
+    pickup: PickupKind.stake,
+    unlocksAt: Campaign.stakeFrom,
+  ),
+  ReferenceEntry(
     section: ReferenceSection.rules,
     name: 'She never stops',
     blurb:

@@ -57,6 +57,7 @@ class Palette {
   static const scent = Color(0xFFFFA6D8);
   static const blast = Color(0xFFFF8A5C);
   static const dig = Color(0xFFD8C08A);
+  static const stake = Color(0xFF9FE8C0);
 
   // Obstacles (§6.1).
   static const springTop = Color(0xFF2E5A57);
@@ -83,6 +84,7 @@ class Palette {
     PickupKind.scent => scent,
     PickupKind.blast => blast,
     PickupKind.dig => dig,
+    PickupKind.stake => stake,
   };
 
   // The campaign map (§12.1). One colour per band, so the climb reads as four

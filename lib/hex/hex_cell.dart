@@ -105,6 +105,13 @@ class HexCell {
   /// 0..1 progress through [RegrowAnim] while [state] is regrowing.
   double regrowT = 0;
 
+  /// Staked open for the rest of the run — never regrows, never faults.
+  ///
+  /// Lives on the cell rather than in a set on the game because regrowth reads
+  /// it once per cell per frame, and because it belongs to the board: it is
+  /// rebuilt with the level, like [type] and unlike an active powerup.
+  bool pinned = false;
+
   /// 1 -> 0 decay driving the tap-clear scale-up and shard burst (§10).
   double clearBurst = 0;
 

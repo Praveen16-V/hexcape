@@ -1091,6 +1091,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       case PickupKind.scent:
       case PickupKind.blast:
       case PickupKind.dig:
+      case PickupKind.stake:
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
         // Charges wait for a tap, so they need to say so. Timed effects show
@@ -1214,12 +1215,43 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       _dig(coord);
       return true;
     }
+    // Checked before blast, which also accepts `nothingToClear`. Only one tool
+    // can be armed at a time so they cannot both fire, but the order makes the
+    // more specific case the one that reads first.
+    if (outcome == TapOutcome.nothingToClear &&
+        (grid.at(coord)?.isSolid ?? true) == false &&
+        powerups.spendSelected(PickupKind.stake)) {
+      _stake(coord);
+      return true;
+    }
     if ((outcome == TapOutcome.hit || outcome == TapOutcome.nothingToClear) &&
         powerups.spendSelected(PickupKind.blast)) {
       _blast(coord);
       return true;
     }
     return false;
+  }
+
+  /// One tap, one tile that never closes again.
+  void _stake(HexCoord coord) {
+    final cell = grid.at(coord);
+    if (cell == null) {
+      return;
+    }
+    cell
+      ..pinned = true
+      // Anything already mid-close is pulled back open. Staking a tile whose
+      // warning pulses had started must save it, or the tool would fail in the
+      // exact moment a player reaches for it.
+      ..state = CellState.open
+      ..regrowT = 0
+      ..eligibleSince = null
+      ..clearBurst = 1;
+    fieldVersion++;
+    sfx.play(Sound.thunk);
+    Haptics.medium();
+    effects.shatter(layout.toPixel(coord), layout.size, colour: Palette.stake);
+    announce('Pinned open');
   }
 
   /// Arms or puts away a held tool from the HUD. This is deliberately separate

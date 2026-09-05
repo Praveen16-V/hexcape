@@ -43,6 +43,13 @@ class RegrowthSystem {
           break;
 
         case CellState.open:
+          // Staked ground is out of the cycle entirely — that is the whole of
+          // what STAKE buys, and it has to outrank the fault exemption below or
+          // the one thing that answers cracked ground would not answer it.
+          if (cell.pinned) {
+            cell.eligibleSince = null;
+            continue;
+          }
           // A fault is eligible the moment it is cleared, wherever it is. That
           // one exemption is the whole mechanic: it closes in the middle of an
           // open pocket, so the ground *ahead* of her is on a clock too.

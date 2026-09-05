@@ -238,6 +238,13 @@ class Campaign {
   /// this reads as "never", which is exactly right.
   static const faultsFrom = 61;
 
+  /// STAKE, two levels after the pressure it answers.
+  ///
+  /// Meet the crack, practise it, *then* be handed the tool that pins ground
+  /// open. Arriving with the mechanic would let a player neutralise it before
+  /// they had understood what it does to them.
+  static const stakeFrom = 63;
+
   /// Patrols open the Pressure band. They apply *timing*, which nothing before
   /// them does, so they get a band boundary to themselves rather than being
   /// mixed into a level that is also introducing tighter numbers.
@@ -268,6 +275,7 @@ class Campaign {
     PickupKind.blast,
   ];
   static const _masteryPowerups = [..._pressurePowerups, PickupKind.dig];
+  static const _collapsePowerups = [..._masteryPowerups, PickupKind.stake];
 
   /// Authored names turn stable generated boards into places a player can
   /// remember and discuss. Their mechanics still come from the signatures
@@ -787,14 +795,16 @@ class Campaign {
     if (level == springsFrom ||
         level == guardsFrom ||
         level == 41 ||
-        level == faultsFrom) {
+        level == faultsFrom ||
+        level == stakeFrom) {
       return LevelPace.introduction;
     }
     if (level == 6 ||
         level == springsFrom + 1 ||
         level == guardsFrom + 1 ||
         level == 42 ||
-        level == faultsFrom + 1) {
+        level == faultsFrom + 1 ||
+        level == stakeFrom + 1) {
       return LevelPace.practice;
     }
     if (level == foundationEnd ||
@@ -877,6 +887,9 @@ class Campaign {
   }
 
   /// Which powerups a level may drop.
+  /// Keyed on the level rather than the band, because STAKE arrives two levels
+  /// into Collapse rather than with it — a band-keyed pool would offer it on 61
+  /// and 62, before the level that introduces it.
   static List<PickupKind> poolFor(int level) {
     if (level <= foundationEnd) {
       return _foundationPowerups;
@@ -884,7 +897,10 @@ class Campaign {
     if (level <= pressureEnd) {
       return _pressurePowerups;
     }
-    return _masteryPowerups;
+    if (level < stakeFrom) {
+      return _masteryPowerups;
+    }
+    return _collapsePowerups;
   }
 
   /// The banner for a level, or null on the great majority that introduce
@@ -893,6 +909,7 @@ class Campaign {
     springsFrom => 'Springs throw her the way she was already walking',
     guardsFrom => 'Patrols sweep the field. She will not walk into the light',
     faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
+    stakeFrom => 'STAKE pins one open tile open for good. Arm it from the HUD',
     41 => 'DIG breaks one riveted tile. Arm it from the HUD',
     _ => null,
   };
@@ -911,7 +928,11 @@ class Campaign {
       // Sprint first, and that is the point of the whole type: a crack is only
       // a short cut if you can cross it before it shuts, which finally gives
       // the campaign's weakest powerup a board it is the right answer to.
-      LevelSignature.faultLine => const [PickupKind.sprint, PickupKind.freeze],
+      LevelSignature.faultLine => const [
+        PickupKind.sprint,
+        PickupKind.stake,
+        PickupKind.freeze,
+      ],
       LevelSignature.heavyGround =>
         level <= foundationEnd
             ? const [PickupKind.radiusPlus, PickupKind.freeze]

@@ -41,23 +41,44 @@ enum PickupKind {
 
   /// One tap that breaks an anchor, permanently. The only thing in the game
   /// that can.
-  dig;
+  dig,
+
+  /// One tap that pins an open tile open, permanently. The exact inverse of
+  /// [dig], and the answer to cracked ground.
+  ///
+  /// [freeze] already answers "the field is closing", but it answers it
+  /// *temporally* — five seconds, everywhere. A fault does not care: it will
+  /// still be there in six. Stake answers the same pressure *structurally* —
+  /// forever, in one place — which makes the two complementary rather than
+  /// redundant.
+  ///
+  /// One cell, never a ring. A ring would let a player build a safe highway
+  /// across the board, and the whole decision here is the sharpest question the
+  /// game can ask: **which single tile must never close?**
+  stake;
 
   bool get isPowerup => this != PickupKind.treat;
 
   /// Whether this is spent as a single use rather than running for a while.
   ///
-  /// [blast] and [dig] are charges on purpose. As timed effects their value
-  /// would scale with how fast the player can tap inside the window, which
-  /// makes the strongest thing in the game a test of thumb speed and hands the
-  /// most help to whoever needs it least. One use is one decision.
-  bool get isCharge => this == PickupKind.blast || this == PickupKind.dig;
+  /// [blast], [dig] and [stake] are charges on purpose. As timed effects their
+  /// value would scale with how fast the player can tap inside the window,
+  /// which makes the strongest thing in the game a test of thumb speed and
+  /// hands the most help to whoever needs it least. One use is one decision.
+  ///
+  /// **Arming is what makes something a charge, not instantaneity.** All three
+  /// are spent by a deliberate second tap rather than simply happening.
+  bool get isCharge =>
+      this == PickupKind.blast ||
+      this == PickupKind.dig ||
+      this == PickupKind.stake;
 
   /// How long the effect lasts. Treats and charges are instant, so zero.
   double get duration => switch (this) {
     PickupKind.treat => 0,
     PickupKind.blast => 0,
     PickupKind.dig => 0,
+    PickupKind.stake => 0,
     PickupKind.freeze => 5.0,
     PickupKind.radiusPlus => 8.0,
     PickupKind.sprint => 6.0,
@@ -73,6 +94,7 @@ enum PickupKind {
     PickupKind.scent => 'SCENT',
     PickupKind.blast => 'BLAST',
     PickupKind.dig => 'DIG',
+    PickupKind.stake => 'STAKE',
   };
 
   /// What the player has to do after explicitly arming a charge. Empty for the
@@ -80,6 +102,7 @@ enum PickupKind {
   String get hint => switch (this) {
     PickupKind.blast => 'BLAST armed — tap a tile in reach',
     PickupKind.dig => 'DIG armed — tap a riveted tile',
+    PickupKind.stake => 'STAKE armed — tap an open tile to pin it',
     _ => '',
   };
 
@@ -88,6 +111,7 @@ enum PickupKind {
   String get readyHint => switch (this) {
     PickupKind.blast => 'BLAST ready — tap it above to arm',
     PickupKind.dig => 'DIG ready — tap it above to arm',
+    PickupKind.stake => 'STAKE ready — tap it above to arm',
     _ => '',
   };
 }

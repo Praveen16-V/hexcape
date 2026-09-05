@@ -49,6 +49,7 @@ Map<HexCoord, double> _simulate(
 }
 
 void main() {
+  _stakeTests();
   group('RegrowthSystem', () {
     test('a cell surrounded by open cells never starts regrowing', () {
       // §2.3 is explicit that regrowth works inward from the outside of the
@@ -314,6 +315,72 @@ void main() {
       }
 
       expect(grid.at(HexCoord.zero)!.isSolid, isFalse);
+    });
+  });
+}
+
+/// STAKE: the tile that never closes again.
+///
+/// Verified against the regrowth system directly rather than through the game,
+/// because the property that matters is not "the tap works" but "the cell is
+/// out of the cycle for the rest of the run" — and a run is thousands of frames
+/// during which any of three separate code paths could put it back in.
+void _stakeTests() {
+  group('Staked ground', () {
+    HexGrid pinnedField({required HexType type, required bool pinned}) {
+      final coords = HexCoord.zero.disc(5);
+      final grid = HexGrid(
+        cells: {for (final c in coords) c: HexCell(c, HexType.plain)},
+        start: HexCoord.zero,
+        exit: coords.last,
+        truePath: [HexCoord.zero, coords.last],
+      );
+      grid.at(HexCoord.zero)!.type = type;
+      for (final c in HexCoord.zero.disc(2)) {
+        grid.at(c)!.clear(0);
+      }
+      grid.at(HexCoord.zero)!.pinned = pinned;
+      return grid;
+    }
+
+    test('a staked fault never closes, however long the run goes on', () {
+      final grid = pinnedField(type: HexType.fault, pinned: true);
+      final tuning = TuningConfig()
+        ..regrowDelay = 0.4
+        ..faultDelay = 0.3;
+
+      // Sixty seconds is far longer than any real level.
+      final solidAt = _simulate(grid, tuning, seconds: 60);
+
+      expect(solidAt.containsKey(HexCoord.zero), isFalse);
+      expect(grid.at(HexCoord.zero)!.isSolid, isFalse);
+      expect(grid.at(HexCoord.zero)!.eligibleSince, isNull);
+    });
+
+    test('the same tile unstaked does close, so the test proves something', () {
+      final grid = pinnedField(type: HexType.fault, pinned: false);
+      final tuning = TuningConfig()
+        ..regrowDelay = 0.4
+        ..faultDelay = 0.3;
+
+      final solidAt = _simulate(grid, tuning, seconds: 60);
+
+      expect(solidAt.containsKey(HexCoord.zero), isTrue);
+    });
+
+    test('it also holds against ordinary regrowth, not just faults', () {
+      // A staked tile on the boundary of the cleared area is the case a player
+      // will actually reach for: the corridor behind them closing in.
+      final grid = pinnedField(type: HexType.plain, pinned: true);
+      // Expose it by walling everything around it back up.
+      for (final c in HexCoord.zero.neighbours) {
+        grid.at(c)!.resetToSolid();
+      }
+      final tuning = TuningConfig()..regrowDelay = 0.4;
+
+      final solidAt = _simulate(grid, tuning, seconds: 30);
+
+      expect(solidAt.containsKey(HexCoord.zero), isFalse);
     });
   });
 }
