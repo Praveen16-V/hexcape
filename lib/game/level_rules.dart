@@ -210,10 +210,14 @@ class Campaign {
 
   static const length = 100;
 
-  /// Five guided levels, not twelve passive ones. Gating is what makes the
-  /// difference: a player cannot skim past a lesson that will not proceed
-  /// without them, so each level can carry more and still be understood.
-  static const tutorialBand = 5;
+  /// Three guided levels, not five and not twelve.
+  ///
+  /// Gating is what makes the compression safe: a player cannot skim past a
+  /// lesson that will not proceed without them, so each level can carry more
+  /// than one idea and still be understood. Three levels is the whole teaching
+  /// budget — tap and drift, then regrowth and the two special tiles, then the
+  /// two resources — and the real game starts on level four.
+  static const tutorialBand = 3;
   static const foundationEnd = 20;
   static const pressureEnd = 40;
 
@@ -251,6 +255,9 @@ class Campaign {
   /// behind a density of zero, so it can be built and played from the debug
   /// panel without any level referencing it. Until the campaign reaches here
   /// this reads as "never", which is exactly right.
+  /// Fog, on the first level of the real game.
+  static const fogFrom = tutorialBand + 1;
+
   static const faultsFrom = 61;
 
   /// STAKE, two levels after the pressure it answers.
@@ -576,69 +583,49 @@ class Campaign {
         rows: 11,
         teaches: 'Tap a tile — she walks into whatever opens',
       ),
+      // Regrowth and the two special tiles together. They were a level each
+      // when the tutorial was five long; the gate is what makes merging them
+      // safe, because a player cannot skim past a step that will not proceed
+      // without them.
       2 => LevelRules(
         level: 2,
         seed: seed,
-        columns: 8,
-        rows: 13,
-        regrowth: true,
-        regrowDelay: 8.5,
-        teaches: 'Tiles grow back. Keep carving',
-      ),
-      3 => LevelRules(
-        level: 3,
-        seed: seed,
         columns: 9,
         rows: 15,
-        anchorDensity: 0.14,
-        heavyDensity: 0.12,
+        anchorDensity: 0.13,
+        heavyDensity: 0.11,
         regrowth: true,
-        regrowDelay: 8,
-        teaches: 'Riveted tiles never clear. Ringed ones take two taps',
+        regrowDelay: 8.5,
+        teaches: 'Tiles grow back. Riveted never clear, ringed take two taps',
       ),
-      4 => LevelRules(
-        level: 4,
+      // The two resources, together, and **no fog**.
+      //
+      // Fog moved out to level four and got a banner of its own. It is not a
+      // rule so much as the absence of information, so it compounds every other
+      // lesson rather than sitting beside them — and this level is already
+      // carrying the tap budget, treats and the hunger clock.
+      _ => LevelRules(
+        level: 3,
         seed: seed,
         columns: 10,
         rows: 17,
-        anchorDensity: 0.16,
+        anchorDensity: 0.15,
         heavyDensity: 0.12,
-        treats: 2,
+        treats: 3,
         powerups: 2,
         regrowth: true,
         regrowDelay: 7.5,
         budget: true,
         // Loose on purpose, and looser than it looks. A tutorial level has to
         // be passable by the *worst* player who has understood the lesson, and
-        // level four's lesson is "taps are finite" — which is delivered by the
-        // counter going down, not by losing. The simulated floor player failed
-        // this level at 26 taps of 27; a first-timer meeting a budget for the
-        // first time is not going to do better.
+        // this one's lesson is "taps and time are finite" — which is delivered
+        // by the counters going down, not by losing. Compressing the tutorial
+        // is not licence to tighten these: campaign_sweep_test still requires
+        // the floor player to clear every one of them.
         budgetMultiplier: 2.4,
-        // Treats arrive with the budget and not before: they pay back taps, so
-        // in a level with neither budget nor clock they do nothing at all, and a
-        // pickup that visibly does nothing teaches players to ignore pickups.
-        teaches: 'Taps are limited. Treats and powerups sit off your route',
-      ),
-      _ => LevelRules(
-        level: 5,
-        seed: seed,
-        columns: 10,
-        rows: 19,
-        anchorDensity: 0.16,
-        heavyDensity: 0.14,
-        treats: 3,
-        powerups: 2,
-        regrowth: true,
-        regrowDelay: 7,
-        fog: true,
-        budget: true,
-        // Same reasoning, and this one is carrying fog and the clock as well.
-        // It previously passed with exactly nothing to spare.
-        budgetMultiplier: 2.2,
         hunger: true,
         hungerSecondsPerCell: 1.7,
-        teaches: 'You see only what she is near — and she tires',
+        teaches: 'Taps and time are limited. Treats pay both back',
       ),
     };
   }
@@ -651,11 +638,23 @@ class Campaign {
   /// ended, while [LevelPace] selectively relieves pressure between peaks.
   /// The result still climbs toward the harder endpoint without asking every
   /// consecutive level to be harsher than the last.
+  ///
+  /// **The first three bands were raised deliberately, and it costs something.**
+  /// The game opened loose — a Foundation budget of 1.70x par with a 1.60s
+  /// clock per cell is a lot of room to be wrong in — and asking the player to
+  /// be good did not really begin until Pressure. Starting Foundation at 1.45
+  /// and carrying that through means fewer players reach level twenty, which is
+  /// where the offer is; that trade was made with eyes open, and the daily
+  /// challenge and the level-21 trial exist partly to offset it.
+  ///
+  /// It also compresses the total dynamic range, which is the second argument
+  /// for the two bands past Mastery carrying their difficulty on new mechanics
+  /// rather than on these four numbers: there is very little left in them.
   static const _foundation = (
     columns: (10, 11),
     rows: (19, 23),
-    anchor: (0.16, 0.24),
-    heavy: (0.14, 0.18),
+    anchor: (0.20, 0.27),
+    heavy: (0.16, 0.21),
     spring: (0.0, 0.06),
     fault: (0.0, 0.0),
     guards: (0, 0),
@@ -665,16 +664,16 @@ class Campaign {
     powerups: (2, 2),
     treatSeconds: (5.0, 4.5),
     treatTaps: (2, 2),
-    regrow: (7.0, 6.0),
-    budget: (1.70, 1.38),
-    hunger: (1.60, 1.28),
+    regrow: (6.2, 5.4),
+    budget: (1.45, 1.24),
+    hunger: (1.38, 1.14),
   );
 
   static const _pressure = (
     columns: (11, 12),
     rows: (23, 25),
-    anchor: (0.24, 0.32),
-    heavy: (0.18, 0.24),
+    anchor: (0.27, 0.33),
+    heavy: (0.21, 0.26),
     spring: (0.06, 0.08),
     fault: (0.0, 0.0),
     guards: (1, 2),
@@ -684,16 +683,16 @@ class Campaign {
     powerups: (2, 3),
     treatSeconds: (4.5, 3.0),
     treatTaps: (2, 1),
-    regrow: (6.0, 4.8),
-    budget: (1.38, 1.18),
-    hunger: (1.28, 1.02),
+    regrow: (5.4, 4.6),
+    budget: (1.24, 1.12),
+    hunger: (1.14, 1.00),
   );
 
   static const _mastery = (
     columns: (12, 12),
     rows: (25, 27),
-    anchor: (0.32, 0.38),
-    heavy: (0.24, 0.30),
+    anchor: (0.33, 0.38),
+    heavy: (0.26, 0.30),
     spring: (0.08, 0.10),
     fault: (0.0, 0.0),
     guards: (2, 3),
@@ -703,9 +702,9 @@ class Campaign {
     powerups: (3, 3),
     treatSeconds: (3.0, 2.0),
     treatTaps: (1, 1),
-    regrow: (4.8, 3.8),
-    budget: (1.18, 1.06),
-    hunger: (1.02, 0.85),
+    regrow: (4.6, 3.8),
+    budget: (1.12, 1.06),
+    hunger: (1.00, 0.85),
   );
 
   /// Collapse (61-80). Cracked ground.
@@ -1016,6 +1015,10 @@ class Campaign {
   /// The banner for a level, or null on the great majority that introduce
   /// nothing.
   static String? introductionAt(int level) => switch (level) {
+    // Fog has arrived silently since the tutorial was five levels long — it was
+    // simply switched on and never mentioned. It is the first thing the real
+    // game does that the guided levels did not.
+    fogFrom => 'You see only what she is near. Carve to look around',
     springsFrom => 'Springs throw her the way she was already walking',
     guardsFrom => 'Patrols sweep the field. She will not walk into the light',
     faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',

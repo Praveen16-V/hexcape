@@ -380,7 +380,7 @@ void main() {
           announced++;
         }
       }
-      expect(announced, 7);
+      expect(announced, 8);
     });
 
     test('the powerup pool only ever widens', () {
