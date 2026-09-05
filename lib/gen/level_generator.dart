@@ -222,7 +222,8 @@ class LevelGenerator {
     // Last of all, and told to keep away from both ends of the board.
     final guards = GuardSystem.place(
       grid: grid,
-      rng: rng,
+      // Food tuning must not reshuffle patrols on the same board.
+      rng: math.Random(spec.seed ^ 0x47554152),
       count: spec.guards,
       cellsPerSecond: spec.guardSpeed,
       sentries: spec.sentries,

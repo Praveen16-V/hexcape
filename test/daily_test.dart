@@ -244,7 +244,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('DAILY CHALLENGE'), findsOneWidget);
-      expect(find.textContaining('MORE LEVELS'), findsOneWidget);
+      expect(find.text('Unlock full game'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -257,7 +257,7 @@ void main() {
       await tester.pumpWidget(homeFor(progress));
 
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('MORE LEVELS'), findsNothing);
+      expect(find.text('Unlock full game'), findsNothing);
       expect(find.textContaining('DAILY CHALLENGE'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });

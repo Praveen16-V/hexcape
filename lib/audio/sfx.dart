@@ -74,9 +74,19 @@ class Sfx {
   Set<SoundGroup> mutedGroups = const {};
 
   final Map<String, AudioPool> _pools = {};
+  final Map<String, Duration> _durations = {};
   final Map<String, double> _lastPlayed = {};
   double _now = 0;
   bool _ready = false;
+
+  /// Used when a clip's real duration can't be read back. Long enough for any
+  /// of these short cues to finish before the player is reclaimed.
+  static const _fallbackDuration = Duration(milliseconds: 800);
+
+  /// Padding on top of a clip's real duration before its player goes back to
+  /// the pool, so the tail of the sound is never cut short by reclaiming it
+  /// too early.
+  static const _releaseMargin = Duration(milliseconds: 150);
 
   /// Advances the throttle clock. Driven from the game loop rather than a
   /// stopwatch so it pauses with the game.
@@ -100,7 +110,7 @@ class Sfx {
     ];
     for (final name in names) {
       try {
-        _pools[name] = await AudioPool.createFromAsset(
+        final pool = await AudioPool.createFromAsset(
           path: '$name.wav',
           audioCache: FlameAudio.audioCache,
           // Two players per sound: enough for a second tap to start before the
@@ -108,6 +118,11 @@ class Sfx {
           maxPlayers: 2,
           playerMode: PlayerMode.lowLatency,
         );
+        _pools[name] = pool;
+        // PlayerMode.lowLatency never auto-recycles its players (see
+        // _playNamed) — read the clip's real length once up front so we know
+        // when it's safe to reclaim one after playback.
+        _durations[name] = await pool.getDuration() ?? _fallbackDuration;
       } catch (error) {
         debugPrint('hexcape: could not load $name.wav ($error)');
       }
@@ -162,10 +177,20 @@ class Sfx {
       return true;
     }
     // Fire and forget: awaiting playback inside the game loop would stall a
-    // frame for the sake of a sound effect.
-    pool.start(volume: (volume * gain).clamp(0.0, 1.0)).catchError((_) {
-      return () async {};
-    });
+    // frame for the sake of a sound effect. In PlayerMode.lowLatency, AudioPool
+    // never reclaims a player on its own (that's only wired up for other
+    // player modes), so without this the pool would silently mint a brand-new
+    // native player on every single call and never free it — the backlog is
+    // what eventually reads as taps' sound and haptics arriving later and
+    // later. Scheduling the returned stop function once the clip has actually
+    // finished is what lets the pool reuse its players instead.
+    final duration = _durations[name] ?? _fallbackDuration;
+    pool
+        .start(volume: (volume * gain).clamp(0.0, 1.0))
+        .then((stop) {
+          Future.delayed(duration + _releaseMargin, stop).catchError((_) {});
+        })
+        .catchError((_) {});
     return true;
   }
 

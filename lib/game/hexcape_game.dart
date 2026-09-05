@@ -219,6 +219,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   double levelTime = 0;
 
   int taps = 0;
+  double foodSecondsRefunded = 0;
+  int foodTapsRefunded = 0;
+  String? foodReceipt;
+  double foodReceiptFor = 0;
   int seed = 0;
 
   /// Which level of the campaign is being played. Past [Campaign.length] this
@@ -456,6 +460,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     elapsed = 0;
     levelTime = 0;
     taps = 0;
+    foodSecondsRefunded = 0;
+    foodTapsRefunded = 0;
+    foodReceipt = null;
+    foodReceiptFor = 0;
     despair = 0;
     firstRegrowthAt = null;
     lockedByBudget = false;
@@ -704,6 +712,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     final step = juice.consume(dt);
 
     elapsed += dt;
+    foodReceiptFor = math.max(0, foodReceiptFor - dt);
+    if (foodReceiptFor == 0) foodReceipt = null;
     tapRingFlash = math.max(0, tapRingFlash - dt * 3.2);
     wardFlash = math.max(0, wardFlash - dt * 3.0);
     barkFlash = math.max(0, barkFlash - dt * 1.6);
@@ -1114,10 +1124,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       case PickupKind.treat:
         wagBoost = 1;
         sfx.play(Sound.treat);
+        final beforeFood = hunger.remaining;
         hunger.feed(tuning.treatSeconds);
-        // Taps as well as seconds: the fog guarantees some are spent finding
-        // walls, so exploring has to be able to pay for itself.
-        tapBudget += tuning.treatTaps.round();
+        final secondsAdded = hunger.remaining - beforeFood;
+        final tapsAdded = tuning.treatTaps.round();
+        tapBudget += tapsAdded;
+        foodSecondsRefunded += secondsAdded;
+        foodTapsRefunded += tapsAdded;
+        final receipt = <String>[
+          if (tuning.hungerEnabled) '+${secondsAdded.toStringAsFixed(1)}s',
+          if (budgetLimited) '+$tapsAdded ${tapsAdded == 1 ? 'tap' : 'taps'}',
+        ];
+        foodReceipt = receipt.isEmpty ? 'Bone collected' : receipt.join(' · ');
+        foodReceiptFor = 2.5;
       case PickupKind.freeze:
       case PickupKind.radiusPlus:
       case PickupKind.sprint:

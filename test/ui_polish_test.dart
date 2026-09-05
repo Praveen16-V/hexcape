@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hexcape/game/progress.dart';
+import 'package:hexcape/game/daily.dart';
 import 'package:hexcape/game/pets.dart';
 import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/tuning.dart';
@@ -39,111 +40,143 @@ void main() {
     const Size(768, 1024),
     const Size(1280, 800),
   ]) {
-    testWidgets('Home, campaign and pause fit $size', (tester) async {
-      tester.view.physicalSize = size;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      SharedPreferences.setMockInitialValues({});
-      final progress = await Progress.load();
-      final game = HexcapeGame(tuning: TuningConfig())
-        ..onGameResize(Vector2(size.width, size.height))
-        ..startLevel(level: 1);
-      var homePressed = false;
-      final screens = <String, Widget>{
-        'home': HomeScreen(
-          progress: progress,
-          pet: Pets.scout,
-          onPlay: () {},
-          onCampaign: () {},
-          onTutorial: () {},
-          onDaily: () {},
-          onPets: () {},
-          onSettings: () {},
-          onReference: () {},
-          onUnlock: () {},
-        ),
-        'tutorial': Material(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(painter: _TutorialBoard(game)),
-              ),
-              Positioned.fill(child: Hud(game: game)),
-            ],
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('Home, campaign and pause fit $size scale=$scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({
+          'opt_reduced_motion': scale == 2,
+        });
+        final progress = await Progress.load();
+        final game = HexcapeGame(tuning: TuningConfig())
+          ..onGameResize(Vector2(size.width, size.height))
+          ..startLevel(level: 1);
+        var homePressed = false;
+        final screens = <String, Widget>{
+          'home': HomeScreen(
+            progress: progress,
+            pet: Pets.scout,
+            onPlay: () {},
+            onCampaign: () {},
+            onTutorial: () {},
+            onDaily: () {},
+            onPets: () {},
+            onSettings: () {},
+            onReference: () {},
+            onUnlock: () {},
           ),
-        ),
-        for (final phase in [GamePhase.won, GamePhase.crushed])
-          phase.name: Material(
-            child: ResultOverlay(
-              game: HexcapeGame(tuning: TuningConfig())
-                ..onGameResize(Vector2(size.width, size.height))
-                ..startLevel(level: 1)
-                ..phase = phase,
-              owned: true,
-              dailyStreak: 0,
-              onMap: () {},
-              onUnlock: () {},
-              onHome: () => homePressed = true,
+          'tutorial': Material(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(painter: _TutorialBoard(game)),
+                ),
+                Positioned.fill(child: Hud(game: game)),
+              ],
             ),
           ),
-        'campaign': LevelMap(
-          progress: progress,
-          onSelect: (_) {},
-          onBack: () {},
-          showToken: 1,
-        ),
-        'pause': Material(
-          child: PauseOverlay(
-            game: game,
-            onMap: () {},
-            onHome: () => homePressed = true,
-            onReference: () {},
+          for (final phase in [GamePhase.won, GamePhase.crushed])
+            phase.name: Material(
+              child: ResultOverlay(
+                game: HexcapeGame(tuning: TuningConfig())
+                  ..onGameResize(Vector2(size.width, size.height))
+                  ..startLevel(level: 1)
+                  ..phase = phase,
+                owned: true,
+                dailyStreak: 0,
+                onMap: () {},
+                onUnlock: () {},
+                onHome: () => homePressed = true,
+              ),
+            ),
+          for (final phase in [GamePhase.won, GamePhase.starved])
+            'daily-${phase.name}': Material(
+              child: ResultOverlay(
+                game: HexcapeGame(tuning: TuningConfig())
+                  ..onGameResize(Vector2(size.width, size.height))
+                  ..daily = Daily.forDate(DateTime.utc(2026, 9, 1))
+                  ..startLevel(
+                    level: Daily.forDate(DateTime.utc(2026, 9, 1)).sourceLevel,
+                  )
+                  ..phase = phase,
+                owned: false,
+                dailyStreak: 2,
+                onMap: () {},
+                onUnlock: () {},
+                onHome: () => homePressed = true,
+              ),
+            ),
+          'campaign': LevelMap(
+            progress: progress,
+            onSelect: (_) {},
+            onBack: () {},
+            showToken: 1,
           ),
-        ),
-      };
-      for (final entry in screens.entries) {
-        final key = GlobalKey();
-        await tester.pumpWidget(
-          MaterialApp(
-            home: RepaintBoundary(key: key, child: entry.value),
+          'pause': Material(
+            child: PauseOverlay(
+              game: game,
+              onMap: () {},
+              onHome: () => homePressed = true,
+              onReference: () {},
+            ),
           ),
-        );
-        await tester.pump(const Duration(milliseconds: 450));
-        expect(tester.takeException(), isNull);
-        if (entry.key == 'won' || entry.key == 'crushed') {
-          homePressed = false;
-          await tester.ensureVisible(find.text('Main Menu'));
-          await tester.tap(find.text('Main Menu'));
-          expect(homePressed, isTrue);
+        };
+        for (final entry in screens.entries) {
+          final key = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: size,
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                ),
+                child: RepaintBoundary(key: key, child: entry.value),
+              ),
+            ),
+          );
+          await tester.pump(const Duration(milliseconds: 450));
+          expect(tester.takeException(), isNull, reason: entry.key);
+          if (entry.key == 'won' || entry.key == 'crushed') {
+            homePressed = false;
+            await tester.ensureVisible(find.text('Main Menu'));
+            await tester.tap(find.text('Main Menu'));
+            expect(homePressed, isTrue);
+          }
+          if (entry.key == 'pause') {
+            await tester.tap(find.text('MAIN MENU'));
+            expect(homePressed, isTrue);
+          }
+          if (const bool.fromEnvironment('RENDER_UI')) {
+            final boundary =
+                key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              final data = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                'build/ui-review/${entry.key}-${size.width.toInt()}-${scale.toInt()}x.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(data!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          if (entry.key == 'tutorial') {
+            await tester.tap(find.text('Skip'));
+            await tester.pump();
+            expect(game.tutorial!.isDone, isTrue);
+            expect(game.tutorialTarget, isNull);
+          }
+          await tester.pumpWidget(const SizedBox());
         }
-        if (entry.key == 'pause') {
-          await tester.tap(find.text('MAIN MENU'));
-          expect(homePressed, isTrue);
-        }
-        if (const bool.fromEnvironment('RENDER_UI')) {
-          final boundary =
-              key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-          await tester.runAsync(() async {
-            final image = await boundary.toImage();
-            final data = await image.toByteData(format: ui.ImageByteFormat.png);
-            final file = File(
-              'build/ui-review/${entry.key}-${size.width.toInt()}.png',
-            );
-            await file.parent.create(recursive: true);
-            await file.writeAsBytes(data!.buffer.asUint8List());
-            image.dispose();
-          });
-        }
-        if (entry.key == 'tutorial') {
-          await tester.tap(find.text('Skip'));
-          await tester.pump();
-          expect(game.tutorial!.isDone, isTrue);
-          expect(game.tutorialTarget, isNull);
-        }
-        await tester.pumpWidget(const SizedBox());
-      }
-    });
+      });
+    }
   }
 }
 

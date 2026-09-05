@@ -187,7 +187,7 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                   child: !game.isOver && !(game.tutorial?.isDone ?? true)
                       ? TutorialCard(game: game)
                       : GameHint(
-                          text: _hintFor(game),
+                          text: game.foodReceipt ?? _hintFor(game),
                           reducedMotion: game.tuning.reducedMotion,
                         ),
                 ),
@@ -635,7 +635,9 @@ class TutorialCard extends StatelessWidget {
               Semantics(
                 liveRegion: true,
                 child: Text(
-                  step.prompt,
+                  game.foodReceipt == null
+                      ? step.prompt
+                      : '${game.foodReceipt} - ${step.prompt}',
                   style: const TextStyle(
                     color: Palette.hudText,
                     fontSize: 16,

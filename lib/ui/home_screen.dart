@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../game/daily.dart';
-import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/pets.dart';
 import '../game/progress.dart';
@@ -78,155 +77,169 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Palette.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            _TopBar(
-              stars: progress.totalStars,
-              maxStars: Campaign.length * 3,
-              onPets: onPets,
-              onSettings: onSettings,
-              onReference: onReference,
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => Center(
-                  child: HomeDog(
-                    pet: pet,
-                    reducedMotion: progress.reducedMotion,
-                    size: math.min(
-                      constraints.maxWidth * 0.62,
-                      constraints.maxHeight * 0.68,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const Text(
-              'HEXCAPE',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 34,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 6,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 36),
-              child: Text(
-                Strings.tagline,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-              ),
-            ),
-            if (onTutorial != null)
-              TextButton.icon(
-                onPressed: onTutorial,
-                icon: const Icon(Icons.touch_app_outlined, size: 18),
-                label: const Text('Learn to play'),
-                style: TextButton.styleFrom(foregroundColor: Palette.dogBody),
-              )
-            else
-              const SizedBox(height: 22),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _Chip(
-                      icon: dailyCleared
-                          ? Icons.check_circle_outline
-                          : Icons.today_outlined,
-                      label: dailyCleared
-                          ? Strings.dailyDone
-                          : Strings.dailyTitle,
-                      trailing: streak > 0 ? '$streak🔥' : null,
-                      colour: dailyCleared
-                          ? Palette.hudDim
-                          : Palette.forBand(daily.band),
-                      onTap: onDaily,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _Chip(
-                      icon: Icons.hexagon_outlined,
-                      label: Strings.campaign,
-                      trailing: '$frontier/${MapLayout.tiles}',
-                      colour: Palette.hudText,
-                      onTap: onCampaign,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+            return SingleChildScrollView(
               child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: FilledButton(
-                  onPressed: onPlay,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colour,
-                    foregroundColor: Palette.background,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      endless
-                          ? (bestDepth > 0
-                                ? 'ENDLESS  ·  BEST D$bestDepth'
-                                : 'ENDLESS')
-                          : 'LEVEL $frontier  ·  ${identity.title.toUpperCase()}',
-                      maxLines: 1,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6,
-                      ),
-                    ),
-                  ),
+                height: math.max(
+                  constraints.maxHeight,
+                  scale > 1.4 ? 560 * scale : 0,
                 ),
-              ),
-            ),
-            SizedBox(
-              height: 28,
-              child: progress.ownsFullGame
-                  ? null
-                  // Always reachable, never loud. One line under Play rather
-                  // than a bar of its own — a game with one thing to sell can
-                  // afford to say so once, quietly.
-                  : TextButton(
-                      onPressed: onUnlock,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Palette.bandPressure,
-                        padding: EdgeInsets.zero,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          '${Campaign.length - Entitlements.freeThrough} '
-                          'MORE LEVELS  ·  UNLOCK THE FULL GAME',
-                          maxLines: 1,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
+                child: Column(
+                  children: [
+                    _TopBar(
+                      stars: progress.totalStars,
+                      maxStars: Campaign.length * 3,
+                      onPets: onPets,
+                      onSettings: onSettings,
+                      onReference: onReference,
+                    ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Center(
+                          child: HomeDog(
+                            pet: pet,
+                            reducedMotion: progress.reducedMotion,
+                            size: math.min(
+                              constraints.maxWidth * 0.62,
+                              constraints.maxHeight * 0.68,
+                            ),
                           ),
                         ),
                       ),
                     ),
-            ),
-          ],
+                    const Text(
+                      'HEXCAPE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 6,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 36),
+                      child: Text(
+                        Strings.tagline,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 12.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    if (onTutorial != null)
+                      TextButton.icon(
+                        onPressed: onTutorial,
+                        icon: const Icon(Icons.touch_app_outlined, size: 18),
+                        label: const Text('Learn to play'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Palette.dogBody,
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 22),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _Chip(
+                              icon: dailyCleared
+                                  ? Icons.check_circle_outline
+                                  : Icons.today_outlined,
+                              label: dailyCleared
+                                  ? Strings.dailyDone
+                                  : Strings.dailyTitle,
+                              trailing: streak > 0 ? '$streak🔥' : null,
+                              colour: dailyCleared
+                                  ? Palette.hudDim
+                                  : Palette.forBand(daily.band),
+                              onTap: onDaily,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _Chip(
+                              icon: Icons.hexagon_outlined,
+                              label: Strings.campaign,
+                              trailing: '$frontier/${MapLayout.tiles}',
+                              colour: Palette.hudText,
+                              onTap: onCampaign,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: FilledButton(
+                          onPressed: onPlay,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colour,
+                            foregroundColor: Palette.background,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              endless
+                                  ? (bestDepth > 0
+                                        ? 'ENDLESS  ·  BEST D$bestDepth'
+                                        : 'ENDLESS')
+                                  : 'LEVEL $frontier  ·  ${identity.title.toUpperCase()}',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 28,
+                      child: progress.ownsFullGame
+                          ? null
+                          // Always reachable, never loud. One line under Play rather
+                          // than a bar of its own — a game with one thing to sell can
+                          // afford to say so once, quietly.
+                          : TextButton(
+                              onPressed: onUnlock,
+                              style: TextButton.styleFrom(
+                                foregroundColor: Palette.bandPressure,
+                                padding: EdgeInsets.zero,
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Unlock full game',
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -374,11 +387,16 @@ class _Chip extends StatelessWidget {
           ),
           if (trailing != null) ...[
             const SizedBox(width: 6),
-            Text(
-              trailing!,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  trailing!,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
           ],

@@ -330,27 +330,26 @@ class _ResultOverlayState extends State<ResultOverlay>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  // Quieter than the other two, and always present. Leaving is
-                  // never the thing the panel is pushing you toward, but a player
-                  // who wants out of a level they keep losing should not have to
-                  // win it first.
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: widget.onMap,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white.withValues(alpha: 0.5),
-                      ),
-                      child: const Text(
-                        Strings.backToMap,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
+                  // Do not duplicate navigation already offered above.
+                  if (primaryAction != widget.onMap &&
+                      secondaryAction != widget.onMap)
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: widget.onMap,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white.withValues(alpha: 0.5),
+                        ),
+                        child: const Text(
+                          Strings.backToMap,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

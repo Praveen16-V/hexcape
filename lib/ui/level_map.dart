@@ -114,6 +114,13 @@ class _LevelMapState extends State<LevelMap>
   @override
   Widget build(BuildContext context) {
     final progress = widget.progress;
+    final reducedMotion =
+        progress.reducedMotion || MediaQuery.disableAnimationsOf(context);
+    if (reducedMotion) {
+      _pulse.stop();
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat();
+    }
     final frontier = math.min(progress.unlocked, MapLayout.tiles);
 
     return Scaffold(
@@ -175,7 +182,7 @@ class _LevelMapState extends State<LevelMap>
                               layout: layout,
                               progress: progress,
                               frontier: frontier,
-                              phase: _pulse.value,
+                              phase: reducedMotion ? 0.5 : _pulse.value,
                               owned: progress.ownsFullGame,
                               trialUsed: progress.trialUsed,
                             ),
@@ -295,7 +302,7 @@ class _MapPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: colour.withValues(alpha: 0.55),
+          color: colour.withValues(alpha: 0.90),
           fontSize: 10,
           fontWeight: FontWeight.w800,
           letterSpacing: 2,
@@ -306,6 +313,15 @@ class _MapPainter extends CustomPainter {
     )..layout();
     canvas.save();
     final centreY = math.max(y, previousBottom + 12 + painter.width / 2);
+    _stroke
+      ..color = colour
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(3, centreY - painter.width / 2),
+      Offset(3, centreY + painter.width / 2),
+      _stroke,
+    );
     canvas.translate(15, centreY);
     canvas.rotate(-math.pi / 2);
     painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
@@ -406,8 +422,33 @@ class _MapPainter extends CustomPainter {
     canvas.drawPath(hex, _stroke);
 
     if (!unlocked) {
-      _paintLock(canvas, centre, forSale ? colour : Palette.lockedEdge);
+      _paintLabel(
+        canvas,
+        centre.translate(0, -layout.size * 0.24),
+        isEndless ? '∞' : '$level',
+        colour: Palette.hudText,
+        size: layout.size * 0.48,
+        weight: FontWeight.w600,
+      );
+      _paintLock(
+        canvas,
+        centre.translate(0, layout.size * 0.38),
+        Color.lerp(colour, Palette.hudText, 0.55)!,
+        scale: 0.65,
+      );
       return;
+    }
+    if (isFrontier) {
+      _fill.color = Palette.hudText;
+      final tip = centre.translate(0, -layout.size * 0.62);
+      canvas.drawPath(
+        Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo(tip.dx - layout.size * 0.13, tip.dy - layout.size * 0.17)
+          ..lineTo(tip.dx + layout.size * 0.13, tip.dy - layout.size * 0.17)
+          ..close(),
+        _fill,
+      );
     }
 
     _paintLabel(
@@ -424,8 +465,13 @@ class _MapPainter extends CustomPainter {
     }
   }
 
-  void _paintLock(Canvas canvas, Offset centre, Color colour) {
-    final s = layout.size * 0.22;
+  void _paintLock(
+    Canvas canvas,
+    Offset centre,
+    Color colour, {
+    double scale = 1,
+  }) {
+    final s = layout.size * 0.22 * scale;
     _stroke
       ..color = colour
       ..strokeWidth = 2;
@@ -487,6 +533,7 @@ class _MapPainter extends CustomPainter {
         style: TextStyle(
           color: colour,
           fontSize: size,
+          fontFamily: 'Roboto',
           fontWeight: weight,
           height: 1,
         ),
@@ -536,16 +583,23 @@ class _CampaignBar extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
           const SizedBox(width: 4),
-          const Text(
-            'CAMPAIGN',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.4,
+          const Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'CAMPAIGN',
+                maxLines: 1,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.4,
+                ),
+              ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           Semantics(
             label: 'Campaign mastery: $stars of $maxStars stars',
             child: Row(
