@@ -58,7 +58,30 @@ void main() {
               reason: 'level $n cannot resolve ${step.target.name}',
             );
           }
-          script.update(1 / 60, ctx.level.grid, ctx.dog, ctx.level.pickups);
+          if (step.advance == TutorialAdvance.onContinue) {
+            script.continueLesson();
+          } else if (step.advance == TutorialAdvance.onTap) {
+            final target = script.targetCell(
+              ctx.level.grid,
+              ctx.dog,
+              ctx.level.pickups,
+            )!;
+            ctx.level.grid.at(target)!.clear(0);
+            script.onTapped(
+              target,
+              ctx.level.grid,
+              ctx.dog,
+              ctx.level.pickups,
+              targetBeforeTap: target,
+            );
+          } else {
+            ctx.dog.cell = script.targetCell(
+              ctx.level.grid,
+              ctx.dog,
+              ctx.level.pickups,
+            )!;
+            script.update(0, ctx.level.grid, ctx.dog, ctx.level.pickups);
+          }
         }
         expect(script.isDone, isTrue, reason: 'level $n never finished');
       }
@@ -105,48 +128,41 @@ void main() {
       );
     });
 
-    test('a gate always gives up eventually', () {
-      // The failure that matters: a player who cannot find the tile, or simply
-      // will not play along, must never be left with a board that refuses every
-      // tap. A tutorial that can trap someone is worse than no tutorial.
-      final ctx = _levelFor(1);
-      final script = Tutorial.forLevel(1)!;
-      expect(script.isGating, isTrue);
+    test(
+      'an action waits for the player and Skip always releases the gate',
+      () {
+        final ctx = _levelFor(1);
+        final script = Tutorial.forLevel(1)!;
+        script.update(120, ctx.level.grid, ctx.dog, ctx.level.pickups);
+        script.continueLesson();
+        expect(script.stepNumber, 1);
+        expect(script.isGating, isTrue);
+        script.skip();
+        expect(script.isDone, isTrue);
+        expect(
+          script.allowsTap(
+            const HexCoord(99, 99),
+            ctx.level.grid,
+            ctx.dog,
+            ctx.level.pickups,
+          ),
+          isTrue,
+        );
+        expect(script.prompt, isNull);
+      },
+    );
 
-      for (var i = 0; i < 60 * 60; i++) {
-        script.update(1 / 60, ctx.level.grid, ctx.dog, ctx.level.pickups);
-      }
-      expect(script.isDone, isTrue, reason: 'the script never released');
-      expect(script.isGating, isFalse);
-    });
-
-    test('every script finishes on its own within a reasonable time', () {
-      for (var n = 1; n <= Campaign.tutorialBand; n++) {
-        final ctx = _levelFor(n);
-        final script = Tutorial.forLevel(n)!;
-        for (var i = 0; i < 60 * 90; i++) {
-          script.update(1 / 60, ctx.level.grid, ctx.dog, ctx.level.pickups);
-        }
-        expect(script.isDone, isTrue, reason: 'level $n still talking');
-      }
-    });
-
-    test('nothing is gated once the script is done', () {
-      final ctx = _levelFor(1);
-      final script = Tutorial.forLevel(1)!;
-      for (var i = 0; i < 60 * 60; i++) {
-        script.update(1 / 60, ctx.level.grid, ctx.dog, ctx.level.pickups);
-      }
-      expect(
-        script.allowsTap(
-          const HexCoord(99, 99),
-          ctx.level.grid,
-          ctx.dog,
-          ctx.level.pickups,
-        ),
-        isTrue,
-      );
-      expect(script.prompt, isNull);
+    test('explanations wait for Continue and reset restores the lesson', () {
+      final ctx = _levelFor(2);
+      final script = Tutorial.forLevel(2)!;
+      script.update(120, ctx.level.grid, ctx.dog, ctx.level.pickups);
+      expect(script.stepNumber, 1);
+      script.continueLesson();
+      expect(script.stepNumber, 2);
+      script.skip();
+      script.reset();
+      expect(script.isDone, isFalse);
+      expect(script.stepNumber, 1);
     });
   });
 

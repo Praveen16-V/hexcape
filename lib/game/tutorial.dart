@@ -38,23 +38,21 @@ enum TutorialAdvance {
   /// She reaches the target cell.
   onReach,
 
-  /// A timer runs out.
-  onTimer,
+  /// The player acknowledges the explanation.
+  onContinue,
 }
 
 class TutorialStep {
   const TutorialStep({
     required this.prompt,
     this.target = TutorialTarget.none,
-    this.advance = TutorialAdvance.onTimer,
-    this.seconds = 3,
+    this.advance = TutorialAdvance.onContinue,
     this.gate = false,
   });
 
   final String prompt;
   final TutorialTarget target;
   final TutorialAdvance advance;
-  final double seconds;
 
   /// Whether every tap but the target is refused.
   ///
@@ -76,8 +74,18 @@ class Tutorial {
   final List<TutorialStep> steps;
 
   int _index = 0;
-  double _elapsed = 0;
+  HexCoord? _reachTarget;
   bool _done = false;
+
+  int get stepNumber => (_index + 1).clamp(1, steps.length);
+  int get stepCount => steps.length;
+
+  void skip() => _done = true;
+
+  /// Explanations wait for acknowledgement; action steps require real play.
+  void continueLesson() {
+    if (current?.advance == TutorialAdvance.onContinue) _next();
+  }
 
   bool get isDone => _done || _index >= steps.length;
 
@@ -91,13 +99,13 @@ class Tutorial {
 
   void reset() {
     _index = 0;
-    _elapsed = 0;
+    _reachTarget = null;
     _done = false;
   }
 
   void _next() {
     _index++;
-    _elapsed = 0;
+    _reachTarget = null;
   }
 
   /// The cell this step points at, resolved against the board as it is now.
@@ -120,7 +128,10 @@ class Tutorial {
         dog,
         (c) => c.type == HexType.heavy && c.isSolid,
       ),
-      TutorialTarget.nearestPickup => _nearestPickup(dog, pickups),
+      TutorialTarget.nearestPickup => _reachTarget ??= _nearestPickup(
+        dog,
+        pickups,
+      ),
     };
   }
 
@@ -220,31 +231,24 @@ class Tutorial {
     }
   }
 
-  /// Call every frame while the level is live.
-  ///
-  /// **Every step has a way out on time**, including the ones waiting for the
-  /// player to do something. A step that waits forever for a tap that never
-  /// comes, or for her to reach a treat the player has decided to skip, leaves
-  /// the game showing a stale instruction — and a gated one leaves the board
-  /// refusing every tap. A tutorial that can trap someone is worse than none.
+  /// Action steps wait for play. Missing targets release the step, and the
+  /// visible Skip control always gives the player a way out.
   void update(double dt, HexGrid grid, Dog dog, List<Pickup> pickups) {
     final step = current;
-    if (step == null) {
-      return;
-    }
-    _elapsed += dt;
+    if (step == null) return;
     switch (step.advance) {
-      case TutorialAdvance.onTimer:
-        if (_elapsed >= step.seconds) {
-          _next();
-        }
+      case TutorialAdvance.onContinue:
+        break;
       case TutorialAdvance.onReach:
         final target = targetCell(grid, dog, pickups);
-        if (target == null || dog.cell == target || _elapsed >= step.seconds) {
+        if (target == null ||
+            dog.cell == target ||
+            pickups.any((p) => p.coord == target && p.collected)) {
           _next();
         }
       case TutorialAdvance.onTap:
-        if (_elapsed >= step.seconds * 6) {
+        if (step.target != TutorialTarget.none &&
+            targetCell(grid, dog, pickups) == null) {
           _next();
         }
     }
@@ -259,74 +263,52 @@ class Tutorial {
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
-        seconds: 4,
       ),
       TutorialStep(
         prompt: 'Open the next tile to make a narrow path',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
-        seconds: 1.5,
       ),
-      TutorialStep(prompt: 'Narrow paths keep her pace gentle', seconds: 1.5),
+      TutorialStep(prompt: 'Narrow paths keep her pace gentle'),
       TutorialStep(
         prompt: 'Open a tile beside her to widen the path',
         target: TutorialTarget.widenPath,
         advance: TutorialAdvance.onTap,
-        seconds: 1.5,
       ),
       TutorialStep(
         prompt: 'Widen it once more for more speed',
         target: TutorialTarget.widenPath,
         advance: TutorialAdvance.onTap,
-        seconds: 1.5,
       ),
-      TutorialStep(
-        prompt: 'More open space, more speed. Find the bone!',
-        seconds: 3.5,
-      ),
+      TutorialStep(prompt: 'More open space, more speed. Find the bone!'),
     ]),
     // Regrowth and the two special tiles, in one gated run. Four beats rather
     // than the two-and-two they were as separate levels — the ceiling is
     // attention, not level count, and a gated step waits for the player.
     2 => Tutorial(const [
-      TutorialStep(
-        prompt: 'Cleared tiles grow back — watch behind her',
-        seconds: 4.5,
-      ),
-      TutorialStep(
-        prompt: 'Boxed in on every side, and she is finished',
-        seconds: 4,
-      ),
+      TutorialStep(prompt: 'Cleared tiles grow back — watch behind her'),
+      TutorialStep(prompt: 'Boxed in on every side, and she is finished'),
       TutorialStep(
         prompt: 'Riveted tiles never clear. Go around them',
         target: TutorialTarget.nearestAnchor,
-        seconds: 4.5,
       ),
       TutorialStep(
         prompt: 'Double-ringed tiles take two taps',
         target: TutorialTarget.nearestHeavy,
-        seconds: 4.5,
       ),
     ]),
     // Both resources. Fog is deliberately not here — it moved to level four,
     // where it gets a banner of its own.
     3 => Tutorial(const [
-      TutorialStep(prompt: 'Your taps are limited now', seconds: 3.5),
-      TutorialStep(
-        prompt: 'And she tires — the bar is how long she has left',
-        seconds: 3.5,
-      ),
+      TutorialStep(prompt: 'Your taps are limited now'),
+      TutorialStep(prompt: 'And she tires — the bar is how long she has left'),
       TutorialStep(
         prompt: 'Walk her over this — treats pay back taps and time',
         target: TutorialTarget.nearestPickup,
         advance: TutorialAdvance.onReach,
-        seconds: 12,
       ),
-      TutorialStep(
-        prompt: 'They sit off your route. Worth the detour?',
-        seconds: 3.5,
-      ),
+      TutorialStep(prompt: 'They sit off your route. Worth the detour?'),
     ]),
     _ => null,
   };

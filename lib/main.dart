@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +15,7 @@ import 'game/tuning.dart';
 import 'l10n/strings.dart';
 import 'theme/palette.dart';
 import 'ui/debug_panel.dart';
+import 'ui/home_screen.dart';
 import 'ui/hud.dart';
 import 'ui/level_detail.dart';
 import 'ui/level_map.dart';
@@ -22,6 +25,12 @@ import 'ui/pet_picker.dart';
 import 'ui/reference_sheet.dart';
 import 'ui/result_overlay.dart';
 import 'ui/settings_sheet.dart';
+
+/// Which of the three mutually-exclusive screens is on top.
+///
+/// Not a `Navigator` route for any of them — see [GameShell] — so this is the
+/// only thing that actually changes when the player moves between them.
+enum _Screen { home, campaign, level }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,14 +71,15 @@ class HexcapeApp extends StatelessWidget {
   }
 }
 
-/// Map and level, in one widget.
+/// Home, map and level, in one widget.
 ///
-/// Deliberately **not** a `Navigator` with two routes. The game is one long-lived
-/// [HexcapeGame]: it owns loaded audio, a running loop and a level in progress,
-/// and pushing a route over it would tear the `GameWidget` down and rebuild it on
-/// every visit to the map. Keeping both children mounted and swapping which one
-/// is on screen means going to the map costs nothing and comes back to exactly
-/// what was there, which is what a paused level should do.
+/// Deliberately **not** a `Navigator` with three routes. The game is one
+/// long-lived [HexcapeGame]: it owns loaded audio, a running loop and a level
+/// in progress, and pushing a route over it would tear the `GameWidget` down
+/// and rebuild it on every visit to the map. Keeping all three children
+/// mounted and swapping which one is on screen means moving between them
+/// costs nothing and comes back to exactly what was there, which is what a
+/// paused level should do.
 class GameShell extends StatefulWidget {
   const GameShell({required this.progress, super.key});
 
@@ -91,8 +101,14 @@ class _GameShellState extends State<GameShell>
     duration: const Duration(seconds: 1),
   )..repeat();
 
-  /// Whether the level is on screen. The map is what you get when it is not.
-  bool _playing = false;
+  /// Which of the three screens is on top. Starts on the home screen, always.
+  _Screen _screen = _Screen.home;
+
+  /// Bumped every time the campaign map is opened, so it re-centres on the
+  /// frontier each time rather than only once ever — it stays mounted for the
+  /// app's life, so `didUpdateWidget` is the only way it can tell it has been
+  /// navigated to again.
+  int _campaignToken = 0;
 
   late final Store _store = Store(widget.progress);
 
@@ -102,6 +118,10 @@ class _GameShellState extends State<GameShell>
   /// which *rebuilds the board* — so stepping out of a level for two seconds
   /// silently threw away the run. Now the same level in progress is resumed.
   int? _activeLevel;
+
+  /// The frontier level — the furthest the player has reached — clamped to
+  /// what actually exists. What Play, on the home screen, plays.
+  int get _frontier => math.min(widget.progress.unlocked, MapLayout.tiles);
 
   @override
   void initState() {
@@ -258,7 +278,7 @@ class _GameShellState extends State<GameShell>
       }
     }
 
-    setState(() => _playing = true);
+    setState(() => _screen = _Screen.level);
     if (resuming) {
       _game.resumeRun();
       return;
@@ -276,17 +296,29 @@ class _GameShellState extends State<GameShell>
   void _openDaily() {
     _activeLevel = null;
     _tuning.zenMode = false;
-    setState(() => _playing = true);
+    setState(() => _screen = _Screen.level);
     _game.paused = false;
     _game.startDailyRun(Daily.forDate(DateTime.now()));
   }
 
-  void _openMap() {
+  /// Opens the hundred-level campaign map — what pause and a result screen's
+  /// "back to map" both mean, and what the home screen's own Campaign chip
+  /// opens.
+  void _openCampaign() {
     // Paused rather than merely hidden: an offstage widget still gets its
     // ticks, so without this the hunger clock would keep running on a level
     // nobody is looking at.
     _game.paused = true;
-    setState(() => _playing = false);
+    setState(() {
+      _screen = _Screen.campaign;
+      _campaignToken++;
+    });
+  }
+
+  /// Back to the front door.
+  void _openHome() {
+    _game.paused = true;
+    setState(() => _screen = _Screen.home);
   }
 
   Future<void> _openPets() async {
@@ -318,7 +350,8 @@ class _GameShellState extends State<GameShell>
         Overlays.debug: (_, game) => DebugPanel(game: game),
         Overlays.result: (_, game) => ResultOverlay(
           game: game,
-          onMap: _openMap,
+          onMap: _openCampaign,
+          onHome: _openHome,
           owned: widget.progress.ownsFullGame,
           dailyStreak: widget.progress.dailyStreak,
           onUnlock: _openPaywall,
@@ -327,7 +360,11 @@ class _GameShellState extends State<GameShell>
           game: game,
           onMap: () {
             game.resumeRun();
-            _openMap();
+            _openCampaign();
+          },
+          onHome: () {
+            game.resumeRun();
+            _openHome();
           },
           onReference: _openReference,
         ),
@@ -335,21 +372,29 @@ class _GameShellState extends State<GameShell>
     );
 
     return PopScope(
-      // Back goes to the map from a level, and only leaves the app from the
-      // map itself. Backing out of the game entirely mid-run would throw away
-      // a level the player was in the middle of.
-      canPop: !_playing,
+      // Back leaves the campaign map for home, the level for the campaign map
+      // (by way of the pause screen), and only leaves the app from home
+      // itself. Backing out of the game entirely mid-run would throw away a
+      // level the player was in the middle of.
+      canPop: _screen == _Screen.home,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop || !_playing) {
+        if (didPop) {
           return;
         }
-        // Back opens the pause screen rather than dropping straight to the map.
-        // Leaving is a choice worth making on purpose, and it is now one of
-        // four things the player might want here.
-        if (_game.isPausedByPlayer || _game.isOver) {
-          _openMap();
-        } else {
-          _game.pauseRun();
+        switch (_screen) {
+          case _Screen.home:
+            break; // unreachable: canPop is true here.
+          case _Screen.campaign:
+            _openHome();
+          case _Screen.level:
+            // Back opens the pause screen rather than dropping straight to
+            // the map. Leaving is a choice worth making on purpose, and it is
+            // now one of four things the player might want here.
+            if (_game.isPausedByPlayer || _game.isOver) {
+              _openCampaign();
+            } else {
+              _game.pauseRun();
+            }
         }
       },
       child: Scaffold(
@@ -357,24 +402,42 @@ class _GameShellState extends State<GameShell>
         body: Stack(
           children: [
             Offstage(
-              offstage: _playing,
+              offstage: _screen != _Screen.home,
               child: TickerMode(
-                enabled: !_playing,
-                child: LevelMap(
+                enabled: _screen == _Screen.home,
+                child: HomeScreen(
                   progress: widget.progress,
-                  onSelect: _selectLevel,
+                  pet: _game.pet,
+                  onPlay: () => _selectLevel(_frontier),
+                  onCampaign: _openCampaign,
+                  onTutorial: () {
+                    _tuning.zenMode = false;
+                    _openLevel(1, restart: true);
+                  },
+                  onDaily: _openDaily,
                   onPets: _openPets,
                   onSettings: _openSettings,
                   onReference: _openReference,
                   onUnlock: _openPaywall,
-                  onDaily: _openDaily,
                 ),
               ),
             ),
             Offstage(
-              offstage: !_playing,
+              offstage: _screen != _Screen.campaign,
               child: TickerMode(
-                enabled: _playing,
+                enabled: _screen == _Screen.campaign,
+                child: LevelMap(
+                  progress: widget.progress,
+                  onSelect: _selectLevel,
+                  onBack: _openHome,
+                  showToken: _campaignToken,
+                ),
+              ),
+            ),
+            Offstage(
+              offstage: _screen != _Screen.level,
+              child: TickerMode(
+                enabled: _screen == _Screen.level,
                 child: AnimatedBuilder(
                   animation: _ticker,
                   builder: (context, child) {

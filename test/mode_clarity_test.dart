@@ -20,6 +20,7 @@ Widget resultFor(HexcapeGame game, {MediaQueryData? media}) {
       owned: true,
       dailyStreak: 0,
       onMap: () {},
+      onHome: () {},
       onUnlock: () {},
     ),
   );

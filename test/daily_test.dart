@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/game/daily.dart';
 import 'package:hexcape/game/level_rules.dart';
+import 'package:hexcape/game/pets.dart';
 import 'package:hexcape/game/progress.dart';
-import 'package:hexcape/ui/level_map.dart';
+import 'package:hexcape/ui/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The daily challenge.
@@ -212,32 +213,34 @@ void main() {
     });
   });
 
-  group('The map still fits', () {
-    Widget mapFor(Progress progress) => MaterialApp(
-      home: LevelMap(
+  group('The home screen still fits', () {
+    Widget homeFor(Progress progress) => MaterialApp(
+      home: HomeScreen(
         progress: progress,
-        onSelect: (_) {},
+        pet: Pets.scout,
+        onPlay: () {},
+        onCampaign: () {},
+        onDaily: () {},
         onPets: () {},
         onSettings: () {},
         onReference: () {},
         onUnlock: () {},
-        onDaily: () {},
       ),
     );
 
-    testWidgets('with the daily bar and the unlock strip both present', (
+    testWidgets('with the daily chip and the unlock offer both present', (
       tester,
     ) async {
-      // The worst case: an unbought game shows the daily bar *and* the unlock
-      // strip above a play bar that was already there. On a small phone that is
-      // three fixed rows competing with the trail for height.
+      // The worst case: an unbought game shows the daily chip *and* the
+      // unlock offer beneath a play button that was already there. On a
+      // small phone that is everything the home screen has, all at once.
       tester.view.physicalSize = const Size(320, 568);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       SharedPreferences.setMockInitialValues({'unlocked': 12});
       final progress = await Progress.load();
-      await tester.pumpWidget(mapFor(progress));
+      await tester.pumpWidget(homeFor(progress));
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('DAILY CHALLENGE'), findsOneWidget);
@@ -251,7 +254,7 @@ void main() {
         'owns_full': true,
       });
       final progress = await Progress.load();
-      await tester.pumpWidget(mapFor(progress));
+      await tester.pumpWidget(homeFor(progress));
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('MORE LEVELS'), findsNothing);

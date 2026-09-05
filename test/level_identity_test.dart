@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/entities/pickup.dart';
 import 'package:hexcape/game/level_rules.dart';
+import 'package:hexcape/game/pets.dart';
 import 'package:hexcape/game/progress.dart';
-import 'package:hexcape/ui/level_map.dart';
+import 'package:hexcape/ui/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -80,19 +81,23 @@ void main() {
     });
   });
 
-  testWidgets('the map play bar names the current level', (tester) async {
+  testWidgets('the home screen\'s play button names the current level', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({'unlocked': 32, 'owns_full': true});
     final progress = await Progress.load();
     await tester.pumpWidget(
       MaterialApp(
-        home: LevelMap(
+        home: HomeScreen(
           progress: progress,
-          onSelect: (_) {},
+          pet: Pets.scout,
+          onPlay: () {},
+          onCampaign: () {},
+          onDaily: () {},
           onPets: () {},
           onSettings: () {},
           onReference: () {},
           onUnlock: () {},
-          onDaily: () {},
         ),
       ),
     );

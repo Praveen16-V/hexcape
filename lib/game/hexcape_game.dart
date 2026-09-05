@@ -230,6 +230,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// The scripted opening, on tutorial levels only.
   Tutorial? tutorial;
 
+  bool get tutorialReading =>
+      tutorial?.current?.advance == TutorialAdvance.onContinue;
+
   /// The cell the tutorial is pointing at, resolved each frame for the renderer.
   HexCoord? tutorialTarget;
 
@@ -680,6 +683,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   void update(double dt) {
     super.update(dt);
     if (!_ready) {
+      return;
+    }
+
+    if (!isOver && tutorialReading) {
+      tutorialTarget = tutorial?.targetCell(grid, dog, pickups);
       return;
     }
 
@@ -1424,7 +1432,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   @override
   void onTapDown(TapDownEvent event) {
-    if (!_ready || isOver) {
+    if (!_ready || isOver || tutorialReading) {
       return;
     }
 

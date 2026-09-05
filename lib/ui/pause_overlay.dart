@@ -14,12 +14,14 @@ class PauseOverlay extends StatelessWidget {
   const PauseOverlay({
     required this.game,
     required this.onMap,
+    required this.onHome,
     required this.onReference,
     super.key,
   });
 
   final HexcapeGame game;
   final VoidCallback onMap;
+  final VoidCallback onHome;
   final VoidCallback onReference;
 
   @override
@@ -30,55 +32,63 @@ class PauseOverlay extends StatelessWidget {
       color: Palette.background.withValues(alpha: 0.88),
       child: SafeArea(
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  Strings.paused,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    Strings.paused,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  game.isEndless
-                      ? 'ENDLESS · ${Strings.depth} ${game.depth}'
-                      : game.tuning.zenMode
-                      ? 'ZEN PRACTICE · ${Strings.level} ${game.levelNumber}'
-                      : '${Strings.level} ${game.levelNumber}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 13,
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 6),
+                  Text(
+                    game.isEndless
+                        ? 'ENDLESS · ${Strings.depth} ${game.depth}'
+                        : game.tuning.zenMode
+                        ? 'ZEN PRACTICE · ${Strings.level} ${game.levelNumber}'
+                        : '${Strings.level} ${game.levelNumber}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 13,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 28),
-                _PauseButton(
-                  label: Strings.resume,
-                  primary: true,
-                  onPressed: game.resumeRun,
-                ),
-                const SizedBox(height: 10),
-                _PauseButton(
-                  label: Strings.restart,
-                  onPressed: () {
-                    game.resumeRun();
-                    game.retry();
-                  },
-                ),
-                const SizedBox(height: 10),
-                _PauseButton(label: Strings.reference, onPressed: onReference),
-                const SizedBox(height: 10),
-                _PauseButton(label: Strings.leaveLevel, onPressed: onMap),
-              ],
+                  const SizedBox(height: 28),
+                  _PauseButton(
+                    label: Strings.resume,
+                    primary: true,
+                    onPressed: game.resumeRun,
+                  ),
+                  const SizedBox(height: 10),
+                  _PauseButton(
+                    label: Strings.restart,
+                    onPressed: () {
+                      game.resumeRun();
+                      game.retry();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _PauseButton(
+                    label: Strings.reference,
+                    onPressed: onReference,
+                  ),
+                  const SizedBox(height: 10),
+                  _PauseButton(label: Strings.leaveLevel, onPressed: onMap),
+                  const SizedBox(height: 10),
+                  _PauseButton(label: 'MAIN MENU', onPressed: onHome),
+                ],
+              ),
             ),
           ),
         ),

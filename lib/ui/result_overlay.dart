@@ -13,6 +13,7 @@ class ResultOverlay extends StatefulWidget {
   const ResultOverlay({
     required this.game,
     required this.onMap,
+    required this.onHome,
     required this.onUnlock,
     required this.owned,
     required this.dailyStreak,
@@ -23,6 +24,7 @@ class ResultOverlay extends StatefulWidget {
 
   /// Back to the campaign map.
   final VoidCallback onMap;
+  final VoidCallback onHome;
 
   /// Opens the offer, on finishing the last free level.
   final VoidCallback onUnlock;
@@ -315,6 +317,19 @@ class _ResultOverlayState extends State<ResultOverlay>
                     ],
                   ),
                   const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: widget.onHome,
+                      icon: const Icon(Icons.home_outlined),
+                      label: const Text('Main Menu'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Palette.hudText,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   // Quieter than the other two, and always present. Leaving is
                   // never the thing the panel is pushing you toward, but a player
                   // who wants out of a level they keep losing should not have to
