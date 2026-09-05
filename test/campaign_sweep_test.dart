@@ -169,6 +169,7 @@ void main() {
           var levels = 0;
           var guards = 0;
           var springs = 0;
+          var faults = 0;
           for (var n = 1; n <= Campaign.length; n++) {
             if (Campaign.bandOf(n) != band) {
               continue;
@@ -186,6 +187,12 @@ void main() {
             springs += level.grid.all
                 .where((c) => c.type.name == 'spring')
                 .length;
+            // Collapse's entire difficulty gradient is cracked ground — the
+            // other four axes are pinned flat there — so a readout without this
+            // column would show that band as a plateau when it is not.
+            faults += level.grid.all
+                .where((c) => c.type.name == 'fault')
+                .length;
           }
           final slack = (spare + treatTaps) / par * 100;
           rows.add(
@@ -195,7 +202,8 @@ void main() {
             '+treats ${(treatTaps / levels).toStringAsFixed(1).padLeft(4)}  '
             'room to waste ${slack.toStringAsFixed(0).padLeft(3)}%  '
             'patrols ${(guards / levels).toStringAsFixed(1)}  '
-            'springs ${(springs / levels).toStringAsFixed(1)}',
+            'springs ${(springs / levels).toStringAsFixed(1)}  '
+            'cracks ${(faults / levels).toStringAsFixed(1)}',
           );
         }
         // ignore: avoid_print
@@ -204,7 +212,7 @@ void main() {
           // ignore: avoid_print
           print('  $row');
         }
-        expect(rows, hasLength(4));
+        expect(rows, hasLength(6));
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );

@@ -26,6 +26,7 @@ import '../systems/streak_system.dart';
 import '../systems/reveal_system.dart';
 import '../systems/softlock_system.dart';
 import '../theme/palette.dart';
+import 'daily.dart';
 import 'haptics.dart';
 import 'juice.dart';
 import 'level_rules.dart';
@@ -151,7 +152,20 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// something wants it: the dog reads it, the renderer reads it and the catch
   /// check reads it, and all three must agree about the same instant.
   List<Guard> guards = const [];
+
+  /// Ground a patrol is lighting: she refuses to walk into it, and it bites.
   Set<HexCoord> guardedCells = const {};
+
+  /// Ground a sentry is lighting: taps there do nothing.
+  ///
+  /// Deliberately a separate set from [guardedCells], not a flag on it. The two
+  /// are read by different systems — the dog and the catch check take the
+  /// first, tap resolution takes the second — and merging them would give a
+  /// sentry a patrol's teeth and a patrol a sentry's reach.
+  Set<HexCoord> wardedCells = const {};
+
+  /// 1 -> 0 after a tap was refused by the light.
+  double wardFlash = 0;
 
   /// Stops one patrol from billing her every frame she stands in its light.
   double _caughtCooldown = 0;
@@ -343,10 +357,29 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     syncDeveloperTools();
   }
 
+  /// The daily board being played, or null on a campaign or endless run.
+  ///
+  /// Sticky across [retry] and [regenerate] — retrying today's board is still
+  /// today's board — and cleared by every route that starts something else.
+  DailyChallenge? daily;
+
+  bool get isDaily => daily != null;
+
+  /// Starts today's board. Its [levelNumber] is the level it borrows its rules
+  /// from, so everything that reasons about difficulty keeps working; only what
+  /// gets *written* at the end differs.
+  /// Deferred by a frame like [requestLevel], and for the same reason: the
+  /// board is fitted to the widget's size, which is stale at the moment the map
+  /// hands over.
+  void startDailyRun(DailyChallenge challenge) {
+    daily = challenge;
+    _request(challenge.sourceLevel);
+  }
+
   /// Builds a level and resets everything that belongs to a run.
   void startLevel({int? level, bool reuseSeed = false}) {
     levelNumber = level ?? levelNumber;
-    rules = Campaign.rulesFor(levelNumber);
+    rules = daily?.rules ?? Campaign.rulesFor(levelNumber);
     if (tuning.followCampaign) {
       _applyRules(rules);
     }
@@ -360,7 +393,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         anchorDensity: tuning.anchorDensity,
         heavyDensity: tuning.heavyDensity,
         springDensity: tuning.springDensity,
+        faultDensity: tuning.faultDensity,
         guards: tuning.guardCount,
+        sentries: tuning.sentryCount,
         guardSpeed: tuning.guardSpeed,
         treats: tuning.treatCount.round(),
         powerups: tuning.powerupCount.round(),
@@ -390,6 +425,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     pickups = this.level.pickups;
     guards = this.level.guards;
     guardedCells = const {};
+    wardedCells = const {};
+    wardFlash = 0;
     scentPath = const [];
     _scentFieldVersion = -1;
     _caughtCooldown = 0;
@@ -491,6 +528,14 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// over — generating here would fit the board to a stale size and then have
   /// to rescale it on the very next frame.
   void requestLevel(int level) {
+    // The map only ever asks for campaign levels. Without this, going from a
+    // daily to a campaign level would keep the daily's rules and record the
+    // clear against the wrong thing.
+    daily = null;
+    _request(level);
+  }
+
+  void _request(int level) {
     _requestedLevel = level;
     if (!_ready) {
       return;
@@ -508,9 +553,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   void regenerate() => startLevel();
 
   /// Onward. Past the end of the campaign this keeps going into endless.
-  void nextLevel() => startLevel(level: levelNumber + 1);
+  void nextLevel() {
+    daily = null;
+    startLevel(level: levelNumber + 1);
+  }
 
-  /// Past the sixty authored levels.
+  /// Past the authored campaign.
   bool get isEndless => levelNumber > Campaign.length;
 
   /// How far past them. Endless is counted in depth rather than level number
@@ -523,7 +571,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Back to the top of endless. A run is the unit there, not a level, so
   /// losing at depth 12 and retrying that one board would be scoring a
   /// marathon by the last mile.
-  void startEndlessRun() => startLevel(level: Campaign.length + 1);
+  void startEndlessRun() {
+    daily = null;
+    startLevel(level: Campaign.length + 1);
+  }
 
   /// Replays this authored level under its scored rules after Zen practice.
   void startScoredRun() {
@@ -549,7 +600,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ..anchorDensity = r.anchorDensity
       ..heavyDensity = r.heavyDensity
       ..springDensity = r.springDensity
+      ..faultDensity = r.faultDensity
       ..guardCount = r.guards
+      ..sentryCount = r.sentries
       ..guardSpeed = r.guardSpeed
       ..treatCount = r.treats.toDouble()
       ..powerupCount = r.powerups.toDouble()
@@ -644,6 +697,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     elapsed += dt;
     tapRingFlash = math.max(0, tapRingFlash - dt * 3.2);
+    wardFlash = math.max(0, wardFlash - dt * 3.0);
     barkFlash = math.max(0, barkFlash - dt * 1.6);
     wagBoost = math.max(0, wagBoost - dt * 0.9);
     startleFlash = math.max(0, startleFlash - dt * 4.0);
@@ -715,8 +769,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
       guardedCells = {
         for (final guard in guards)
-          for (final c in guard.lit)
-            if (grid.contains(c)) c,
+          if (!guard.isSentry)
+            for (final c in guard.lit)
+              if (grid.contains(c)) c,
+      };
+      wardedCells = {
+        for (final guard in guards)
+          if (guard.isSentry)
+            for (final c in guard.lit)
+              if (grid.contains(c)) c,
       };
     }
 
@@ -950,7 +1011,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // the hard way, so it is practice: nothing is written, nothing unlocks. The
     // level detail sheet says so before the run starts.
     if (!tuning.zenMode) {
-      if (isEndless) {
+      // Checked before everything else, and it must stay that way. A daily
+      // borrows an authored level's number to borrow its difficulty; falling
+      // through to the campaign write would hand out that level's star and
+      // advance the unlock chain for a board the player reached from the map's
+      // daily tile.
+      final today = daily;
+      if (today != null) {
+        progress?.recordDailyClear(today);
+      } else if (isEndless) {
         progress?.recordEndlessClear(level: levelNumber);
       } else {
         progress?.recordWin(
@@ -1047,6 +1116,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       case PickupKind.scent:
       case PickupKind.blast:
       case PickupKind.dig:
+      case PickupKind.stake:
+      case PickupKind.heel:
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
         // Charges wait for a tap, so they need to say so. Timed effects show
@@ -1170,12 +1241,43 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       _dig(coord);
       return true;
     }
+    // Checked before blast, which also accepts `nothingToClear`. Only one tool
+    // can be armed at a time so they cannot both fire, but the order makes the
+    // more specific case the one that reads first.
+    if (outcome == TapOutcome.nothingToClear &&
+        (grid.at(coord)?.isSolid ?? true) == false &&
+        powerups.spendSelected(PickupKind.stake)) {
+      _stake(coord);
+      return true;
+    }
     if ((outcome == TapOutcome.hit || outcome == TapOutcome.nothingToClear) &&
         powerups.spendSelected(PickupKind.blast)) {
       _blast(coord);
       return true;
     }
     return false;
+  }
+
+  /// One tap, one tile that never closes again.
+  void _stake(HexCoord coord) {
+    final cell = grid.at(coord);
+    if (cell == null) {
+      return;
+    }
+    cell
+      ..pinned = true
+      // Anything already mid-close is pulled back open. Staking a tile whose
+      // warning pulses had started must save it, or the tool would fail in the
+      // exact moment a player reaches for it.
+      ..state = CellState.open
+      ..regrowT = 0
+      ..eligibleSince = null
+      ..clearBurst = 1;
+    fieldVersion++;
+    sfx.play(Sound.thunk);
+    Haptics.medium();
+    effects.shatter(layout.toPixel(coord), layout.size, colour: Palette.stake);
+    announce('Pinned open');
   }
 
   /// Arms or puts away a held tool from the HUD. This is deliberately separate
@@ -1333,6 +1435,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       layout: layout,
       dogPosition: dog.position,
       tapRadius: effectiveTapRadius,
+      warded: wardedCells,
     );
 
     // A gated tutorial step refuses everything but the tile it is pointing at,
@@ -1355,6 +1458,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         tapsLeft > 0 &&
         _spendCharge(result.outcome, result.coord!)) {
       return;
+    }
+
+    // HEEL is spent *outside* _spendCharge, which exists to finish a tap. This
+    // one rides along with it: the whole point is to open the corridor ahead
+    // and not have her walk into it while you do, so the carve still has to
+    // happen.
+    if (result.outcome == TapOutcome.hit &&
+        tapsLeft > 0 &&
+        powerups.spendSelected(PickupKind.heel)) {
+      dog.holdFor = ActiveEffects.heelSeconds;
+      sfx.play(Sound.snap);
+      Haptics.medium();
+      announce('Held');
     }
 
     switch (result.outcome) {
@@ -1439,6 +1555,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         juice.shake(1.8);
         sfx.play(Sound.thunk);
         Haptics.heavy();
+
+      case TapOutcome.warded:
+        // Costs nothing and breaks nothing. A sentry rations *when* you may
+        // tap, not how many taps you have — charging a tap for it would make
+        // it a second budget, and breaking the chain would make waiting out a
+        // sweep punish the player twice for one obstacle.
+        grid.at(result.coord!)!.rejectShake = 1;
+        wardFlash = 1;
+        sfx.play(Sound.thunk);
+        Haptics.light();
 
       case TapOutcome.outOfRange:
       case TapOutcome.nothingToClear:

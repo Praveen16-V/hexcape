@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'daily.dart';
 import 'level_rules.dart';
 
 /// What a player has done with one level.
@@ -39,6 +40,14 @@ class Progress {
   static const _hintsKey = 'opt_hints';
   static const _developerKey = 'opt_developer';
   static const _ownedKey = 'owns_full';
+  static const _trialKey = 'trial_used';
+
+  // The daily. Three keys rather than one blob, matching the settings above:
+  // a corrupt value costs one of them rather than the streak and the record
+  // together.
+  static const _dailyLastKey = 'daily_last';
+  static const _dailyStreakKey = 'daily_streak';
+  static const _dailyBestKey = 'daily_best_streak';
 
   final Map<int, LevelRecord> _records = {};
 
@@ -222,6 +231,85 @@ class Progress {
   bool get ownsFullGame => _prefs.getBool(_ownedKey) ?? false;
   Future<void> setOwnsFullGame(bool owned) => _prefs.setBool(_ownedKey, owned);
 
+  /// Whether the one free look past the paywall has been taken.
+  ///
+  /// Spent when the trial level *starts*, not when it ends. Ending it would
+  /// mean backing out returned the trial, which makes it replayable forever
+  /// through the one route the player is guaranteed to find. Starting it is a
+  /// deliberate act — the detail sheet says plainly that it is a single try —
+  /// so there is nothing to protect them from here.
+  bool get trialUsed => _prefs.getBool(_trialKey) ?? false;
+  Future<void> setTrialUsed() => _prefs.setBool(_trialKey, true);
+
+  // -------------------------------------------------------------------------
+  // The daily challenge.
+  // -------------------------------------------------------------------------
+
+  /// The `YYYY-MM-DD` of the last daily cleared, or empty for none.
+  String get dailyLastCleared => _prefs.getString(_dailyLastKey) ?? '';
+
+  /// Consecutive days cleared, ending on [dailyLastCleared].
+  ///
+  /// Note this is **not** decayed on read: a player who misses a day still
+  /// sees their old streak until they next clear one, at which point it resets
+  /// to 1. Expiring it in the getter would mean the number quietly changed
+  /// while nobody was playing, and the honest place to break the news is the
+  /// run that broke it. [dailyStreakAsOf] is the display-time view.
+  int get dailyStreak => _prefs.getInt(_dailyStreakKey) ?? 0;
+
+  int get dailyBestStreak => _prefs.getInt(_dailyBestKey) ?? 0;
+
+  bool hasClearedDaily(DailyChallenge daily) => dailyLastCleared == daily.id;
+
+  /// The streak as it stands on [today] — zero once a day has been missed.
+  ///
+  /// What the UI shows, so a lapsed streak does not keep advertising itself as
+  /// live. The stored value is left alone; only the reading of it changes.
+  int dailyStreakAsOf(DateTime today) {
+    final last = _parseDay(dailyLastCleared);
+    if (last == null) {
+      return 0;
+    }
+    final day = Daily.dayNumber(Daily.today(today));
+    final since = day - Daily.dayNumber(last);
+    // Today's own clear, or yesterday's with today still to play.
+    return since <= 1 ? dailyStreak : 0;
+  }
+
+  /// Records a cleared daily. Idempotent: clearing the same day twice — by
+  /// retrying a board already won — must not advance the streak twice.
+  Future<void> recordDailyClear(DailyChallenge daily) async {
+    if (dailyLastCleared == daily.id) {
+      return;
+    }
+    final last = _parseDay(dailyLastCleared);
+    final continues = last != null && Daily.isDayBefore(last, daily.date);
+    final streak = continues ? dailyStreak + 1 : 1;
+
+    await _prefs.setString(_dailyLastKey, daily.id);
+    await _prefs.setInt(_dailyStreakKey, streak);
+    if (streak > dailyBestStreak) {
+      await _prefs.setInt(_dailyBestKey, streak);
+    }
+  }
+
+  static DateTime? _parseDay(String id) {
+    if (id.isEmpty) {
+      return null;
+    }
+    final parts = id.split('-');
+    if (parts.length != 3) {
+      return null;
+    }
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) {
+      return null;
+    }
+    return DateTime.utc(y, m, d);
+  }
+
   /// Wipes everything. Only reachable from the debug panel.
   Future<void> reset() async {
     _records.clear();
@@ -230,9 +318,16 @@ class Progress {
       // progress: someone who turned the sound off does not expect it back on
       // because they cleared their levels, and erasing progress is emphatically
       // not un-buying the game.
+      // The trial goes with progress rather than with the purchase: it is only
+      // reachable by clearing twenty levels, so a wiped save that kept it spent
+      // would deny the free look to a playthrough that has earned it again.
       if (key.startsWith('lvl_') ||
           key == _unlockedKey ||
           key == _endlessKey ||
+          key == _trialKey ||
+          key == _dailyLastKey ||
+          key == _dailyStreakKey ||
+          key == _dailyBestKey ||
           key == _petKey) {
         await _prefs.remove(key);
       }

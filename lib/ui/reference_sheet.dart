@@ -175,6 +175,16 @@ const allReferenceEntries = <ReferenceEntry>[
     unlocksAt: Campaign.springsFrom,
   ),
   ReferenceEntry(
+    section: ReferenceSection.hexes,
+    name: 'Cracked',
+    blurb:
+        'Clears in one tap, then closes again on its own — wherever it is, '
+        'whether or not anything is beside it. A line of them is the short '
+        'way through, but only if you run it in one go.',
+    hex: HexType.fault,
+    unlocksAt: Campaign.faultsFrom,
+  ),
+  ReferenceEntry(
     section: ReferenceSection.obstacles,
     name: 'Patrol',
     blurb:
@@ -183,6 +193,16 @@ const allReferenceEntries = <ReferenceEntry>[
         'you wait for it.',
     icon: Icons.visibility,
     unlocksAt: Campaign.guardsFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.obstacles,
+    name: 'Warded light',
+    blurb:
+        'A pale light that sweeps like a patrol, but does the opposite: she '
+        'walks through it freely and it never bites — your taps are what it '
+        'refuses. Wait for it to pass, or HEEL and time the gap.',
+    icon: Icons.highlight,
+    unlocksAt: Campaign.sentriesFrom,
   ),
   ReferenceEntry(
     section: ReferenceSection.obstacles,
@@ -253,6 +273,26 @@ const allReferenceEntries = <ReferenceEntry>[
         'tile to break the only wall that can be removed.',
     pickup: PickupKind.dig,
     unlocksAt: Campaign.pressureEnd + 1,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.pickups,
+    name: 'Stake',
+    blurb:
+        'Held until you spend it. Tap STAKE above to arm it, then tap an open '
+        'tile to hold it open for the rest of the run — no regrowth, no crack. '
+        'One tile, so choose the one that must not close.',
+    pickup: PickupKind.stake,
+    unlocksAt: Campaign.stakeFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.pickups,
+    name: 'Heel',
+    blurb:
+        'Held until you spend it. Tap HEEL above to arm it, then tap as normal '
+        '— the tile opens and she stands still for a moment instead of walking '
+        'into it. The one way to choose your moment.',
+    pickup: PickupKind.heel,
+    unlocksAt: Campaign.heelFrom,
   ),
   ReferenceEntry(
     section: ReferenceSection.rules,
@@ -423,6 +463,16 @@ class _EntryPainter extends CustomPainter {
             stroke,
           );
         }
+      case HexType.fault:
+        stroke.color = Palette.faultEdge;
+        canvas.drawPath(
+          Path()
+            ..moveTo(centre.dx - r * 0.12, centre.dy - r * 0.5)
+            ..lineTo(centre.dx + r * 0.16, centre.dy - r * 0.12)
+            ..lineTo(centre.dx - r * 0.14, centre.dy + r * 0.12)
+            ..lineTo(centre.dx + r * 0.12, centre.dy + r * 0.5),
+          stroke,
+        );
     }
   }
 
@@ -431,6 +481,7 @@ class _EntryPainter extends CustomPainter {
     HexType.heavy => Palette.heavyTop,
     HexType.anchor => Palette.anchorTop,
     HexType.spring => Palette.springTop,
+    HexType.fault => Palette.faultTop,
   };
 
   static Color _edgeOf(HexType type) => switch (type) {
@@ -438,6 +489,7 @@ class _EntryPainter extends CustomPainter {
     HexType.heavy => Palette.heavyEdge,
     HexType.anchor => Palette.anchorEdge,
     HexType.spring => Palette.springEdge,
+    HexType.fault => Palette.faultEdge,
   };
 
   @override

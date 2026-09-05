@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
+import '../gen/silhouette.dart';
+import '../l10n/strings.dart';
 import '../theme/palette.dart';
 
 /// What a level is, before you commit to it.
@@ -61,8 +63,12 @@ class _LevelDetailState extends State<LevelDetail> {
       level,
       unlocked: widget.progress.unlocked,
       owned: widget.progress.ownsFullGame,
+      trialUsed: widget.progress.trialUsed,
     );
-    final unlocked = access == LevelAccess.open;
+    final trial = access == LevelAccess.trial;
+    // The trial is playable, so it takes the same body as an open level — the
+    // records, the brief, the play button. Only the framing above it differs.
+    final unlocked = access == LevelAccess.open || trial;
     final band = Campaign.bandOf(level);
     final endless = level > Campaign.length;
     final colour = Palette.forBand(band);
@@ -134,6 +140,25 @@ class _LevelDetailState extends State<LevelDetail> {
                     height: 1.35,
                   ),
                 ),
+                // The outline, said out loud.
+                //
+                // Boards have been cut to bones and fish for a long time and
+                // nothing ever mentioned it, which made the whole silhouette
+                // system invisible to the person it was built for — a player
+                // sees one board at a time and has no way to know the shape was
+                // chosen rather than incidental.
+                if (rules.shape != FieldShape.ellipse) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    'CUT TO A ${rules.shape.label.toUpperCase()}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.34),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
 
@@ -142,6 +167,10 @@ class _LevelDetailState extends State<LevelDetail> {
               else if (!unlocked)
                 _Locked(level: level)
               else ...[
+                if (trial) ...[
+                  const _TrialBanner(),
+                  const SizedBox(height: 14),
+                ],
                 if (endless)
                   _EndlessRecord(bestLevel: widget.progress.endlessBest)
                 else if (record.played)
@@ -189,6 +218,8 @@ class _LevelDetailState extends State<LevelDetail> {
                           ? 'RESUME'
                           : _zen
                           ? 'PRACTICE'
+                          : trial
+                          ? Strings.trialPlay
                           : endless
                           ? 'START RUN'
                           : 'PLAY',
@@ -328,6 +359,50 @@ class _Locked extends StatelessWidget {
 /// Kept distinct from [_Locked] on purpose: one is "you have not got here yet"
 /// and the other is "this is for sale", and answering the wrong one tells a
 /// player to do something they cannot.
+/// The free look, offered.
+///
+/// Framed as an invitation rather than a restriction. "One free run" is a gift;
+/// "you only get one" is a rule, and the same fact told the second way makes
+/// the game sound like it is rationing itself.
+class _TrialBanner extends StatelessWidget {
+  const _TrialBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Palette.bandPressure.withValues(alpha: 0.10),
+        border: Border.all(color: Palette.bandPressure.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            Strings.trialTitle.toUpperCase(),
+            style: TextStyle(
+              color: Palette.bandPressure,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            Strings.trialBlurb,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ForSale extends StatelessWidget {
   const _ForSale({required this.onUnlock});
 

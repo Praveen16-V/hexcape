@@ -20,6 +20,13 @@ enum TapOutcome {
 
   /// In range, but nothing left to clear there.
   nothingToClear,
+
+  /// Inside a sentry's light, which refuses taps.
+  ///
+  /// Reported rather than silently swallowed or redirected to a neighbour: the
+  /// player has to learn that the light is what stopped them, and a tap that
+  /// quietly carved somewhere else instead would teach the opposite.
+  warded,
 }
 
 class TapResult {
@@ -49,6 +56,7 @@ class InputSystem {
     required HexLayout layout,
     required Offset dogPosition,
     required double tapRadius,
+    Set<HexCoord> warded = const {},
   }) {
     // A wild tap across the screen must not carve next to the dog, but the
     // boundary itself stays forgiving by about one hex.
@@ -58,6 +66,12 @@ class InputSystem {
 
     final direct = layout.toHex(point);
     final directCell = grid.at(direct);
+    // Checked before the anchor case and before any snapping: a warded tap must
+    // report the light wherever it landed, or a tap into a sentry beside an
+    // anchor would blame the rivets instead.
+    if (warded.contains(direct) && directCell != null) {
+      return TapResult(TapOutcome.warded, direct);
+    }
     if (directCell != null && directCell.type == HexType.anchor) {
       return TapResult(TapOutcome.anchor, direct);
     }
@@ -79,7 +93,11 @@ class InputSystem {
     HexCoord? best;
     var bestDistance = double.infinity;
     for (final coord in dogCell.disc(rings)) {
-      if (!grid.isClearable(coord) || !inReach(coord)) {
+      if (!grid.isClearable(coord) ||
+          !inReach(coord) ||
+          // Never snap *into* the light. A tap that missed and got helpfully
+          // redirected onto warded ground would spend nothing and look broken.
+          warded.contains(coord)) {
         continue;
       }
       final d = (layout.toPixel(coord) - point).distanceSquared;

@@ -51,10 +51,16 @@ class SoftlockSystem {
     int blastCharges = 0,
     int digCharges = 0,
   }) {
+    // Only what can actually pay for a route out. Written as an explicit list
+    // rather than `kind.isCharge`, because a charge is not automatically a
+    // recovery: STAKE holds ground open but opens none, so counting it here
+    // would let the check believe in a rescue that cannot happen and leave a
+    // player stuck in a level it had decided was still winnable.
+    const recoveries = {PickupKind.blast, PickupKind.dig};
     final remaining = [
       for (final pickup in pickups)
         if (!pickup.collected &&
-            (pickup.kind.isCharge ||
+            (recoveries.contains(pickup.kind) ||
                 (pickup.kind == PickupKind.treat && treatTaps > 0)))
           (pickup.kind, pickup.coord),
     ];

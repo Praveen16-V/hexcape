@@ -13,7 +13,11 @@ void main() {
       // grid — the largest-region filter does.
       for (final shape in FieldShape.values) {
         final cells = shaped(shape: shape, columns: 11, rows: 23);
-        expect(cells.length, greaterThan(80), reason: '${shape.name} too small');
+        expect(
+          cells.length,
+          greaterThan(80),
+          reason: '${shape.name} too small',
+        );
 
         final seen = <HexCoord>{cells.first};
         final queue = <HexCoord>[cells.first];
@@ -29,6 +33,32 @@ void main() {
           cells.length,
           reason: '${shape.name} has an unreachable island',
         );
+      }
+    });
+
+    test('every shape keeps enough board to be a level', () {
+      // The sampling and the largest-region filter between them can quietly
+      // amputate a shape: a thin tail or a narrow shaft either vanishes into the
+      // hex grid or survives detached and is thrown away. A mask that loses half
+      // its board is not a silhouette, it is a corridor, and a corridor has no
+      // route choices in it.
+      final reference = ellipse(columns: 12, rows: 27).length;
+      for (final shape in FieldShape.values) {
+        final cells = shaped(shape: shape, columns: 12, rows: 27);
+        expect(
+          cells.length / reference,
+          greaterThan(0.6),
+          reason:
+              '${shape.name} keeps only '
+              '${(cells.length / reference * 100).round()}% of a full board',
+        );
+      }
+    });
+
+    test('every shape has a name to show the player', () {
+      for (final shape in FieldShape.values) {
+        expect(shape.label, isNotEmpty);
+        expect(shape.label, isNot(shape.name), reason: 'raw enum name shown');
       }
     });
 
@@ -61,10 +91,7 @@ void main() {
 
     test('a level always wears the same shape', () {
       for (final level in [7, 19, 33, 52, 88]) {
-        expect(
-          Campaign.rulesFor(level).shape,
-          Campaign.rulesFor(level).shape,
-        );
+        expect(Campaign.rulesFor(level).shape, Campaign.rulesFor(level).shape);
       }
     });
 
@@ -76,7 +103,7 @@ void main() {
       expect(
         shapes.length,
         greaterThan(2),
-        reason: 'sixty levels of one silhouette is the thing this fixes',
+        reason: 'a campaign of one silhouette is the thing this fixes',
       );
     });
 

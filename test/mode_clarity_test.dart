@@ -15,7 +15,13 @@ HexcapeGame gameAt(int level) => HexcapeGame(tuning: TuningConfig())
 
 Widget resultFor(HexcapeGame game, {MediaQueryData? media}) {
   final screen = Scaffold(
-    body: ResultOverlay(game: game, owned: true, onMap: () {}, onUnlock: () {}),
+    body: ResultOverlay(
+      game: game,
+      owned: true,
+      dailyStreak: 0,
+      onMap: () {},
+      onUnlock: () {},
+    ),
   );
   return MaterialApp(
     home: media == null ? screen : MediaQuery(data: media, child: screen),
@@ -108,7 +114,7 @@ void main() {
     expect(find.text('Zen'), findsOneWidget);
 
     await show(45);
-    expect(find.text('MASTERY · 0/60 THREE-STAR CLEARS'), findsOneWidget);
+    expect(find.text('MASTERY · 0/100 THREE-STAR CLEARS'), findsOneWidget);
 
     await show(Campaign.length + 1);
     expect(find.text('ENDLESS RUN'), findsOneWidget);

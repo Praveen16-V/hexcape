@@ -11,7 +11,7 @@ void main() {
 
   group('Finishing the campaign', () {
     test('level sixty is the last authored level, and the only ending', () {
-      expect(Campaign.bandOf(Campaign.length), CampaignBand.mastery);
+      expect(Campaign.bandOf(Campaign.length), CampaignBand.vigil);
       expect(Campaign.bandOf(Campaign.length + 1), CampaignBand.endless);
     });
 

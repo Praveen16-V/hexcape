@@ -18,7 +18,9 @@ class LevelSpec {
     this.anchorDensity = 0.22,
     this.heavyDensity = 0.18,
     this.springDensity = 0,
+    this.faultDensity = 0,
     this.guards = 0,
+    this.sentries = 0,
     this.guardSpeed = 0.85,
     this.treats = 3,
     this.powerups = 2,
@@ -53,9 +55,17 @@ class LevelSpec {
   /// does, and only changes what happens after it opens.
   final double springDensity;
 
+  /// Fraction promoted to fault. Like heavy and spring these never block, so
+  /// they need no solvability check — a fault costs the same single tap a plain
+  /// hex does, and only changes how long what it opens stays open.
+  final double faultDensity;
+
   /// How many patrols sweep the board (§6.1), and how fast they walk.
   final int guards;
   final double guardSpeed;
+
+  /// How many of the sweeping lights refuse taps rather than block her.
+  final int sentries;
 
   /// How many treats and powerups to scatter beside the route (§6.2).
   final int treats;
@@ -83,7 +93,9 @@ class LevelSpec {
     double? anchorDensity,
     double? heavyDensity,
     double? springDensity,
+    double? faultDensity,
     int? guards,
+    int? sentries,
     int? treats,
     int? powerups,
     double? treatSeconds,
@@ -96,7 +108,9 @@ class LevelSpec {
     anchorDensity: anchorDensity ?? this.anchorDensity,
     heavyDensity: heavyDensity ?? this.heavyDensity,
     springDensity: springDensity ?? this.springDensity,
+    faultDensity: faultDensity ?? this.faultDensity,
     guards: guards ?? this.guards,
+    sentries: sentries ?? this.sentries,
     guardSpeed: guardSpeed,
     treats: treats ?? this.treats,
     powerups: powerups ?? this.powerups,
@@ -179,6 +193,7 @@ class LevelGenerator {
     _placeAnchors(grid, sorted, spec, rng);
     _placeHeavies(grid, sorted, spec, rng);
     _placeSprings(grid, sorted, spec, rng);
+    _placeFaults(grid, sorted, spec, rng);
 
     final par = Pathfinder.cheapestCost(
       start,
@@ -210,6 +225,7 @@ class LevelGenerator {
       rng: rng,
       count: spec.guards,
       cellsPerSecond: spec.guardSpeed,
+      sentries: spec.sentries,
     );
 
     return GeneratedLevel(
@@ -423,6 +439,82 @@ class LevelGenerator {
       }
       grid.cells[c]!.type = HexType.spring;
       placed.add(c);
+    }
+  }
+
+  /// Faults, in short lines rather than scattered singles.
+  ///
+  /// The shape is the mechanic. A lone fault is confetti — one tile that
+  /// happens to close, indistinguishable from bad luck. A blob of them is an
+  /// unreadable timed room. A *line* of two to four reads as a crack you either
+  /// commit to and run, or route around, which is the decision the type exists
+  /// to create.
+  ///
+  /// No solvability check, for the same reason springs and heavies need none:
+  /// a fault is clearable and costs one tap, so it never blocks a route — it
+  /// only prices one. `isTraversableInPrinciple`, `Pathfinder.cheapestCost` and
+  /// the softlock check are all already correct without knowing it exists.
+  static void _placeFaults(
+    HexGrid grid,
+    List<HexCoord> sorted,
+    LevelSpec spec,
+    math.Random rng,
+  ) {
+    if (spec.faultDensity <= 0) {
+      return;
+    }
+    final protected = <HexCoord>{
+      grid.start,
+      grid.exit,
+      ...grid.start.neighbours,
+      ...grid.exit.neighbours,
+    };
+    final candidates = [
+      for (final c in sorted)
+        if (!protected.contains(c) && grid.cells[c]!.type == HexType.plain) c,
+    ];
+    if (candidates.isEmpty) {
+      return;
+    }
+
+    final target = (candidates.length * spec.faultDensity).round();
+    final placed = <HexCoord>[];
+    var attempts = 0;
+    final maxAttempts = math.max(40, target * 12);
+
+    while (placed.length < target && attempts < maxAttempts) {
+      attempts++;
+      final start = candidates[rng.nextInt(candidates.length)];
+      // Two clear of any existing line, so two cracks never read as one wide
+      // smear of timed ground.
+      if (placed.any((p) => p.distanceTo(start) < 3)) {
+        continue;
+      }
+      final direction = HexCoord.directions[rng.nextInt(6)];
+      final length = 2 + rng.nextInt(3);
+
+      // Walked first and committed second: a line that runs off the board or
+      // into a wall halfway through would leave a one-cell stub, which is the
+      // confetti case this exists to avoid.
+      final line = <HexCoord>[];
+      var cursor = start;
+      for (var i = 0; i < length; i++) {
+        final cell = grid.cells[cursor];
+        if (cell == null ||
+            cell.type != HexType.plain ||
+            protected.contains(cursor)) {
+          break;
+        }
+        line.add(cursor);
+        cursor += direction;
+      }
+      if (line.length < 2) {
+        continue;
+      }
+      for (final c in line) {
+        grid.cells[c]!.type = HexType.fault;
+        placed.add(c);
+      }
     }
   }
 

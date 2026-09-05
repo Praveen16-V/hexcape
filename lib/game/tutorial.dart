@@ -286,6 +286,9 @@ class Tutorial {
         seconds: 3.5,
       ),
     ]),
+    // Regrowth and the two special tiles, in one gated run. Four beats rather
+    // than the two-and-two they were as separate levels — the ceiling is
+    // attention, not level count, and a gated step waits for the player.
     2 => Tutorial(const [
       TutorialStep(
         prompt: 'Cleared tiles grow back — watch behind her',
@@ -295,8 +298,6 @@ class Tutorial {
         prompt: 'Boxed in on every side, and she is finished',
         seconds: 4,
       ),
-    ]),
-    3 => Tutorial(const [
       TutorialStep(
         prompt: 'Riveted tiles never clear. Go around them',
         target: TutorialTarget.nearestAnchor,
@@ -308,10 +309,16 @@ class Tutorial {
         seconds: 4.5,
       ),
     ]),
-    4 => Tutorial(const [
+    // Both resources. Fog is deliberately not here — it moved to level four,
+    // where it gets a banner of its own.
+    3 => Tutorial(const [
       TutorialStep(prompt: 'Your taps are limited now', seconds: 3.5),
       TutorialStep(
-        prompt: 'Walk her over this — treats and powerups pay you back',
+        prompt: 'And she tires — the bar is how long she has left',
+        seconds: 3.5,
+      ),
+      TutorialStep(
+        prompt: 'Walk her over this — treats pay back taps and time',
         target: TutorialTarget.nearestPickup,
         advance: TutorialAdvance.onReach,
         seconds: 12,
@@ -319,13 +326,6 @@ class Tutorial {
       TutorialStep(
         prompt: 'They sit off your route. Worth the detour?',
         seconds: 3.5,
-      ),
-    ]),
-    5 => Tutorial(const [
-      TutorialStep(prompt: 'You can only see what she is near', seconds: 4),
-      TutorialStep(
-        prompt: 'And she tires — the bar is how long she has left',
-        seconds: 4,
       ),
     ]),
     _ => null,

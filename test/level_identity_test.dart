@@ -74,7 +74,7 @@ void main() {
     });
 
     test('endless depth has a stable generated identity', () {
-      final identity = Campaign.identityFor(73);
+      final identity = Campaign.identityFor(Campaign.length + 13);
       expect(identity.title, 'Depth 13');
       expect(identity.signature, LevelSignature.gauntlet);
     });
@@ -91,6 +91,8 @@ void main() {
           onPets: () {},
           onSettings: () {},
           onReference: () {},
+          onUnlock: () {},
+          onDaily: () {},
         ),
       ),
     );

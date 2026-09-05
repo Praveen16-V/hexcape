@@ -41,23 +41,59 @@ enum PickupKind {
 
   /// One tap that breaks an anchor, permanently. The only thing in the game
   /// that can.
-  dig;
+  dig,
+
+  /// One tap that pins an open tile open, permanently. The exact inverse of
+  /// [dig], and the answer to cracked ground.
+  ///
+  /// [freeze] already answers "the field is closing", but it answers it
+  /// *temporally* — five seconds, everywhere. A fault does not care: it will
+  /// still be there in six. Stake answers the same pressure *structurally* —
+  /// forever, in one place — which makes the two complementary rather than
+  /// redundant.
+  ///
+  /// One cell, never a ring. A ring would let a player build a safe highway
+  /// across the board, and the whole decision here is the sharpest question the
+  /// game can ask: **which single tile must never close?**
+  stake,
+
+  /// One tap that carves as normal *and* holds her still for a moment.
+  ///
+  /// **Patrols have had no answer since level 21.** The guard's own note says
+  /// it: a patrol "is answered by choosing a different *moment*", and the
+  /// hunger clock is what makes waiting cost something — but the player has
+  /// never been able to express that choice, because she never stops. HEEL is
+  /// the missing verb, and a sentry makes it matter twice over.
+  ///
+  /// It holds; it does not steer. "You do not move her" survives intact, and
+  /// the enclosure timer keeps running while she waits, so being held in a
+  /// closing pocket still kills.
+  heel;
 
   bool get isPowerup => this != PickupKind.treat;
 
   /// Whether this is spent as a single use rather than running for a while.
   ///
-  /// [blast] and [dig] are charges on purpose. As timed effects their value
-  /// would scale with how fast the player can tap inside the window, which
-  /// makes the strongest thing in the game a test of thumb speed and hands the
-  /// most help to whoever needs it least. One use is one decision.
-  bool get isCharge => this == PickupKind.blast || this == PickupKind.dig;
+  /// [blast], [dig] and [stake] are charges on purpose. As timed effects their
+  /// value would scale with how fast the player can tap inside the window,
+  /// which makes the strongest thing in the game a test of thumb speed and
+  /// hands the most help to whoever needs it least. One use is one decision.
+  ///
+  /// **Arming is what makes something a charge, not instantaneity.** All three
+  /// are spent by a deliberate second tap rather than simply happening.
+  bool get isCharge =>
+      this == PickupKind.blast ||
+      this == PickupKind.dig ||
+      this == PickupKind.stake ||
+      this == PickupKind.heel;
 
   /// How long the effect lasts. Treats and charges are instant, so zero.
   double get duration => switch (this) {
     PickupKind.treat => 0,
     PickupKind.blast => 0,
     PickupKind.dig => 0,
+    PickupKind.stake => 0,
+    PickupKind.heel => 0,
     PickupKind.freeze => 5.0,
     PickupKind.radiusPlus => 8.0,
     PickupKind.sprint => 6.0,
@@ -73,6 +109,8 @@ enum PickupKind {
     PickupKind.scent => 'SCENT',
     PickupKind.blast => 'BLAST',
     PickupKind.dig => 'DIG',
+    PickupKind.stake => 'STAKE',
+    PickupKind.heel => 'HEEL',
   };
 
   /// What the player has to do after explicitly arming a charge. Empty for the
@@ -80,6 +118,8 @@ enum PickupKind {
   String get hint => switch (this) {
     PickupKind.blast => 'BLAST armed — tap a tile in reach',
     PickupKind.dig => 'DIG armed — tap a riveted tile',
+    PickupKind.stake => 'STAKE armed — tap an open tile to pin it',
+    PickupKind.heel => 'HEEL armed — your next tap also holds her still',
     _ => '',
   };
 
@@ -88,6 +128,8 @@ enum PickupKind {
   String get readyHint => switch (this) {
     PickupKind.blast => 'BLAST ready — tap it above to arm',
     PickupKind.dig => 'DIG ready — tap it above to arm',
+    PickupKind.stake => 'STAKE ready — tap it above to arm',
+    PickupKind.heel => 'HEEL ready — tap it above to arm',
     _ => '',
   };
 }
@@ -122,6 +164,10 @@ class ActiveEffects {
 
   /// How far a blast reaches from the tapped hex, in rings.
   static const blastRadius = 1;
+
+  /// How long HEEL holds her. Long enough to open the corridor ahead without
+  /// her drifting into it; short enough that it buys one decision, not a rest.
+  static const heelSeconds = 2.5;
 
   void grant(PickupKind kind) {
     if (!kind.isPowerup) {

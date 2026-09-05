@@ -24,12 +24,34 @@ enum HexType {
   /// that gives, and it is dangerous for exactly that reason: it gives you
   /// distance in whatever direction she happened to be walking, which is a gift
   /// only if you set it up.
-  spring;
+  spring,
+
+  /// Clears in one tap like a plain hex, then closes again on its own short
+  /// clock — whether or not anything is next to it.
+  ///
+  /// The pressure nothing else in the game applies: **the route closing ahead
+  /// of you.** Regrowth only ever eats the corridor behind her, because a cell
+  /// has to border something solid before it becomes eligible. The consequence
+  /// went unnoticed for a long time: carving far ahead is strictly optimal and
+  /// costs nothing, and no obstacle has ever contested it.
+  ///
+  /// Deliberately **not** permanent, or it is an anchor that took a tap to
+  /// make. It re-opens for one tap, every time.
+  ///
+  /// And deliberately a *fast lane* rather than another subtraction, for the
+  /// reason [spring] exists: faults are laid in short lines and cost one tap
+  /// each, so the route through a crack is cheaper than the detour around it —
+  /// but it has to be run in one continuous push. Cheap-and-timed against
+  /// expensive-and-safe is a live choice, which more walls would not be.
+  fault;
 
   /// Taps needed to clear one of these from solid.
   int get hitsRequired => this == HexType.heavy ? 2 : 1;
 
   bool get isClearableType => this != HexType.anchor;
+
+  /// Whether this closes on its own clock rather than by bordering a wall.
+  bool get closesOnItsOwn => this == HexType.fault;
 }
 
 /// Where a cell is in the clear/regrow cycle.
@@ -82,6 +104,13 @@ class HexCell {
 
   /// 0..1 progress through [RegrowAnim] while [state] is regrowing.
   double regrowT = 0;
+
+  /// Staked open for the rest of the run — never regrows, never faults.
+  ///
+  /// Lives on the cell rather than in a set on the game because regrowth reads
+  /// it once per cell per frame, and because it belongs to the board: it is
+  /// rebuilt with the level, like [type] and unlike an active powerup.
+  bool pinned = false;
 
   /// 1 -> 0 decay driving the tap-clear scale-up and shard burst (§10).
   double clearBurst = 0;

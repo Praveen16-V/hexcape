@@ -34,9 +34,31 @@ class Strings {
       'That is the whole free campaign. What follows gets faster, tighter, '
       'and starts putting patrols in her way.';
   static const seeWhatIsNext = 'See what is next';
+
+  // The daily challenge.
+  static const dailyCleared = 'Today\'s board, cleared';
+  static const dailyTitle = 'Daily challenge';
+  static const dailyDone = 'Cleared today';
+  static const dailyPlay = 'PLAY TODAY\'S BOARD';
+  static const dailyBlurb =
+      'One board a day, the same for everyone, drawn from the full campaign. '
+      'No stars — just the streak.';
+
+  // The one free look past the paywall.
+  static const trialCleared = 'You held the lane';
+  static const trialClearedHint =
+      'That was one level of Pressure, with one patrol. There are nineteen '
+      'more like it, then twenty of Mastery, then Endless.';
+  static const trialTitle = 'Try the first Pressure level';
+  static const trialBlurb =
+      'One free run at First Patrol — the level right after the free '
+      'campaign ends. Play it as many times as you like; leaving for the map '
+      'ends the trial.';
+  static const trialPlay = 'TRY IT FREE';
+  static const trialSpent = 'You have taken your free look at this one.';
   static const campaignDone = 'Every level cleared';
   static const campaignDoneHint =
-      'Sixty levels, and she found the bone in all of them. '
+      'A hundred levels, and she found the bone in all of them. '
       'Endless keeps going from here, and only gets deeper.';
   static const depth = 'DEPTH';
   static const runEnded = 'Run ended';

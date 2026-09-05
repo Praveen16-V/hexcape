@@ -2,11 +2,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../game/daily.dart';
 import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
 import '../hex/hex_coord.dart';
 import '../hex/hex_layout.dart';
+import '../l10n/strings.dart';
 import '../theme/palette.dart';
 
 /// Where each level sits on the map.
@@ -63,6 +65,8 @@ class LevelMap extends StatefulWidget {
     required this.onPets,
     required this.onSettings,
     required this.onReference,
+    required this.onUnlock,
+    required this.onDaily,
     super.key,
   });
 
@@ -74,6 +78,12 @@ class LevelMap extends StatefulWidget {
   final VoidCallback onPets;
   final VoidCallback onSettings;
   final VoidCallback onReference;
+
+  /// Opens the offer. Shown on the map only while the game is unbought.
+  final VoidCallback onUnlock;
+
+  /// Starts today's board.
+  final VoidCallback onDaily;
 
   @override
   State<LevelMap> createState() => _LevelMapState();
@@ -161,6 +171,7 @@ class _LevelMapState extends State<LevelMap>
                               frontier: frontier,
                               phase: _pulse.value,
                               owned: progress.ownsFullGame,
+                              trialUsed: progress.trialUsed,
                             ),
                           ),
                         ),
@@ -170,6 +181,24 @@ class _LevelMapState extends State<LevelMap>
                 },
               ),
             ),
+            _DailyBar(
+              daily: Daily.forDate(DateTime.now()),
+              cleared: progress.hasClearedDaily(Daily.forDate(DateTime.now())),
+              streak: progress.dailyStreakAsOf(DateTime.now()),
+              onPlay: widget.onDaily,
+            ),
+            // Always reachable, never loud.
+            //
+            // Dismissing the paywall used to leave exactly one way back to it:
+            // tapping a locked tile. Someone who has decided to think about it
+            // should not have to remember which tile that was, and a game with
+            // one thing to sell can afford to say so once, quietly, in a strip
+            // the width of the screen.
+            if (!progress.ownsFullGame)
+              _UnlockStrip(
+                paidLevels: Campaign.length - Entitlements.freeThrough,
+                onUnlock: widget.onUnlock,
+              ),
             _PlayBar(
               level: frontier,
               bestDepth: progress.endlessBest > Campaign.length
@@ -215,6 +244,7 @@ class _MapPainter extends CustomPainter {
     required this.frontier,
     required this.phase,
     required this.owned,
+    required this.trialUsed,
   });
 
   final HexLayout layout;
@@ -225,6 +255,10 @@ class _MapPainter extends CustomPainter {
   /// Passed in rather than read off [progress] so [shouldRepaint] can see it
   /// change — buying the game has to repaint forty tiles.
   final bool owned;
+
+  /// Passed in for the same reason as [owned]: spending the trial changes how
+  /// one tile draws, and [shouldRepaint] cannot see it on [progress].
+  final bool trialUsed;
 
   final Paint _fill = Paint()..style = PaintingStyle.fill;
   final Paint _stroke = Paint()..style = PaintingStyle.stroke;
@@ -273,8 +307,13 @@ class _MapPainter extends CustomPainter {
       level,
       unlocked: progress.unlocked,
       owned: progress.ownsFullGame,
+      trialUsed: progress.trialUsed,
     );
-    final unlocked = access == LevelAccess.open;
+    final trial = access == LevelAccess.trial;
+    // A trial tile is drawn as playable, because it is. Drawing a padlock on
+    // the one level we are inviting them into would be the map contradicting
+    // the offer.
+    final unlocked = access == LevelAccess.open || trial;
     final forSale = access == LevelAccess.needsPurchase;
     final record = progress.recordFor(level);
     final isEndless = level > Campaign.length;
@@ -418,6 +457,7 @@ class _MapPainter extends CustomPainter {
       old.phase != phase ||
       old.frontier != frontier ||
       old.owned != owned ||
+      old.trialUsed != trialUsed ||
       old.layout.size != layout.size;
 }
 
@@ -533,6 +573,141 @@ class _HeaderButton extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+    );
+  }
+}
+
+/// Today's board.
+///
+/// Sits above the campaign's own Play button rather than in a menu, because a
+/// daily nobody sees is a daily nobody plays — and the streak is the only
+/// number in the game that decays, so it has to be in front of the player
+/// every time they open the app.
+class _DailyBar extends StatelessWidget {
+  const _DailyBar({
+    required this.daily,
+    required this.cleared,
+    required this.streak,
+    required this.onPlay,
+  });
+
+  final DailyChallenge daily;
+  final bool cleared;
+  final int streak;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = Palette.forBand(daily.band);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
+          onPressed: onPlay,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: cleared ? Palette.hudDim : colour,
+            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            side: BorderSide(
+              color: (cleared ? Palette.lockedEdge : colour).withValues(
+                alpha: cleared ? 1 : 0.5,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                cleared ? Icons.check_circle_outline : Icons.today_outlined,
+                size: 17,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    cleared
+                        ? '${Strings.dailyDone.toUpperCase()}  ·  '
+                              '${daily.band.label.toUpperCase()}'
+                        : '${Strings.dailyTitle.toUpperCase()}  ·  '
+                              '${daily.band.label.toUpperCase()}',
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              if (streak > 0) ...[
+                const SizedBox(width: 8),
+                Semantics(
+                  label: '$streak day streak',
+                  child: Text(
+                    '$streak🔥',
+                    style: TextStyle(
+                      color: Palette.treat,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The standing route back to the offer.
+///
+/// A strip rather than a button: it sits under the trail it is talking about,
+/// says how much more of it there is, and does not compete with Play. No badge,
+/// no price, no countdown — the sheet it opens is where the numbers live.
+class _UnlockStrip extends StatelessWidget {
+  const _UnlockStrip({required this.paidLevels, required this.onUnlock});
+
+  final int paidLevels;
+  final VoidCallback onUnlock;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+      child: SizedBox(
+        width: double.infinity,
+        child: TextButton(
+          onPressed: onUnlock,
+          style: TextButton.styleFrom(
+            foregroundColor: Palette.bandPressure,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+              side: BorderSide(
+                color: Palette.bandPressure.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '$paidLevels MORE LEVELS  ·  PRESSURE, MASTERY, ENDLESS',
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

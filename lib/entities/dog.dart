@@ -91,6 +91,9 @@ class Dog {
   /// in charge.
   double launchFor = 0;
 
+  /// Seconds left of a HEEL. She stays exactly where she is.
+  double holdFor = 0;
+
   /// True while a spring still has hold of her.
   bool get isLaunched => launchFor > 0;
 
@@ -161,7 +164,13 @@ class Dog {
 
     _trackEnclosure(grid, dt, regrowthActive);
     final previousVelocity = velocity;
-    if (launchFor > 0) {
+    // Outranks a launch: a spring firing her across the board while the player
+    // has just paid to hold her still would spend the tool on nothing.
+    if (holdFor > 0) {
+      holdFor = math.max(0, holdFor - dt);
+      launchFor = 0;
+      velocity = Offset.zero;
+    } else if (launchFor > 0) {
       launchFor = math.max(0, launchFor - dt);
     } else {
       _steer(dt, grid, layout, tuning, speedMultiplier);

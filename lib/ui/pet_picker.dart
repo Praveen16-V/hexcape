@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/entitlements.dart';
 import '../game/pets.dart';
 import '../theme/palette.dart';
 
@@ -13,10 +14,16 @@ class PetPicker extends StatefulWidget {
     required this.stars,
     required this.selected,
     required this.onSelected,
+    required this.owned,
     super.key,
   });
 
   final int stars;
+
+  /// Whether the full campaign is bought. A locked pet whose cost sits above
+  /// the free star ceiling is out of reach for a reason the player can act on,
+  /// and saying "100 stars" to someone capped at 60 is not that reason.
+  final bool owned;
   final String selected;
   final void Function(Pet pet) onSelected;
 
@@ -87,6 +94,9 @@ class _PetPickerState extends State<PetPicker> {
               _PetRow(
                 pet: pet,
                 unlocked: Pets.isUnlocked(pet, widget.stars),
+                beyondFree:
+                    !widget.owned &&
+                    pet.starsRequired > Entitlements.freeStarCeiling,
                 selected: pet.id == _selected,
                 onTap: () {
                   if (!Pets.isUnlocked(pet, widget.stars)) {
@@ -109,12 +119,16 @@ class _PetRow extends StatelessWidget {
   const _PetRow({
     required this.pet,
     required this.unlocked,
+    required this.beyondFree,
     required this.selected,
     required this.onTap,
   });
 
   final Pet pet;
   final bool unlocked;
+
+  /// Locked behind more stars than the free campaign contains.
+  final bool beyondFree;
   final bool selected;
   final VoidCallback onTap;
 
@@ -143,9 +157,7 @@ class _PetRow extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: unlocked
-                    ? pet.body
-                    : Palette.lockedTile,
+                color: unlocked ? pet.body : Palette.lockedTile,
                 border: Border.all(
                   color: unlocked ? pet.dark : Palette.lockedEdge,
                   width: 2,
@@ -171,6 +183,8 @@ class _PetRow extends StatelessWidget {
                   Text(
                     unlocked
                         ? pet.blurb
+                        : beyondFree
+                        ? '${pet.starsRequired} stars — needs the full campaign'
                         : '${pet.starsRequired} stars to unlock',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.42),

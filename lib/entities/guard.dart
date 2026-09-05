@@ -16,9 +16,30 @@ import '../hex/hex_layout.dart';
 /// Every other obstacle is answered by choosing a different route; a patrol is
 /// answered by choosing a different *moment*, and the hunger clock is what makes
 /// waiting cost something.
+/// What a sweeping light does to the player.
+///
+/// The split matters more than it looks. A [patrol] is a moving wall for *her*:
+/// she will not walk into it, and it costs her seconds when it catches her. A
+/// [sentry] is a moving wall for *your hands*: taps inside it do nothing, but
+/// it does not block her body and never bites.
+///
+/// Making a sentry do both would only be a better guard. Making it do neither
+/// of a guard's jobs is what gives it a pressure of its own — and it is also
+/// why it can never cause an unavoidable loss, so like springs and faults it
+/// needs no solvability check. The worst it can do is cost time, which is
+/// charged to the hunger clock, which is the right currency for waiting.
+enum GuardKind { patrol, sentry }
+
 class Guard {
-  Guard({required this.patrol, this.cellsPerSecond = 0.85})
-    : assert(patrol.length >= 2, 'a patrol of one cell never moves');
+  Guard({
+    required this.patrol,
+    this.cellsPerSecond = 0.85,
+    this.kind = GuardKind.patrol,
+  }) : assert(patrol.length >= 2, 'a patrol of one cell never moves');
+
+  final GuardKind kind;
+
+  bool get isSentry => kind == GuardKind.sentry;
 
   /// The route it walks, end to end and back again.
   final List<HexCoord> patrol;
