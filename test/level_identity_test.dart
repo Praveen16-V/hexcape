@@ -91,6 +91,8 @@ void main() {
           onPets: () {},
           onSettings: () {},
           onReference: () {},
+          onUnlock: () {},
+          onDaily: () {},
         ),
       ),
     );

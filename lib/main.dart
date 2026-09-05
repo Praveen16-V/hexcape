@@ -2,6 +2,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'game/daily.dart';
 import 'game/entitlements.dart';
 import 'game/haptics.dart';
 import 'game/hexcape_game.dart';
@@ -149,6 +150,7 @@ class _GameShellState extends State<GameShell>
         unlocked: Entitlements.revealCeiling(
           unlocked: widget.progress.unlocked,
           owned: widget.progress.ownsFullGame,
+          trialUsed: widget.progress.trialUsed,
         ),
       ),
     );
@@ -222,20 +224,41 @@ class _GameShellState extends State<GameShell>
   }
 
   void _openLevel(int level, {bool restart = false}) {
+    final resuming =
+        !restart && _activeLevel == level && _game.isReady && !_game.isOver;
+
     // Checked here as well as in the two places that offer the button, because
     // this is the one function every route into a level goes through — the map,
     // the detail sheet, "next level" and the debug jump alike.
-    if (!Entitlements.canPlay(
-      level,
-      unlocked: widget.progress.unlocked,
-      owned: widget.progress.ownsFullGame,
-    )) {
-      _openPaywall();
-      return;
+    //
+    // Skipped entirely when resuming: **a run already in progress belongs to
+    // the player, whatever the entitlement now says.** The trial spends itself
+    // on the way in, so re-checking here would read as `needsPurchase` and
+    // bounce someone to the paywall for stepping out to the map and back in the
+    // middle of the very level the trial had just given them.
+    if (!resuming) {
+      final access = Entitlements.accessTo(
+        level,
+        unlocked: widget.progress.unlocked,
+        owned: widget.progress.ownsFullGame,
+        trialUsed: widget.progress.trialUsed,
+      );
+      switch (access) {
+        case LevelAccess.needsPurchase:
+          _openPaywall();
+          return;
+        case LevelAccess.needsProgress:
+          // Not an offer. Telling someone to buy a level they simply have not
+          // reached is the one thing the access split exists to prevent.
+          return;
+        case LevelAccess.trial:
+          widget.progress.setTrialUsed();
+        case LevelAccess.open:
+          break;
+      }
     }
+
     setState(() => _playing = true);
-    final resuming =
-        !restart && _activeLevel == level && _game.isReady && !_game.isOver;
     if (resuming) {
       _game.resumeRun();
       return;
@@ -243,6 +266,19 @@ class _GameShellState extends State<GameShell>
     _activeLevel = level;
     _game.paused = false;
     _game.requestLevel(level);
+  }
+
+  /// Starts today's board.
+  ///
+  /// `_activeLevel` is cleared rather than set: a daily borrows a campaign
+  /// level's number, and leaving it set would make the detail sheet for that
+  /// level offer to "resume" a run that is not it.
+  void _openDaily() {
+    _activeLevel = null;
+    _tuning.zenMode = false;
+    setState(() => _playing = true);
+    _game.paused = false;
+    _game.startDailyRun(Daily.forDate(DateTime.now()));
   }
 
   void _openMap() {
@@ -260,6 +296,7 @@ class _GameShellState extends State<GameShell>
       isScrollControlled: true,
       builder: (context) => PetPicker(
         stars: widget.progress.totalStars,
+        owned: widget.progress.ownsFullGame,
         selected: _game.pet.id,
         onSelected: (pet) {
           widget.progress.choosePet(pet.id);
@@ -283,6 +320,7 @@ class _GameShellState extends State<GameShell>
           game: game,
           onMap: _openMap,
           owned: widget.progress.ownsFullGame,
+          dailyStreak: widget.progress.dailyStreak,
           onUnlock: _openPaywall,
         ),
         Overlays.pause: (_, game) => PauseOverlay(
@@ -328,6 +366,8 @@ class _GameShellState extends State<GameShell>
                   onPets: _openPets,
                   onSettings: _openSettings,
                   onReference: _openReference,
+                  onUnlock: _openPaywall,
+                  onDaily: _openDaily,
                 ),
               ),
             ),

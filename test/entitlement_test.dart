@@ -36,9 +36,11 @@ void main() {
     });
 
     test('past the free band, unbought levels report the purchase', () {
-      for (var level = Entitlements.freeThrough + 1;
-          level <= Campaign.length + 5;
-          level++) {
+      for (
+        var level = Entitlements.freeThrough + 1;
+        level <= Campaign.length + 5;
+        level++
+      ) {
         expect(
           Entitlements.accessTo(level, unlocked: 999, owned: false),
           LevelAccess.needsPurchase,
@@ -95,11 +97,7 @@ void main() {
 
     test('endless is part of the purchase', () {
       expect(
-        Entitlements.accessTo(
-          Campaign.length + 1,
-          unlocked: 999,
-          owned: false,
-        ),
+        Entitlements.accessTo(Campaign.length + 1, unlocked: 999, owned: false),
         LevelAccess.needsPurchase,
       );
       expect(
@@ -128,8 +126,10 @@ void main() {
         Entitlements.revealCeiling(unlocked: 21, owned: false),
         Entitlements.freeThrough,
       );
-      expect(Entitlements.revealCeiling(unlocked: 60, owned: false),
-          Entitlements.freeThrough);
+      expect(
+        Entitlements.revealCeiling(unlocked: 60, owned: false),
+        Entitlements.freeThrough,
+      );
     });
 
     test('it never reveals more than the player has reached', () {
@@ -201,6 +201,135 @@ void main() {
         greaterThanOrEqualTo(2),
         reason: 'purchases for other products must be completed too',
       );
+    });
+  });
+
+  group('The one free look past the wall', () {
+    test('is offered on the first paid level, once it has been earned', () {
+      expect(
+        Entitlements.accessTo(
+          Entitlements.trialLevel,
+          unlocked: Entitlements.trialLevel,
+          owned: false,
+          trialUsed: false,
+        ),
+        LevelAccess.trial,
+      );
+    });
+
+    test('sits exactly where patrols start', () {
+      // The offer's central claim is that what follows puts patrols in her way.
+      // If these ever drift apart the trial stops demonstrating the thing being
+      // sold, which is its entire reason for existing.
+      expect(Entitlements.trialLevel, Campaign.guardsFrom);
+      expect(Campaign.rulesFor(Entitlements.trialLevel).guards, greaterThan(0));
+    });
+
+    test('has to be earned, not merely reached for', () {
+      // Someone still on level three is not owed the free look: spending it
+      // there skips the twenty levels that give it its weight.
+      expect(
+        Entitlements.accessTo(
+          Entitlements.trialLevel,
+          unlocked: 3,
+          owned: false,
+          trialUsed: false,
+        ),
+        LevelAccess.needsPurchase,
+      );
+    });
+
+    test('is spent once, and only covers the one level', () {
+      expect(
+        Entitlements.accessTo(
+          Entitlements.trialLevel,
+          unlocked: 99,
+          owned: false,
+          trialUsed: true,
+        ),
+        LevelAccess.needsPurchase,
+      );
+      // The level after it is never free, spent or not.
+      for (final used in [true, false]) {
+        expect(
+          Entitlements.accessTo(
+            Entitlements.trialLevel + 1,
+            unlocked: 99,
+            owned: false,
+            trialUsed: used,
+          ),
+          LevelAccess.needsPurchase,
+          reason: 'trialUsed=$used leaked the level past the trial',
+        );
+      }
+    });
+
+    test('is playable, and callers that ignore it are unaffected', () {
+      expect(
+        Entitlements.canPlay(
+          Entitlements.trialLevel,
+          unlocked: Entitlements.trialLevel,
+          owned: false,
+          trialUsed: false,
+        ),
+        isTrue,
+      );
+      // The default is "already spent", so nothing that has not been taught
+      // about the trial can hand it out by accident.
+      expect(
+        Entitlements.canPlay(
+          Entitlements.trialLevel,
+          unlocked: Entitlements.trialLevel,
+          owned: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('never changes anything for someone who has bought the game', () {
+      for (final used in [true, false]) {
+        expect(
+          Entitlements.accessTo(
+            Entitlements.trialLevel,
+            unlocked: 99,
+            owned: true,
+            trialUsed: used,
+          ),
+          LevelAccess.open,
+        );
+      }
+    });
+
+    test('lifts the reference ceiling by exactly the level it covers', () {
+      expect(
+        Entitlements.revealCeiling(unlocked: 99, owned: false),
+        Entitlements.freeThrough,
+      );
+      expect(
+        Entitlements.revealCeiling(unlocked: 99, owned: false, trialUsed: true),
+        Entitlements.trialLevel,
+      );
+    });
+
+    test('survives a restart, and comes back with a wiped save', () async {
+      SharedPreferences.setMockInitialValues({});
+      final progress = await Progress.load();
+      expect(progress.trialUsed, isFalse);
+      await progress.setTrialUsed();
+      expect((await Progress.load()).trialUsed, isTrue);
+
+      // Reset is for progress, and the trial is only reachable by clearing
+      // twenty levels — a wiped save has to be able to earn it again.
+      await progress.reset();
+      expect((await Progress.load()).trialUsed, isFalse);
+    });
+
+    test('resetting progress does not un-buy the game', () async {
+      SharedPreferences.setMockInitialValues({});
+      final progress = await Progress.load();
+      await progress.setOwnsFullGame(true);
+      await progress.reset();
+      expect((await Progress.load()).ownsFullGame, isTrue);
     });
   });
 }

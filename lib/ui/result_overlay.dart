@@ -15,6 +15,7 @@ class ResultOverlay extends StatefulWidget {
     required this.onMap,
     required this.onUnlock,
     required this.owned,
+    required this.dailyStreak,
     super.key,
   });
 
@@ -28,6 +29,10 @@ class ResultOverlay extends StatefulWidget {
 
   /// Whether the full campaign is bought.
   final bool owned;
+
+  /// The daily streak *after* this run has been recorded, so a win can name the
+  /// number it just produced.
+  final int dailyStreak;
 
   @override
   State<ResultOverlay> createState() => _ResultOverlayState();
@@ -53,17 +58,38 @@ class _ResultOverlayState extends State<ResultOverlay>
 
     final endless = game.isEndless;
     final zen = game.tuning.zenMode;
+    // A daily borrows an authored level's number, so every campaign milestone
+    // below has to exclude it explicitly. Without this a daily drawn from level
+    // 60 announces "Every level cleared", and one drawn from level 21 offers a
+    // free player the trial they may already have spent.
+    final daily = game.daily;
     final clearedDepth = endless
         ? (won ? game.depth : (game.depth > 1 ? game.depth - 1 : 0))
         : 0;
     final storedBest = _bestDepth(game);
     final bestDepth = clearedDepth > storedBest ? clearedDepth : storedBest;
-    final finishedCampaign = won && game.isFinalLevel;
+    final finishedCampaign = won && game.isFinalLevel && daily == null;
     // The end of the free game. Framed as a milestone reached rather than a
     // wall hit — twenty levels is a whole game, and telling someone who just
     // finished one that they have run out is the wrong note entirely.
     final finishedFree =
-        won && !widget.owned && game.levelNumber == Entitlements.freeThrough;
+        won &&
+        !widget.owned &&
+        daily == null &&
+        game.levelNumber == Entitlements.freeThrough;
+
+    // The free look past the wall, being played right now.
+    //
+    // Retry is deliberately still offered here, and on a loss it stays the
+    // primary action. The trial exists to let someone *experience* Pressure,
+    // and a player whose one look ended in a loss has experienced only the
+    // loss — selling to them at that moment is both meaner and less persuasive
+    // than letting them clear it first. Leaving for the map is what ends it.
+    final trialRun =
+        !widget.owned &&
+        !endless &&
+        daily == null &&
+        game.levelNumber == Entitlements.trialLevel;
 
     final (title, blurb) = switch (game.phase) {
       GamePhase.won when zen => (
@@ -80,9 +106,19 @@ class _ResultOverlayState extends State<ResultOverlay>
         Strings.campaignDone,
         Strings.campaignDoneHint,
       ),
+      GamePhase.won when daily != null => (
+        Strings.dailyCleared,
+        widget.dailyStreak > 1
+            ? '${widget.dailyStreak} days in a row.'
+            : 'Come back tomorrow for the next one.',
+      ),
       GamePhase.won when finishedFree => (
         Strings.freeCampaignDone,
         Strings.freeCampaignDoneHint,
+      ),
+      GamePhase.won when trialRun => (
+        Strings.trialCleared,
+        Strings.trialClearedHint,
       ),
       GamePhase.won => (Strings.levelComplete, null),
       // In endless a loss ends the *run*, which is the thing being scored.
@@ -118,6 +154,31 @@ class _ResultOverlayState extends State<ResultOverlay>
       if (won) {
         secondaryLabel = Strings.newRun;
         secondaryAction = game.startEndlessRun;
+      }
+    } else if (daily != null) {
+      // Neither `nextLevel` nor `regenerate` belongs here: there is exactly one
+      // daily board, and both would silently replace it with something else
+      // while the panel still said "daily".
+      primaryLabel = won ? Strings.backToMap : Strings.retry;
+      primaryAction = won ? widget.onMap : game.retry;
+      if (!won) {
+        secondaryLabel = Strings.backToMap;
+        secondaryAction = widget.onMap;
+      }
+    } else if (trialRun) {
+      // Never `game.nextLevel` from here. It calls `startLevel` directly and so
+      // bypasses the entitlement gate entirely — offering it on a won trial
+      // would hand out level 22 for nothing.
+      if (won) {
+        primaryLabel = Strings.seeWhatIsNext;
+        primaryAction = widget.onUnlock;
+        secondaryLabel = Strings.retry;
+        secondaryAction = game.retry;
+      } else {
+        primaryLabel = Strings.retry;
+        primaryAction = game.retry;
+        secondaryLabel = Strings.seeWhatIsNext;
+        secondaryAction = widget.onUnlock;
       }
     } else {
       primaryLabel = Strings.retry;
@@ -178,21 +239,27 @@ class _ResultOverlayState extends State<ResultOverlay>
                       ),
                     ),
                   ],
-                  if (zen || endless) ...[
+                  if (zen || endless || daily != null) ...[
                     const SizedBox(height: 9),
                     Text(
                       zen
                           ? 'ZEN PRACTICE · NOT SAVED'
+                          : daily != null
+                          ? 'DAILY · ${daily.band.label.toUpperCase()} · NO STARS'
                           : 'ENDLESS RUN · NO STARS',
                       style: TextStyle(
-                        color: zen ? Palette.freeze : Palette.goalGlow,
+                        color: zen
+                            ? Palette.freeze
+                            : daily != null
+                            ? Palette.treat
+                            : Palette.goalGlow,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.4,
                       ),
                     ),
                   ],
-                  if (won && !zen && !endless) ...[
+                  if (won && !zen && !endless && daily == null) ...[
                     const SizedBox(height: 14),
                     _Stars(count: game.stars),
                     const SizedBox(height: 6),

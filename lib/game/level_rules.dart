@@ -201,6 +201,16 @@ class Campaign {
   static const foundationEnd = 20;
   static const pressureEnd = 40;
 
+  /// The last level of the Mastery band.
+  ///
+  /// Distinct from [length], and that distinction is the whole point. These
+  /// were the same number while Mastery was the final band, so `rulesFor`
+  /// interpolated it as `length - pressureEnd` — which silently turns Mastery
+  /// into a band of every remaining level the moment the campaign grows past
+  /// it. A band has to know where it ends independently of where the campaign
+  /// does.
+  static const masteryEnd = 60;
+
   /// Springs land inside Foundation, once anchors and heavy hexes are familiar
   /// but before the clock gets tight — they are the one obstacle that gives
   /// something back, so meeting them while there is still slack is what lets a
@@ -334,7 +344,7 @@ class Campaign {
     if (level <= pressureEnd) {
       return CampaignBand.pressure;
     }
-    if (level <= length) {
+    if (level <= masteryEnd) {
       return CampaignBand.mastery;
     }
     return CampaignBand.endless;
@@ -374,10 +384,18 @@ class Campaign {
     CampaignBand.endless => length + 1,
   };
 
-  static LevelRules rulesFor(int level) {
+  /// The rules for a level, optionally on a different board.
+  ///
+  /// [seed] overrides the one this level would normally derive, and is how the
+  /// daily challenge borrows a level's *shape of difficulty* without borrowing
+  /// its board. Deliberately an override on this function rather than a
+  /// `copyWith` on [LevelRules]: a copy of twenty-five fields silently drops
+  /// whichever one is added next, and the failure would be a daily board that
+  /// quietly stopped matching the level it claims to be built from.
+  static LevelRules rulesFor(int level, {int? seed}) {
     final n = math.max(1, level);
     if (n <= tutorialBand) {
-      return _tutorial(n);
+      return _tutorial(n, seed: seed);
     }
     if (n <= foundationEnd) {
       return _band(
@@ -385,6 +403,7 @@ class Campaign {
         foundationEnd - tutorialBand,
         n - tutorialBand - 1,
         _foundation,
+        seed: seed,
       );
     }
     if (n <= pressureEnd) {
@@ -393,20 +412,27 @@ class Campaign {
         pressureEnd - foundationEnd,
         n - foundationEnd - 1,
         _pressure,
+        seed: seed,
       );
     }
-    if (n <= length) {
-      return _band(n, length - pressureEnd, n - pressureEnd - 1, _mastery);
+    if (n <= masteryEnd) {
+      return _band(
+        n,
+        masteryEnd - pressureEnd,
+        n - pressureEnd - 1,
+        _mastery,
+        seed: seed,
+      );
     }
-    return _endless(n);
+    return _endless(n, seed: seed);
   }
 
   // -------------------------------------------------------------------------
   // Five guided levels. Small boards, so a lesson is over in half a minute.
   // -------------------------------------------------------------------------
 
-  static LevelRules _tutorial(int n) {
-    final seed = seedFor(n);
+  static LevelRules _tutorial(int n, {int? seed}) {
+    seed ??= seedFor(n);
     return switch (n) {
       1 => LevelRules(
         level: 1,
@@ -561,8 +587,9 @@ class Campaign {
       (double, double) budget,
       (double, double) hunger,
     })
-    band,
-  ) {
+    band, {
+    int? seed,
+  }) {
     final t = span <= 1 ? 0.0 : index / (span - 1);
     final pace = paceFor(level);
     final signature = signatureFor(level);
@@ -576,7 +603,7 @@ class Campaign {
     final baseHunger = _lerp(band.hunger, t);
     return LevelRules(
       level: level,
-      seed: seedFor(level),
+      seed: seed ?? seedFor(level),
       columns: _lerpInt(band.columns, t),
       rows: _lerpInt(band.rows, t),
       anchorDensity: math.max(
@@ -675,12 +702,12 @@ class Campaign {
   /// that becomes arithmetically impossible is not difficulty, it is a wall with
   /// a number on it. These floors sit just beyond the hardest campaign level, so
   /// the climb is still felt without becoming a lie.
-  static LevelRules _endless(int level) {
+  static LevelRules _endless(int level, {int? seed}) {
     final beyond = level - length;
     final t = 1 - math.pow(0.97, beyond).toDouble();
     return LevelRules(
       level: level,
-      seed: seedFor(level),
+      seed: seed ?? seedFor(level),
       columns: 12,
       rows: math.min(29, 27 + (beyond ~/ 12)),
       anchorDensity: 0.38 + 0.03 * t,

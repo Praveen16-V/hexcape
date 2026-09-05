@@ -15,7 +15,13 @@ HexcapeGame gameAt(int level) => HexcapeGame(tuning: TuningConfig())
 
 Widget resultFor(HexcapeGame game, {MediaQueryData? media}) {
   final screen = Scaffold(
-    body: ResultOverlay(game: game, owned: true, onMap: () {}, onUnlock: () {}),
+    body: ResultOverlay(
+      game: game,
+      owned: true,
+      dailyStreak: 0,
+      onMap: () {},
+      onUnlock: () {},
+    ),
   );
   return MaterialApp(
     home: media == null ? screen : MediaQuery(data: media, child: screen),

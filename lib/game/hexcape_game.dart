@@ -26,6 +26,7 @@ import '../systems/streak_system.dart';
 import '../systems/reveal_system.dart';
 import '../systems/softlock_system.dart';
 import '../theme/palette.dart';
+import 'daily.dart';
 import 'haptics.dart';
 import 'juice.dart';
 import 'level_rules.dart';
@@ -343,10 +344,29 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     syncDeveloperTools();
   }
 
+  /// The daily board being played, or null on a campaign or endless run.
+  ///
+  /// Sticky across [retry] and [regenerate] — retrying today's board is still
+  /// today's board — and cleared by every route that starts something else.
+  DailyChallenge? daily;
+
+  bool get isDaily => daily != null;
+
+  /// Starts today's board. Its [levelNumber] is the level it borrows its rules
+  /// from, so everything that reasons about difficulty keeps working; only what
+  /// gets *written* at the end differs.
+  /// Deferred by a frame like [requestLevel], and for the same reason: the
+  /// board is fitted to the widget's size, which is stale at the moment the map
+  /// hands over.
+  void startDailyRun(DailyChallenge challenge) {
+    daily = challenge;
+    _request(challenge.sourceLevel);
+  }
+
   /// Builds a level and resets everything that belongs to a run.
   void startLevel({int? level, bool reuseSeed = false}) {
     levelNumber = level ?? levelNumber;
-    rules = Campaign.rulesFor(levelNumber);
+    rules = daily?.rules ?? Campaign.rulesFor(levelNumber);
     if (tuning.followCampaign) {
       _applyRules(rules);
     }
@@ -491,6 +511,14 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// over — generating here would fit the board to a stale size and then have
   /// to rescale it on the very next frame.
   void requestLevel(int level) {
+    // The map only ever asks for campaign levels. Without this, going from a
+    // daily to a campaign level would keep the daily's rules and record the
+    // clear against the wrong thing.
+    daily = null;
+    _request(level);
+  }
+
+  void _request(int level) {
     _requestedLevel = level;
     if (!_ready) {
       return;
@@ -508,7 +536,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   void regenerate() => startLevel();
 
   /// Onward. Past the end of the campaign this keeps going into endless.
-  void nextLevel() => startLevel(level: levelNumber + 1);
+  void nextLevel() {
+    daily = null;
+    startLevel(level: levelNumber + 1);
+  }
 
   /// Past the sixty authored levels.
   bool get isEndless => levelNumber > Campaign.length;
@@ -523,7 +554,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Back to the top of endless. A run is the unit there, not a level, so
   /// losing at depth 12 and retrying that one board would be scoring a
   /// marathon by the last mile.
-  void startEndlessRun() => startLevel(level: Campaign.length + 1);
+  void startEndlessRun() {
+    daily = null;
+    startLevel(level: Campaign.length + 1);
+  }
 
   /// Replays this authored level under its scored rules after Zen practice.
   void startScoredRun() {
@@ -950,7 +984,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // the hard way, so it is practice: nothing is written, nothing unlocks. The
     // level detail sheet says so before the run starts.
     if (!tuning.zenMode) {
-      if (isEndless) {
+      // Checked before everything else, and it must stay that way. A daily
+      // borrows an authored level's number to borrow its difficulty; falling
+      // through to the campaign write would hand out that level's star and
+      // advance the unlock chain for a board the player reached from the map's
+      // daily tile.
+      final today = daily;
+      if (today != null) {
+        progress?.recordDailyClear(today);
+      } else if (isEndless) {
         progress?.recordEndlessClear(level: levelNumber);
       } else {
         progress?.recordWin(
