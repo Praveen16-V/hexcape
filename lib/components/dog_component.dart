@@ -77,7 +77,15 @@ class DogComponent extends Component {
     final squash = 1 - dog.surge * 0.14 + startle * 0.18;
 
     // Trot bob, tied to distance covered rather than to the clock.
-    final bob = -(math.sin(dog.gaitPhase * math.pi * 2).abs()) * r * 0.16;
+    final moving = (dog.velocity.distance / (r * 5)).clamp(0.0, 1.0);
+    final motion = game.tuning.reducedMotion ? 0.0 : 1.0;
+    final bob =
+        -math.sin(dog.gaitPhase * math.pi * 2).abs() *
+        r *
+        0.12 *
+        moving *
+        motion;
+    final breath = math.sin(game.elapsed * 2.8) * 0.025 * (1 - moving) * motion;
     final lift = alert * r * 0.22 - weary * r * 0.1 - startle * r * 0.06;
     final lean = (-dog.turnRate * 0.02).clamp(-0.35, 0.35) * _flip;
 
@@ -87,7 +95,7 @@ class DogComponent extends Component {
     _renderShadow(canvas, r, -bob + lift);
 
     canvas.rotate(lean + game.despair * 0.12 + startle * 0.10);
-    canvas.scale(_flip * stretch, squash);
+    canvas.scale(_flip * stretch, squash + breath);
 
     _renderGlow(canvas, r, alert);
     // Far legs first, then body, then near legs — so she has depth rather than
@@ -144,16 +152,17 @@ class DogComponent extends Component {
     Color colour,
     double width,
   ) {
-    final swing = math.sin(phase);
-    final lift = math.max(0.0, math.cos(phase));
+    final stride = (game.dog.velocity.distance / (r * 5)).clamp(0.0, 1.0);
+    final swing = math.sin(phase) * stride;
+    final lift = math.max(0.0, math.cos(phase)) * stride;
 
     final knee = Offset(
       hipX + swing * r * 0.20,
       hipY + r * 0.34 - lift * r * 0.05,
     );
     final paw = Offset(
-      hipX + swing * r * 0.42,
-      hipY + r * 0.66 - lift * r * 0.16,
+      hipX + swing * r * 0.54,
+      hipY + r * 0.66 - lift * r * 0.25,
     );
 
     _stroke
@@ -186,17 +195,25 @@ class DogComponent extends Component {
     // a flat drawing.
     final colour = far ? Color.lerp(_dark, Palette.background, 0.35)! : _dark;
     final width = r * (far ? 0.21 : 0.25);
-    final offset = far ? math.pi * 0.8 : 0.0;
+    final offset = far ? math.pi : 0.0;
     _leg(
       canvas,
-      -r * 0.46,
-      r * 0.16,
+      -r * (far ? 0.60 : 0.40),
+      r * (far ? 0.10 : 0.16),
       phase + math.pi + offset,
       r,
       colour,
       width,
     );
-    _leg(canvas, r * 0.50, r * 0.14, phase + offset, r, colour, width);
+    _leg(
+      canvas,
+      r * (far ? 0.38 : 0.58),
+      r * 0.14,
+      phase + offset,
+      r,
+      colour,
+      width,
+    );
   }
 
   void _renderTail(Canvas canvas, Dog dog, double r, double alert) {
@@ -204,9 +221,10 @@ class DogComponent extends Component {
     final speed = 3.2 + excitement * 9;
     final wag =
         math.sin(
-          dog.gaitPhase * math.pi * speed + game.elapsed * excitement * 14,
+          dog.gaitPhase * math.pi * speed +
+              game.elapsed * (3.5 + excitement * 14),
         ) *
-        (0.5 + excitement * 0.8);
+        (game.tuning.reducedMotion ? 0.0 : 0.5 + excitement * 0.8);
 
     // Tapered in two strokes: thick at the root, thin at the tip. A constant
     // width reads as wire.
@@ -300,8 +318,6 @@ class DogComponent extends Component {
     );
     final head = Offset(r * 0.76, -r * 0.50 + weary * r * 0.16) + lead;
 
-    _renderEars(canvas, dog, r, head, alert, weary);
-
     // Skull and muzzle as one silhouette, tapering to the nose. The taper is
     // what makes it a snout instead of a second ball.
     final skull = Path()
@@ -342,6 +358,34 @@ class DogComponent extends Component {
 
     _fill.color = _body;
     canvas.drawPath(skull, _fill);
+    // Keep the floppy ears visible against the skull at gameplay scale.
+    _renderEars(canvas, dog, r, head, alert, weary);
+
+    _stroke
+      ..color = Palette.treat
+      ..strokeWidth = r * 0.12
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      head + Offset(-r * 0.22, r * 0.35),
+      head + Offset(r * 0.12, r * 0.43),
+      _stroke,
+    );
+    _fill.color = Palette.treat;
+    canvas.drawCircle(head + Offset(r * 0.02, r * 0.51), r * 0.10, _fill);
+    _stroke
+      ..color = _nose
+      ..strokeWidth = r * 0.045;
+    canvas.drawPath(
+      Path()
+        ..moveTo(head.dx + r * 0.35, head.dy + r * 0.26)
+        ..quadraticBezierTo(
+          head.dx + r * 0.53,
+          head.dy + r * 0.36,
+          head.dx + r * 0.69,
+          head.dy + r * 0.25,
+        ),
+      _stroke,
+    );
 
     _fill.color = _dark.withValues(alpha: 0.20);
     canvas.drawPath(
@@ -382,7 +426,8 @@ class DogComponent extends Component {
       _stroke,
     );
 
-    final eyeOpen = (1 - game.despair) * (1 - weary * 0.35);
+    final blink = !game.tuning.reducedMotion && game.elapsed % 4.7 > 4.54;
+    final eyeOpen = blink ? 0.0 : (1 - game.despair) * (1 - weary * 0.35);
     if (eyeOpen > 0.08) {
       _fill.color = _nose;
       canvas.drawOval(
@@ -418,39 +463,66 @@ class DogComponent extends Component {
     double alert,
     double weary,
   ) {
-    final flop =
-        (dog.turnRate * 0.05).clamp(-0.7, 0.7) +
-        math.sin(dog.gaitPhase * math.pi * 2) * 0.12;
-    final droop = game.despair * 1.1 + weary * 0.45 - alert * 0.55;
+    final speed = (dog.velocity.distance / (r * 5)).clamp(0.0, 1.0);
+    final motion = game.tuning.reducedMotion ? 0.0 : 1.0;
+    final droop = game.despair * 0.22 + weary * 0.12;
 
-    for (final side in const [-1.0, 1.0]) {
+    // Two separated ears rise above the crown, then trail toward the tail.
+    // Animate the tips rather than rotating the whole ear across the face.
+    for (final far in const [true, false]) {
+      final flutter =
+          math.sin(
+            dog.gaitPhase * math.pi * 2 + game.elapsed * 3 + (far ? 1.2 : 0),
+          ) *
+          (0.04 + speed * 0.14) *
+          motion;
+      final sweep =
+          speed * 0.22 + (dog.turnRate * 0.025).clamp(-0.10, 0.10) * motion;
       canvas.save();
-      canvas.translate(
-        head.dx - r * 0.08 + r * 0.12 * side,
-        head.dy - r * 0.32,
-      );
-      canvas.rotate(side * (0.35 + droop) + flop);
-
-      // A folded triangle rather than an oval: wide at the base, pointed at the
-      // tip, with a darker inner fold.
+      canvas.translate(head.dx + r * (far ? 0.13 : -0.22), head.dy - r * 0.32);
+      final tipX = -r * (0.32 + sweep);
+      final tipY = -r * (0.72 + alert * 0.12 - droop + flutter);
       final ear = Path()
-        ..moveTo(-r * 0.16, 0)
-        ..quadraticBezierTo(-r * 0.26, r * 0.44, -r * 0.03, r * 0.60)
-        ..quadraticBezierTo(r * 0.20, r * 0.40, r * 0.16, 0)
+        ..moveTo(-r * 0.18, r * 0.07)
+        ..cubicTo(
+          -r * 0.30,
+          -r * 0.20,
+          tipX - r * 0.22,
+          tipY + r * 0.10,
+          tipX,
+          tipY,
+        )
+        ..cubicTo(
+          tipX + r * 0.22,
+          tipY - r * 0.05,
+          r * 0.16,
+          -r * 0.25,
+          r * 0.14,
+          r * 0.05,
+        )
         ..close();
-      _fill.color = _body;
+      _fill.color = far ? Color.lerp(_body, _dark, 0.30)! : _body;
       canvas.drawPath(ear, _fill);
-
-      _fill.color = _dark.withValues(alpha: 0.45);
+      _stroke
+        ..color = _dark
+        ..strokeWidth = r * 0.055
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(ear, _stroke);
+      _stroke
+        ..color = _dark.withValues(alpha: 0.65)
+        ..strokeWidth = r * 0.10
+        ..strokeCap = StrokeCap.round;
       canvas.drawPath(
-        Path.combine(
-          PathOperation.intersect,
-          ear,
-          ear.shift(Offset(r * 0.03, r * 0.12)),
-        ),
-        _fill,
+        Path()
+          ..moveTo(-r * 0.04, -r * 0.08)
+          ..quadraticBezierTo(
+            -r * 0.12,
+            -r * 0.30,
+            tipX + r * 0.02,
+            tipY + r * 0.18,
+          ),
+        _stroke,
       );
-
       canvas.restore();
     }
   }

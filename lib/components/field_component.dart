@@ -723,6 +723,17 @@ class FieldComponent extends Component {
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, layout.size * 0.4);
     canvas.drawCircle(centre, layout.size * 0.8, _fill);
     _fill.maskFilter = null;
+    // An opaque pointer makes the interactive target distinct from pickups.
+    final tip = centre.translate(0, -layout.size * (0.55 + pulse * 0.12));
+    _fill.color = Palette.hudText;
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(tip.dx - layout.size * 0.22, tip.dy - layout.size * 0.28)
+        ..lineTo(tip.dx + layout.size * 0.22, tip.dy - layout.size * 0.28)
+        ..close(),
+      _fill,
+    );
   }
 
   /// Treats and powerups (§6.2).

@@ -2,13 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../game/daily.dart';
 import '../game/entitlements.dart';
+import '../game/haptics.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
 import '../hex/hex_coord.dart';
 import '../hex/hex_layout.dart';
-import '../l10n/strings.dart';
 import '../theme/palette.dart';
 
 /// Where each level sits on the map.
@@ -58,15 +57,17 @@ class MapLayout {
 }
 
 /// The campaign map (§12.1).
+///
+/// Reached from the home screen rather than being the app's front door itself
+/// — a hundred levels to choose from is a chooser, not a title screen. Play,
+/// the daily board and the unlock offer all live there now; this screen is
+/// only for picking a level.
 class LevelMap extends StatefulWidget {
   const LevelMap({
     required this.progress,
     required this.onSelect,
-    required this.onPets,
-    required this.onSettings,
-    required this.onReference,
-    required this.onUnlock,
-    required this.onDaily,
+    required this.onBack,
+    required this.showToken,
     super.key,
   });
 
@@ -75,15 +76,16 @@ class LevelMap extends StatefulWidget {
   /// A tile was chosen. Locked levels are passed through too — the sheet is
   /// where a locked level explains itself, and silence taught nobody anything.
   final void Function(int level) onSelect;
-  final VoidCallback onPets;
-  final VoidCallback onSettings;
-  final VoidCallback onReference;
 
-  /// Opens the offer. Shown on the map only while the game is unbought.
-  final VoidCallback onUnlock;
+  /// Returns to the home screen.
+  final VoidCallback onBack;
 
-  /// Starts today's board.
-  final VoidCallback onDaily;
+  /// Bumped by the parent every time this screen is navigated to. The map
+  /// stays mounted for the app's life (§ below), so without this a scroll
+  /// position set on first launch would never move again — clearing a run and
+  /// coming back here would leave the view wherever it happened to be, not on
+  /// the new frontier.
+  final int showToken;
 
   @override
   State<LevelMap> createState() => _LevelMapState();
@@ -97,7 +99,10 @@ class _LevelMapState extends State<LevelMap>
   )..repeat();
 
   final ScrollController _scroll = ScrollController();
-  bool _scrolledToFrontier = false;
+
+  /// The [LevelMap.showToken] this screen last centred its scroll for. Distinct
+  /// from the token's own initial value so the very first build still scrolls.
+  int? _scrolledToken;
 
   @override
   void dispose() {
@@ -109,6 +114,13 @@ class _LevelMapState extends State<LevelMap>
   @override
   Widget build(BuildContext context) {
     final progress = widget.progress;
+    final reducedMotion =
+        progress.reducedMotion || MediaQuery.disableAnimationsOf(context);
+    if (reducedMotion) {
+      _pulse.stop();
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat();
+    }
     final frontier = math.min(progress.unlocked, MapLayout.tiles);
 
     return Scaffold(
@@ -116,13 +128,10 @@ class _LevelMapState extends State<LevelMap>
       body: SafeArea(
         child: Column(
           children: [
-            _Header(
+            _CampaignBar(
               stars: progress.totalStars,
               maxStars: Campaign.length * 3,
-              mastered: progress.masteredLevels,
-              onPets: widget.onPets,
-              onSettings: widget.onSettings,
-              onReference: widget.onReference,
+              onBack: widget.onBack,
             ),
             Expanded(
               child: LayoutBuilder(
@@ -131,16 +140,19 @@ class _LevelMapState extends State<LevelMap>
                   // spans the screen and the board never needs to scroll
                   // sideways — a map you can lose sideways is a map you get
                   // lost on.
-                  final hex = constraints.maxWidth / (MapLayout.perRow + 1.2);
+                  const labelGutter = 30.0;
+                  final hex =
+                      (constraints.maxWidth - labelGutter) /
+                      (MapLayout.perRow + 1.2);
                   final layout = HexLayout(
                     size: hex / math.sqrt(3),
-                    origin: Offset(hex * 0.85, hex * 0.85),
+                    origin: Offset(labelGutter + hex * 0.85, hex * 0.85),
                   );
                   final height =
                       layout.toPixel(MapLayout.coordFor(MapLayout.tiles)).dy +
                       hex * 1.6;
 
-                  _scrollToFrontierOnce(
+                  _maybeScrollToFrontier(
                     layout,
                     frontier,
                     constraints.maxHeight,
@@ -159,6 +171,7 @@ class _LevelMapState extends State<LevelMap>
                             layout,
                           );
                           if (level != null) {
+                            Haptics.selection();
                             widget.onSelect(level);
                           }
                         },
@@ -169,7 +182,7 @@ class _LevelMapState extends State<LevelMap>
                               layout: layout,
                               progress: progress,
                               frontier: frontier,
-                              phase: _pulse.value,
+                              phase: reducedMotion ? 0.5 : _pulse.value,
                               owned: progress.ownsFullGame,
                               trialUsed: progress.trialUsed,
                             ),
@@ -181,50 +194,27 @@ class _LevelMapState extends State<LevelMap>
                 },
               ),
             ),
-            _DailyBar(
-              daily: Daily.forDate(DateTime.now()),
-              cleared: progress.hasClearedDaily(Daily.forDate(DateTime.now())),
-              streak: progress.dailyStreakAsOf(DateTime.now()),
-              onPlay: widget.onDaily,
-            ),
-            // Always reachable, never loud.
-            //
-            // Dismissing the paywall used to leave exactly one way back to it:
-            // tapping a locked tile. Someone who has decided to think about it
-            // should not have to remember which tile that was, and a game with
-            // one thing to sell can afford to say so once, quietly, in a strip
-            // the width of the screen.
-            if (!progress.ownsFullGame)
-              _UnlockStrip(
-                paidLevels: Campaign.length - Entitlements.freeThrough,
-                onUnlock: widget.onUnlock,
-              ),
-            _PlayBar(
-              level: frontier,
-              bestDepth: progress.endlessBest > Campaign.length
-                  ? progress.endlessBest - Campaign.length
-                  : 0,
-              onPlay: () => widget.onSelect(frontier),
-            ),
           ],
         ),
       ),
     );
   }
 
-  /// Opens on where the player actually is, not at level one.
+  /// Opens on where the player actually is, not at level one, and re-centres
+  /// every time [LevelMap.showToken] changes — this screen stays mounted for
+  /// the app's life, so without that it would only ever do this once.
   ///
   /// Someone forty levels in should not have to scroll past forty tiles they
   /// have already finished to reach the one they were about to play.
-  void _scrollToFrontierOnce(
+  void _maybeScrollToFrontier(
     HexLayout layout,
     int frontier,
     double viewportHeight,
   ) {
-    if (_scrolledToFrontier) {
+    if (_scrolledToken == widget.showToken) {
       return;
     }
-    _scrolledToFrontier = true;
+    _scrolledToken = widget.showToken;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) {
         return;
@@ -269,6 +259,74 @@ class _MapPainter extends CustomPainter {
     for (var level = 1; level <= MapLayout.tiles; level++) {
       _paintTile(canvas, level);
     }
+    _paintBandLabels(canvas);
+  }
+
+  /// Names the six bands along the trail's left margin, so the climb ahead
+  /// reads as stretches with characters of their own rather than one column
+  /// of identical grey padlocks. Endless is left unlabelled here — its single
+  /// tile already carries its own glyph.
+  void _paintBandLabels(Canvas canvas) {
+    const bands = CampaignBand.values;
+    var labelBottom = 0.0;
+    for (var i = 0; i < bands.length - 1; i++) {
+      final band = bands[i];
+      final first = Campaign.firstOf(band);
+      if (first > MapLayout.tiles) {
+        break;
+      }
+      final last = math.min(
+        Campaign.firstOf(bands[i + 1]) - 1,
+        MapLayout.tiles,
+      );
+      final yStart = layout.toPixel(MapLayout.coordFor(first)).dy;
+      final yEnd = layout.toPixel(MapLayout.coordFor(last)).dy;
+      labelBottom = _paintVerticalLabel(
+        canvas,
+        band.label.toUpperCase(),
+        (yStart + yEnd) / 2,
+        Palette.forBand(band),
+        labelBottom,
+      );
+    }
+  }
+
+  double _paintVerticalLabel(
+    Canvas canvas,
+    String text,
+    double y,
+    Color colour,
+    double previousBottom,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: colour.withValues(alpha: 0.90),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 2,
+          fontFamily: 'Roboto',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    canvas.save();
+    final centreY = math.max(y, previousBottom + 12 + painter.width / 2);
+    _stroke
+      ..color = colour
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(3, centreY - painter.width / 2),
+      Offset(3, centreY + painter.width / 2),
+      _stroke,
+    );
+    canvas.translate(15, centreY);
+    canvas.rotate(-math.pi / 2);
+    painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+    canvas.restore();
+    return centreY + painter.width / 2;
   }
 
   /// The line joining one level to the next. Drawn under the tiles, so it
@@ -340,11 +398,16 @@ class _MapPainter extends CustomPainter {
     // A tile you have not bought keeps its band colour. The grey plate says
     // "not yet"; this has to say "more", and a padlock over forty levels of
     // game reads as a wall rather than an offer.
+    //
+    // A tile you simply haven't reached yet gets the same grey plate, but
+    // tinted with a whisper of its own band's colour rather than flat locked
+    // grey — the unclimbed trail should hint at the character ahead, not read
+    // as one undifferentiated wall.
     _fill.color = unlocked
         ? colour.withValues(alpha: campaignPlayed ? 0.24 : 0.13)
         : forSale
         ? colour.withValues(alpha: 0.07)
-        : Palette.lockedTile;
+        : Color.lerp(Palette.lockedTile, colour, 0.14)!;
     canvas.drawPath(hex, _fill);
 
     _stroke
@@ -352,15 +415,40 @@ class _MapPainter extends CustomPainter {
           ? colour.withValues(alpha: isFrontier ? 0.95 : 0.6)
           : forSale
           ? colour.withValues(alpha: 0.34)
-          : Palette.lockedEdge
+          : Color.lerp(Palette.lockedEdge, colour, 0.20)!
       ..strokeWidth = isFrontier ? 2.6 : 1.5
       ..strokeCap = StrokeCap.butt
       ..strokeJoin = StrokeJoin.miter;
     canvas.drawPath(hex, _stroke);
 
     if (!unlocked) {
-      _paintLock(canvas, centre, forSale ? colour : Palette.lockedEdge);
+      _paintLabel(
+        canvas,
+        centre.translate(0, -layout.size * 0.24),
+        isEndless ? '∞' : '$level',
+        colour: Palette.hudText,
+        size: layout.size * 0.48,
+        weight: FontWeight.w600,
+      );
+      _paintLock(
+        canvas,
+        centre.translate(0, layout.size * 0.38),
+        Color.lerp(colour, Palette.hudText, 0.55)!,
+        scale: 0.65,
+      );
       return;
+    }
+    if (isFrontier) {
+      _fill.color = Palette.hudText;
+      final tip = centre.translate(0, -layout.size * 0.62);
+      canvas.drawPath(
+        Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo(tip.dx - layout.size * 0.13, tip.dy - layout.size * 0.17)
+          ..lineTo(tip.dx + layout.size * 0.13, tip.dy - layout.size * 0.17)
+          ..close(),
+        _fill,
+      );
     }
 
     _paintLabel(
@@ -377,8 +465,13 @@ class _MapPainter extends CustomPainter {
     }
   }
 
-  void _paintLock(Canvas canvas, Offset centre, Color colour) {
-    final s = layout.size * 0.22;
+  void _paintLock(
+    Canvas canvas,
+    Offset centre,
+    Color colour, {
+    double scale = 1,
+  }) {
+    final s = layout.size * 0.22 * scale;
     _stroke
       ..color = colour
       ..strokeWidth = 2;
@@ -440,6 +533,7 @@ class _MapPainter extends CustomPainter {
         style: TextStyle(
           color: colour,
           fontSize: size,
+          fontFamily: 'Roboto',
           fontWeight: weight,
           height: 1,
         ),
@@ -461,53 +555,53 @@ class _MapPainter extends CustomPainter {
       old.layout.size != layout.size;
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
+/// The slim bar above the trail: a way back to the home screen, and the same
+/// mastery count that used to share space with a wordmark this screen no
+/// longer needs — the home screen carries that now.
+class _CampaignBar extends StatelessWidget {
+  const _CampaignBar({
     required this.stars,
     required this.maxStars,
-    required this.mastered,
-    required this.onPets,
-    required this.onSettings,
-    required this.onReference,
+    required this.onBack,
   });
 
   final int stars;
   final int maxStars;
-  final int mastered;
-  final VoidCallback onPets;
-  final VoidCallback onSettings;
-  final VoidCallback onReference;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 6, 4),
+      padding: const EdgeInsets.fromLTRB(6, 8, 20, 4),
       child: Row(
         children: [
-          // Shrinks rather than collides. Three icon buttons plus a star count
-          // left the title no room, and the fixed 22pt wordmark ran straight
-          // into the number beside it.
-          const Flexible(
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back, size: 21),
+            color: Colors.white70,
+            tooltip: 'Home',
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: 4),
+          const Expanded(
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                'HEXCAPE',
+                'CAMPAIGN',
                 maxLines: 1,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 21,
+                  fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 3,
+                  letterSpacing: 2.4,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Semantics(
-            label:
-                'Campaign mastery: $stars of $maxStars stars, '
-                '$mastered levels mastered',
+            label: 'Campaign mastery: $stars of $maxStars stars',
             child: Row(
               children: [
                 Icon(Icons.circle, size: 9, color: Palette.treat),
@@ -524,243 +618,7 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const Spacer(),
-          _HeaderButton(
-            onPressed: onPets,
-            icon: Icons.pets,
-            colour: Palette.dogBody,
-            tooltip: 'Pets',
-          ),
-          _HeaderButton(
-            onPressed: onReference,
-            icon: Icons.help_outline,
-            colour: Colors.white70,
-            tooltip: 'How it works',
-          ),
-          _HeaderButton(
-            onPressed: onSettings,
-            icon: Icons.tune,
-            colour: Colors.white70,
-            tooltip: 'Settings',
-          ),
         ],
-      ),
-    );
-  }
-}
-
-/// Compact enough that three of them fit beside a wordmark.
-class _HeaderButton extends StatelessWidget {
-  const _HeaderButton({
-    required this.onPressed,
-    required this.icon,
-    required this.colour,
-    required this.tooltip,
-  });
-
-  final VoidCallback onPressed;
-  final IconData icon;
-  final Color colour;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 21),
-      color: colour,
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-    );
-  }
-}
-
-/// Today's board.
-///
-/// Sits above the campaign's own Play button rather than in a menu, because a
-/// daily nobody sees is a daily nobody plays — and the streak is the only
-/// number in the game that decays, so it has to be in front of the player
-/// every time they open the app.
-class _DailyBar extends StatelessWidget {
-  const _DailyBar({
-    required this.daily,
-    required this.cleared,
-    required this.streak,
-    required this.onPlay,
-  });
-
-  final DailyChallenge daily;
-  final bool cleared;
-  final int streak;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = Palette.forBand(daily.band);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton(
-          onPressed: onPlay,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: cleared ? Palette.hudDim : colour,
-            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            side: BorderSide(
-              color: (cleared ? Palette.lockedEdge : colour).withValues(
-                alpha: cleared ? 1 : 0.5,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                cleared ? Icons.check_circle_outline : Icons.today_outlined,
-                size: 17,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    cleared
-                        ? '${Strings.dailyDone.toUpperCase()}  ·  '
-                              '${daily.band.label.toUpperCase()}'
-                        : '${Strings.dailyTitle.toUpperCase()}  ·  '
-                              '${daily.band.label.toUpperCase()}',
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-              ),
-              if (streak > 0) ...[
-                const SizedBox(width: 8),
-                Semantics(
-                  label: '$streak day streak',
-                  child: Text(
-                    '$streak🔥',
-                    style: TextStyle(
-                      color: Palette.treat,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The standing route back to the offer.
-///
-/// A strip rather than a button: it sits under the trail it is talking about,
-/// says how much more of it there is, and does not compete with Play. No badge,
-/// no price, no countdown — the sheet it opens is where the numbers live.
-class _UnlockStrip extends StatelessWidget {
-  const _UnlockStrip({required this.paidLevels, required this.onUnlock});
-
-  final int paidLevels;
-  final VoidCallback onUnlock;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-      child: SizedBox(
-        width: double.infinity,
-        child: TextButton(
-          onPressed: onUnlock,
-          style: TextButton.styleFrom(
-            foregroundColor: Palette.bandPressure,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(11),
-              side: BorderSide(
-                color: Palette.bandPressure.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '$paidLevels MORE LEVELS  ·  PRESSURE, MASTERY, ENDLESS',
-              maxLines: 1,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.1,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayBar extends StatelessWidget {
-  const _PlayBar({
-    required this.level,
-    required this.bestDepth,
-    required this.onPlay,
-  });
-
-  final int level;
-
-  /// Deepest endless run so far. Shown on the button rather than tucked into a
-  /// stats screen: it is the only score endless has, and a score nobody sees
-  /// is not one anybody chases.
-  final int bestDepth;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    final endless = level > Campaign.length;
-    final band = Campaign.bandOf(level);
-    final identity = Campaign.identityFor(level);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: SizedBox(
-        width: double.infinity,
-        height: 54,
-        child: FilledButton(
-          onPressed: onPlay,
-          style: FilledButton.styleFrom(
-            backgroundColor: Palette.forBand(band),
-            foregroundColor: Palette.background,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              endless
-                  ? (bestDepth > 0 ? 'ENDLESS  ·  BEST D$bestDepth' : 'ENDLESS')
-                  : 'LEVEL $level  ·  ${identity.title.toUpperCase()}',
-              maxLines: 1,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.6,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

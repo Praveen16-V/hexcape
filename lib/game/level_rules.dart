@@ -666,7 +666,7 @@ class Campaign {
     treatTaps: (2, 2),
     regrow: (6.2, 5.4),
     budget: (1.45, 1.24),
-    hunger: (1.38, 1.14),
+    hunger: (1.22, 1.08),
   );
 
   static const _pressure = (
@@ -681,11 +681,11 @@ class Campaign {
     sentries: (0, 0),
     treats: (3, 4),
     powerups: (2, 3),
-    treatSeconds: (4.5, 3.0),
-    treatTaps: (2, 1),
+    treatSeconds: (4.5, 3.5),
+    treatTaps: (2, 2),
     regrow: (5.4, 4.6),
     budget: (1.24, 1.12),
-    hunger: (1.14, 1.00),
+    hunger: (1.08, 0.98),
   );
 
   static const _mastery = (
@@ -700,11 +700,11 @@ class Campaign {
     sentries: (0, 0),
     treats: (4, 4),
     powerups: (3, 3),
-    treatSeconds: (3.0, 2.0),
-    treatTaps: (1, 1),
+    treatSeconds: (3.5, 2.8),
+    treatTaps: (2, 2),
     regrow: (4.6, 3.8),
     budget: (1.12, 1.06),
-    hunger: (1.00, 0.85),
+    hunger: (0.98, 0.85),
   );
 
   /// Collapse (61-80). Cracked ground.
@@ -741,8 +741,8 @@ class Campaign {
     // flat treat value would make treats proportionally *stronger* exactly
     // where the game is meant to bite hardest — the mistake `tutorial_test`
     // was written to catch, and which it caught here.
-    treatSeconds: (2.0, 1.6),
-    treatTaps: (1, 1),
+    treatSeconds: (2.8, 2.6),
+    treatTaps: (2, 2),
     regrow: (3.8, 3.8),
     budget: (1.06, 1.06),
     hunger: (0.85, 0.85),
@@ -766,8 +766,8 @@ class Campaign {
     sentries: (1, 2),
     treats: (4, 4),
     powerups: (3, 3),
-    treatSeconds: (1.6, 1.3),
-    treatTaps: (1, 1),
+    treatSeconds: (2.6, 2.5),
+    treatTaps: (2, 2),
     regrow: (3.8, 3.8),
     budget: (1.06, 1.06),
     hunger: (0.85, 0.85),
@@ -810,6 +810,18 @@ class Campaign {
     final baseRegrow = _lerp(band.regrow, t);
     final baseBudget = _lerp(band.budget, t);
     final baseHunger = _lerp(band.hunger, t);
+    // Preserve the previous reading/practice allowance on easier beats.
+    final hungerRelief = switch (pace) {
+      LevelPace.introduction || LevelPace.practice || LevelPace.breather =>
+        level <= foundationEnd
+            ? _lerp((0.16, 0.06), t)
+            : level <= pressureEnd
+            ? _lerp((0.06, 0.02), t)
+            : level <= masteryEnd
+            ? _lerp((0.02, 0.0), t)
+            : 0.0,
+      _ => 0.0,
+    };
     return LevelRules(
       level: level,
       seed: seed ?? seedFor(level),
@@ -875,7 +887,7 @@ class Campaign {
       budget: true,
       budgetMultiplier: baseBudget + pace.budgetRelief,
       hunger: true,
-      hungerSecondsPerCell: baseHunger + pace.hungerRelief,
+      hungerSecondsPerCell: baseHunger + pace.hungerRelief + hungerRelief,
       pace: pace,
     );
   }

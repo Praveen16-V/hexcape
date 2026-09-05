@@ -157,10 +157,12 @@ class PickupSystem {
     required int treatTaps,
   }) {
     if (cost == null) return false;
+    // Budget a second per extra walking step, a deliberate tap cadence, and
+    // half a second of net benefit. A refund should pay for the diversion.
     return switch (kind) {
       PickupKind.treat =>
         cost.taps <= math.max(0, treatTaps) &&
-            cost.steps <= math.max(0, treatSeconds.floor()),
+            cost.steps + cost.taps * 0.22 + 0.5 <= treatSeconds,
       PickupKind.freeze => cost.taps <= 4 && cost.steps <= 5,
       PickupKind.radiusPlus => cost.taps <= 5 && cost.steps <= 6,
       PickupKind.sprint => cost.taps <= 4 && cost.steps <= 6,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../game/hexcape_game.dart';
+import '../game/tutorial.dart';
 import '../l10n/strings.dart';
 import '../entities/pickup.dart';
 import '../theme/palette.dart';
@@ -181,10 +182,14 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                   ],
                 ),
                 const Spacer(),
-                GameHint(
+                SizedBox(
                   key: _hintKey,
-                  text: _hintFor(game),
-                  reducedMotion: game.tuning.reducedMotion,
+                  child: !game.isOver && !(game.tutorial?.isDone ?? true)
+                      ? TutorialCard(game: game)
+                      : GameHint(
+                          text: game.foodReceipt ?? _hintFor(game),
+                          reducedMotion: game.tuning.reducedMotion,
+                        ),
                 ),
               ],
             ),
@@ -573,6 +578,101 @@ class GameHint extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+/// The lesson lives outside the board; HUD measurement reserves its space.
+class TutorialCard extends StatelessWidget {
+  const TutorialCard({required this.game, super.key});
+  final HexcapeGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    final script = game.tutorial!;
+    final step = script.current!;
+    final reading = step.advance == TutorialAdvance.onContinue;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.38,
+      ),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF172235),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Palette.dogBody),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'LEARN TO PLAY - ${script.stepNumber}/${script.stepCount}',
+                      style: const TextStyle(
+                        color: Palette.dogBody,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      script.skip();
+                      game.tutorialTarget = null;
+                    },
+                    child: const Text(
+                      'Skip',
+                      style: TextStyle(color: Palette.hudText),
+                    ),
+                  ),
+                ],
+              ),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  game.foodReceipt == null
+                      ? step.prompt
+                      : '${game.foodReceipt} - ${step.prompt}',
+                  style: const TextStyle(
+                    color: Palette.hudText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (reading)
+                FilledButton(
+                  onPressed: () {
+                    script.continueLesson();
+                    game.tutorialTarget = script.targetCell(
+                      game.grid,
+                      game.dog,
+                      game.pickups,
+                    );
+                  },
+                  child: Text(
+                    script.stepNumber == script.stepCount
+                        ? "Let's play"
+                        : 'Continue',
+                  ),
+                )
+              else
+                Text(
+                  step.advance == TutorialAdvance.onTap
+                      ? 'Tap the marked tile on the board to continue.'
+                      : 'Open a route so your dog can reach the marked treat.',
+                  style: const TextStyle(color: Palette.hudText, fontSize: 12),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

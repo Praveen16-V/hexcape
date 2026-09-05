@@ -5,6 +5,11 @@ class Strings {
 
   static const appTitle = 'Hexcape';
 
+  // Home screen.
+  static const tagline =
+      'Carve a path through a hex field. She never stops walking.';
+  static const campaign = 'Campaign';
+
   // HUD.
   static const taps = 'TAPS';
   static const tapsLeft = 'TAPS LEFT';
