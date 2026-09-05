@@ -43,13 +43,18 @@ class RegrowthSystem {
           break;
 
         case CellState.open:
-          final onBoundary = cell.coord.neighbours.any(grid.blocks);
+          // A fault is eligible the moment it is cleared, wherever it is. That
+          // one exemption is the whole mechanic: it closes in the middle of an
+          // open pocket, so the ground *ahead* of her is on a clock too.
+          final always = cell.type.closesOnItsOwn;
+          final onBoundary = always || cell.coord.neighbours.any(grid.blocks);
           if (!onBoundary) {
             cell.eligibleSince = null;
             continue;
           }
           cell.eligibleSince ??= now;
-          if (now - cell.eligibleSince! >= tuning.regrowDelay) {
+          final delay = always ? tuning.faultDelay : tuning.regrowDelay;
+          if (now - cell.eligibleSince! >= delay) {
             cell.state = CellState.regrowing;
             cell.regrowT = 0;
           }

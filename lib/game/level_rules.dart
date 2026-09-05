@@ -17,6 +17,7 @@ class LevelRules {
     this.anchorDensity = 0,
     this.heavyDensity = 0,
     this.springDensity = 0,
+    this.faultDensity = 0,
     this.guards = 0,
     this.guardSpeed = 0.85,
     this.treats = 0,
@@ -48,6 +49,10 @@ class LevelRules {
 
   /// Springs (§6.1), from [Campaign.springsFrom] onward.
   final double springDensity;
+
+  /// Cracked ground, from [Campaign.faultsFrom] onward. Zero until then, so
+  /// every level that shipped before faults existed is untouched.
+  final double faultDensity;
 
   /// Patrols (§6.1), from [Campaign.guardsFrom] onward, and how fast they walk.
   final int guards;
@@ -151,6 +156,10 @@ enum LevelSignature {
   ),
   supplyRun('Supply run', 'Extra rewards invite a profitable side route.'),
   breach('Breach', 'Riveted walls dominate; a Dig can rewrite the route.'),
+  faultLine(
+    'Fault line',
+    'Cracked ground dominates; carve late and keep moving.',
+  ),
   gauntlet('Gauntlet', 'Every unlocked pressure is active at full strength.');
 
   const LevelSignature(this.label, this.description);
@@ -170,12 +179,13 @@ class LevelIdentity {
 ///
 /// The bands already existed as numbers the curve interpolated between; naming
 /// them is what lets the map show the climb as four stretches with characters
-/// rather than sixty numbered tiles in a row.
+/// rather than a long column of numbered tiles.
 enum CampaignBand {
   tutorial('Learning'),
   foundation('Foundation'),
   pressure('Pressure'),
   mastery('Mastery'),
+  collapse('Collapse'),
   endless('Endless');
 
   const CampaignBand(this.label);
@@ -183,16 +193,16 @@ enum CampaignBand {
   final String label;
 }
 
-/// The campaign: sixty levels across four bands, then endless.
+/// The campaign: eighty levels across five bands, then endless.
 ///
-/// Boards are generated, so a level is parameters plus a seed. Authoring sixty
+/// Boards are generated, so a level is parameters plus a seed. Authoring eighty
 /// by hand would be busywork — designing bands and letting the level number
 /// interpolate inside each gives the same result for a fraction of the effort,
 /// and extends past the end for free.
 class Campaign {
   Campaign._();
 
-  static const length = 60;
+  static const length = 80;
 
   /// Five guided levels, not twelve passive ones. Gating is what makes the
   /// difference: a player cannot skim past a lesson that will not proceed
@@ -211,11 +221,22 @@ class Campaign {
   /// does.
   static const masteryEnd = 60;
 
+  /// The last level of the Collapse band.
+  static const collapseEnd = 80;
+
   /// Springs land inside Foundation, once anchors and heavy hexes are familiar
   /// but before the clock gets tight — they are the one obstacle that gives
   /// something back, so meeting them while there is still slack is what lets a
   /// player learn to aim one rather than merely survive it.
   static const springsFrom = 9;
+
+  /// Cracked ground opens the Collapse band.
+  ///
+  /// Set before the band exists, and deliberately: the mechanic ships first,
+  /// behind a density of zero, so it can be built and played from the debug
+  /// panel without any level referencing it. Until the campaign reaches here
+  /// this reads as "never", which is exactly right.
+  static const faultsFrom = 61;
 
   /// Patrols open the Pressure band. They apply *timing*, which nothing before
   /// them does, so they get a band boundary to themselves rather than being
@@ -224,6 +245,15 @@ class Campaign {
 
   /// Enough springs on a board to be met rather than merely present.
   static const _springIntroDensity = 0.03;
+
+  /// Enough cracked ground on a board to be met rather than merely present.
+  ///
+  /// Higher than [_springIntroDensity] because faults are placed in *lines* of
+  /// two to four rather than as single cells: at the spring's floor the
+  /// introduction generated one crack of three on a 140-cell board, which a
+  /// player can walk an entire level without touching. This is about two or
+  /// three separate lines, so the banner describes something they will meet.
+  static const _faultIntroDensity = 0.08;
 
   /// The powerup pool, widening. Early levels offer the two that need no
   /// explanation; each later band adds one that does.
@@ -304,6 +334,27 @@ class Campaign {
     'Closing Net',
     'Calm Before',
     'Final Hex',
+    // Collapse (61-80). Named for ground that does not stay where you put it.
+    'First Crack',
+    'Give Way',
+    'Held Ground',
+    'Standing Stone',
+    'Cracked Run',
+    'Thin Floor',
+    'The Drop',
+    'Quick Ground',
+    'Undermine',
+    'Rift',
+    'Set in Stone',
+    'Sinking Trail',
+    'Long Fall',
+    'Fixed Point',
+    'Shatterline',
+    'Slow Collapse',
+    'Deep Crack',
+    'Last Footing',
+    'Bedrock',
+    'Everything Gives',
   ];
 
   static const _openTrailLevels = {6, 13, 19, 25, 31, 37, 47, 53, 59};
@@ -313,6 +364,11 @@ class Campaign {
   static const _nightWatchLevels = {21, 22, 32, 51};
   static const _supplyRunLevels = {16, 28, 34, 44, 50, 56};
   static const _breachLevels = {41, 42, 54};
+
+  /// Collapse's own signature. Every entry is deliberately a non-challenge
+  /// level: [LevelSignature.faultLine] carries no anchor or heavy delta, but
+  /// keeping the rule visible here is what stops the next one from breaking it.
+  static const _faultLineLevels = {61, 62, 65, 68, 71, 74, 77};
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
@@ -347,6 +403,9 @@ class Campaign {
     if (level <= masteryEnd) {
       return CampaignBand.mastery;
     }
+    if (level <= collapseEnd) {
+      return CampaignBand.collapse;
+    }
     return CampaignBand.endless;
   }
 
@@ -372,6 +431,7 @@ class Campaign {
     if (_nightWatchLevels.contains(level)) return LevelSignature.nightWatch;
     if (_supplyRunLevels.contains(level)) return LevelSignature.supplyRun;
     if (_breachLevels.contains(level)) return LevelSignature.breach;
+    if (_faultLineLevels.contains(level)) return LevelSignature.faultLine;
     return LevelSignature.gauntlet;
   }
 
@@ -381,6 +441,7 @@ class Campaign {
     CampaignBand.foundation => tutorialBand + 1,
     CampaignBand.pressure => foundationEnd + 1,
     CampaignBand.mastery => pressureEnd + 1,
+    CampaignBand.collapse => masteryEnd + 1,
     CampaignBand.endless => length + 1,
   };
 
@@ -421,6 +482,15 @@ class Campaign {
         masteryEnd - pressureEnd,
         n - pressureEnd - 1,
         _mastery,
+        seed: seed,
+      );
+    }
+    if (n <= collapseEnd) {
+      return _band(
+        n,
+        collapseEnd - masteryEnd,
+        n - masteryEnd - 1,
+        _collapse,
         seed: seed,
       );
     }
@@ -522,6 +592,7 @@ class Campaign {
     anchor: (0.16, 0.24),
     heavy: (0.14, 0.18),
     spring: (0.0, 0.06),
+    fault: (0.0, 0.0),
     guards: (0, 0),
     guardSpeed: (0.85, 0.85),
     treats: (3, 3),
@@ -539,6 +610,7 @@ class Campaign {
     anchor: (0.24, 0.32),
     heavy: (0.18, 0.24),
     spring: (0.06, 0.08),
+    fault: (0.0, 0.0),
     guards: (1, 2),
     guardSpeed: (0.85, 0.95),
     treats: (3, 4),
@@ -556,6 +628,7 @@ class Campaign {
     anchor: (0.32, 0.38),
     heavy: (0.24, 0.30),
     spring: (0.08, 0.10),
+    fault: (0.0, 0.0),
     guards: (2, 3),
     guardSpeed: (0.95, 1.10),
     treats: (4, 4),
@@ -565,6 +638,46 @@ class Campaign {
     regrow: (4.8, 3.8),
     budget: (1.18, 1.06),
     hunger: (1.02, 0.85),
+  );
+
+  /// Collapse (61-80). Cracked ground.
+  ///
+  /// **Budget, hunger and regrowth are pinned flat at Mastery's floor**, and
+  /// that is the design rather than an oversight. Those three axes were within
+  /// a hair of their limits by level 60 — the budget cannot fall below about
+  /// 1.06 without demanding provably optimal play, which `campaign_sweep_test`
+  /// rightly forbids. Squeezing another twenty levels out of them would produce
+  /// a gradient nobody can feel and a fairness gate nobody can pass.
+  ///
+  /// So the whole felt climb of this band rides on [LevelRules.faultDensity],
+  /// which starts at zero and has exactly as much room as springs and patrols
+  /// had. Anchors and heavies creep by 0.02 across the band purely to satisfy
+  /// the non-decreasing wall assertions; that much is deliberately imperceptible.
+  static const _collapse = (
+    columns: (12, 12),
+    rows: (27, 27),
+    anchor: (0.38, 0.40),
+    heavy: (0.30, 0.31),
+    spring: (0.10, 0.10),
+    // Read against the *remaining plain* cells, not the whole board — anchors,
+    // heavies and springs have already taken theirs by the time faults are
+    // placed, so these numbers buy roughly half what their face value suggests.
+    // At (0.03, 0.09) the band averaged two cracks a board, which is not a
+    // gradient, and this band has no other one.
+    fault: (0.06, 0.18),
+    guards: (3, 3),
+    guardSpeed: (1.10, 1.10),
+    treats: (4, 4),
+    powerups: (3, 3),
+    // Still shrinking, and it has to. The clock is flat across this band, so a
+    // flat treat value would make treats proportionally *stronger* exactly
+    // where the game is meant to bite hardest — the mistake `tutorial_test`
+    // was written to catch, and which it caught here.
+    treatSeconds: (2.0, 1.6),
+    treatTaps: (1, 1),
+    regrow: (3.8, 3.8),
+    budget: (1.06, 1.06),
+    hunger: (0.85, 0.85),
   );
 
   static LevelRules _band(
@@ -577,6 +690,7 @@ class Campaign {
       (double, double) anchor,
       (double, double) heavy,
       (double, double) spring,
+      (double, double) fault,
       (int, int) guards,
       (double, double) guardSpeed,
       (int, int) treats,
@@ -596,6 +710,7 @@ class Campaign {
     final baseAnchor = _lerp(band.anchor, t);
     final baseHeavy = _lerp(band.heavy, t);
     final baseSpring = _lerp(band.spring, t);
+    final baseFault = _lerp(band.fault, t);
     final baseGuards = _lerpInt(band.guards, t);
     final baseGuardSpeed = _lerp(band.guardSpeed, t);
     final baseRegrow = _lerp(band.regrow, t);
@@ -622,6 +737,15 @@ class Campaign {
           ? math.max(
               _springIntroDensity,
               baseSpring * pace.obstacleMultiplier * signature.springMultiplier,
+            )
+          : 0,
+      // Floored on the introduction level for the same reason springs are: a
+      // banner promising cracked ground on a board that generates none is a
+      // promise the level does not keep.
+      faultDensity: level >= faultsFrom
+          ? math.max(
+              _faultIntroDensity,
+              baseFault * pace.obstacleMultiplier * signature.faultMultiplier,
             )
           : 0,
       guards: level >= guardsFrom
@@ -660,19 +784,29 @@ class Campaign {
   static LevelPace paceFor(int level) {
     if (level <= tutorialBand) return LevelPace.learning;
     if (level > length) return LevelPace.endless;
-    if (level == springsFrom || level == guardsFrom || level == 41) {
+    if (level == springsFrom ||
+        level == guardsFrom ||
+        level == 41 ||
+        level == faultsFrom) {
       return LevelPace.introduction;
     }
     if (level == 6 ||
         level == springsFrom + 1 ||
         level == guardsFrom + 1 ||
-        level == 42) {
+        level == 42 ||
+        level == faultsFrom + 1) {
       return LevelPace.practice;
     }
-    if (level == foundationEnd || level == pressureEnd || level == length) {
+    if (level == foundationEnd ||
+        level == pressureEnd ||
+        level == masteryEnd ||
+        level == collapseEnd) {
       return LevelPace.challenge;
     }
-    const breathers = {13, 16, 19, 25, 28, 31, 34, 37, 44, 47, 50, 53, 56, 59};
+    const breathers = {
+      13, 16, 19, 25, 28, 31, 34, 37, 44, 47, 50, 53, 56, 59, //
+      67, 70, 73, 76, 79,
+    };
     if (breathers.contains(level)) return LevelPace.breather;
     const challenges = {
       8,
@@ -691,12 +825,18 @@ class Campaign {
       52,
       55,
       58,
+      66,
+      69,
+      72,
+      75,
+      78,
     };
     if (challenges.contains(level)) return LevelPace.challenge;
     return LevelPace.combination;
   }
 
-  /// Past sixty, Mastery's slope keeps going — but every value has a floor.
+  /// Past the campaign, Collapse's slope keeps going — but every value has a
+  /// floor.
   ///
   /// An unbounded ramp reaches a point no play can survive, and an endless mode
   /// that becomes arithmetically impossible is not difficulty, it is a wall with
@@ -710,9 +850,13 @@ class Campaign {
       seed: seed ?? seedFor(level),
       columns: 12,
       rows: math.min(29, 27 + (beyond ~/ 12)),
-      anchorDensity: 0.38 + 0.03 * t,
-      heavyDensity: 0.30 + 0.03 * t,
+      // Capped rather than merely approached. `t` tends to 1 without reaching
+      // it, so these land a rounding error above their ceiling instead of on
+      // it — and the ceiling is a real limit, not a decoration.
+      anchorDensity: math.min(0.42, 0.40 + 0.02 * t),
+      heavyDensity: math.min(0.33, 0.31 + 0.02 * t),
       springDensity: 0.10,
+      faultDensity: 0.09 + 0.03 * t,
       guards: 3,
       guardSpeed: math.min(1.25, 1.10 + 0.15 * t),
       treats: 4,
@@ -748,6 +892,7 @@ class Campaign {
   static String? introductionAt(int level) => switch (level) {
     springsFrom => 'Springs throw her the way she was already walking',
     guardsFrom => 'Patrols sweep the field. She will not walk into the light',
+    faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
     41 => 'DIG breaks one riveted tile. Arm it from the HUD',
     _ => null,
   };
@@ -763,6 +908,10 @@ class Campaign {
         PickupKind.freeze,
         PickupKind.radiusPlus,
       ],
+      // Sprint first, and that is the point of the whole type: a crack is only
+      // a short cut if you can cross it before it shuts, which finally gives
+      // the campaign's weakest powerup a board it is the right answer to.
+      LevelSignature.faultLine => const [PickupKind.sprint, PickupKind.freeze],
       LevelSignature.heavyGround =>
         level <= foundationEnd
             ? const [PickupKind.radiusPlus, PickupKind.freeze]
@@ -807,6 +956,11 @@ extension on LevelSignature {
 
   double get springMultiplier => switch (this) {
     LevelSignature.springLine => 1.65,
+    _ => 1,
+  };
+
+  double get faultMultiplier => switch (this) {
+    LevelSignature.faultLine => 1.7,
     _ => 1,
   };
 

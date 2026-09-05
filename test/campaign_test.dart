@@ -157,7 +157,7 @@ void main() {
     });
 
     test('endless keeps climbing but never past its floors', () {
-      for (final level in [61, 80, 150, 400, 2000]) {
+      for (final level in [81, 100, 190, 400, 2000]) {
         final r = Campaign.rulesFor(level);
         expect(r.isEndless, isTrue);
         // Without floors an endless ramp eventually reaches a point no play can
@@ -173,7 +173,7 @@ void main() {
   });
 
   group('Every level is playable', () {
-    test('all 60 generate a solvable board', () {
+    test('every authored level generates a solvable board', () {
       for (var level = 1; level <= Campaign.length; level++) {
         final rules = Campaign.rulesFor(level);
         final generated = LevelGenerator.generate(_specFor(rules));
@@ -194,7 +194,7 @@ void main() {
     });
 
     test('sampled endless levels are solvable too', () {
-      for (final level in [61, 75, 120, 300]) {
+      for (final level in [81, 95, 140, 300]) {
         final generated = LevelGenerator.generate(
           _specFor(Campaign.rulesFor(level)),
         );

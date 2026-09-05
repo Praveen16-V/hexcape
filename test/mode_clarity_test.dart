@@ -114,7 +114,7 @@ void main() {
     expect(find.text('Zen'), findsOneWidget);
 
     await show(45);
-    expect(find.text('MASTERY · 0/60 THREE-STAR CLEARS'), findsOneWidget);
+    expect(find.text('MASTERY · 0/80 THREE-STAR CLEARS'), findsOneWidget);
 
     await show(Campaign.length + 1);
     expect(find.text('ENDLESS RUN'), findsOneWidget);

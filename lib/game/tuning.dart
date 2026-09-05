@@ -10,6 +10,8 @@ class TuningConfig extends ChangeNotifier {
   static const driftRange = (0.2, 6.0);
   static const momentumRange = (1.5, 14.0);
   static const regrowDelayRange = (1.5, 20.0);
+  static const faultDelayRange = (1.0, 6.0);
+  static const faultDensityRange = (0.0, 0.25);
   static const suffocateRange = (0.8, 6.0);
   static const anchorDensityRange = (0.0, 0.45);
   static const heavyDensityRange = (0.0, 0.5);
@@ -65,6 +67,20 @@ class TuningConfig extends ChangeNotifier {
   double springDensity = 0;
   int guardCount = 0;
   double guardSpeed = 0.85;
+
+  /// Fraction of eligible cells promoted to faults. Zero everywhere until the
+  /// campaign introduces them, so the mechanic can ship and be playtested from
+  /// the debug panel long before any level references it.
+  double faultDensity = 0;
+
+  /// How long a cleared fault stays open.
+  ///
+  /// Much shorter than [regrowDelay] and independent of it. A fault that
+  /// lingered as long as ordinary regrowth would never actually close ahead of
+  /// her, which is the only thing it exists to do; one that snapped instantly
+  /// would be a wall you paid a tap for. Two seconds is about one confident
+  /// push across a short line of them.
+  double faultDelay = 2.2;
 
   double heavyDensity = 0.18;
 

@@ -201,4 +201,119 @@ void main() {
       expect(grid.all.every((c) => c.eligibleSince == null), isTrue);
     });
   });
+
+  group('Cracked ground', () {
+    /// The same field, with [faults] promoted before anything is cleared.
+    HexGrid faultField({
+      required Iterable<HexCoord> cleared,
+      required Iterable<HexCoord> faults,
+    }) {
+      final coords = HexCoord.zero.disc(5);
+      final grid = HexGrid(
+        cells: {for (final c in coords) c: HexCell(c, HexType.plain)},
+        start: HexCoord.zero,
+        exit: coords.last,
+        truePath: [HexCoord.zero, coords.last],
+      );
+      for (final c in faults) {
+        grid.at(c)!.type = HexType.fault;
+      }
+      for (final c in cleared) {
+        grid.at(c)!.clear(0);
+      }
+      return grid;
+    }
+
+    test('an interior fault closes even with nothing solid beside it', () {
+      // The whole mechanic, and the exact inverse of the first test in this
+      // file: an interior *plain* cell can never close, and that is what makes
+      // carving far ahead free. An interior fault closes on its own clock.
+      final cleared = HexCoord.zero.disc(2);
+      final grid = faultField(cleared: cleared, faults: [HexCoord.zero]);
+      final tuning = TuningConfig()
+        ..regrowDelay = 30
+        ..faultDelay = 0.5;
+
+      final solidAt = _simulate(grid, tuning, seconds: 3);
+
+      expect(
+        solidAt.containsKey(HexCoord.zero),
+        isTrue,
+        reason: 'the fault never closed',
+      );
+      // And nothing else did: the ordinary cells around it are nowhere near
+      // their own delay, so this is the fault's clock and not regrowth's.
+      expect(solidAt.keys, [HexCoord.zero]);
+    });
+
+    test('it still holds under the dog, so she is never sealed in', () {
+      // The fairness rule the rest of regrowth already obeys. A fault that
+      // closed on top of her would make the one mechanic that closes ahead of
+      // her the one mechanic that can kill without warning.
+      final grid = faultField(
+        cleared: HexCoord.zero.disc(2),
+        faults: [HexCoord.zero],
+      );
+      final tuning = TuningConfig()
+        ..regrowDelay = 30
+        ..faultDelay = 0.5;
+
+      final solidAt = _simulate(
+        grid,
+        tuning,
+        seconds: 4,
+        dogCell: HexCoord.zero,
+      );
+
+      expect(solidAt, isEmpty);
+      expect(grid.at(HexCoord.zero)!.state, CellState.regrowing);
+      expect(grid.at(HexCoord.zero)!.regrowT, lessThanOrEqualTo(1.0));
+    });
+
+    test('it re-opens for one tap rather than becoming a wall', () {
+      final grid = faultField(
+        cleared: HexCoord.zero.disc(2),
+        faults: [HexCoord.zero],
+      );
+      final tuning = TuningConfig()
+        ..regrowDelay = 30
+        ..faultDelay = 0.5;
+      _simulate(grid, tuning, seconds: 3);
+
+      final cell = grid.at(HexCoord.zero)!;
+      expect(cell.isSolid, isTrue);
+      expect(cell.type.hitsRequired, 1, reason: 'a fault is not a heavy');
+      expect(cell.type.isClearableType, isTrue, reason: 'nor an anchor');
+    });
+
+    test('Zen switches it off with everything else', () {
+      // `settleForZen` nulls `eligibleSince` on every cell, so faults are
+      // covered without knowing they exist. Asserted because that is exactly
+      // the kind of thing a later refactor quietly breaks.
+      final grid = faultField(
+        cleared: HexCoord.zero.disc(2),
+        faults: [HexCoord.zero],
+      );
+      final tuning = TuningConfig()
+        ..regrowDelay = 30
+        ..faultDelay = 0.5;
+
+      final system = RegrowthSystem();
+      const dt = 1 / 60;
+      var now = 0.0;
+      for (var i = 0; i < 120; i++) {
+        now += dt;
+        system.update(
+          dt: dt,
+          now: now,
+          grid: grid,
+          tuning: tuning,
+          dogCell: const HexCoord(99, 99),
+        );
+        system.settleForZen(grid);
+      }
+
+      expect(grid.at(HexCoord.zero)!.isSolid, isFalse);
+    });
+  });
 }

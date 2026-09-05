@@ -175,6 +175,16 @@ const allReferenceEntries = <ReferenceEntry>[
     unlocksAt: Campaign.springsFrom,
   ),
   ReferenceEntry(
+    section: ReferenceSection.hexes,
+    name: 'Cracked',
+    blurb:
+        'Clears in one tap, then closes again on its own — wherever it is, '
+        'whether or not anything is beside it. A line of them is the short '
+        'way through, but only if you run it in one go.',
+    hex: HexType.fault,
+    unlocksAt: Campaign.faultsFrom,
+  ),
+  ReferenceEntry(
     section: ReferenceSection.obstacles,
     name: 'Patrol',
     blurb:
@@ -423,6 +433,16 @@ class _EntryPainter extends CustomPainter {
             stroke,
           );
         }
+      case HexType.fault:
+        stroke.color = Palette.faultEdge;
+        canvas.drawPath(
+          Path()
+            ..moveTo(centre.dx - r * 0.12, centre.dy - r * 0.5)
+            ..lineTo(centre.dx + r * 0.16, centre.dy - r * 0.12)
+            ..lineTo(centre.dx - r * 0.14, centre.dy + r * 0.12)
+            ..lineTo(centre.dx + r * 0.12, centre.dy + r * 0.5),
+          stroke,
+        );
     }
   }
 
@@ -431,6 +451,7 @@ class _EntryPainter extends CustomPainter {
     HexType.heavy => Palette.heavyTop,
     HexType.anchor => Palette.anchorTop,
     HexType.spring => Palette.springTop,
+    HexType.fault => Palette.faultTop,
   };
 
   static Color _edgeOf(HexType type) => switch (type) {
@@ -438,6 +459,7 @@ class _EntryPainter extends CustomPainter {
     HexType.heavy => Palette.heavyEdge,
     HexType.anchor => Palette.anchorEdge,
     HexType.spring => Palette.springEdge,
+    HexType.fault => Palette.faultEdge,
   };
 
   @override

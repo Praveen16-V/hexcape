@@ -100,6 +100,7 @@ class FieldComponent extends Component {
     final heavyRings = Path();
     final crackedRings = Path();
     final springMarks = Path();
+    final faultMarks = Path();
 
     final rivetHex = HexLayout.pathFromCorners(
       HexLayout.cornersAt(Offset.zero, layout.size * 0.3),
@@ -131,6 +132,18 @@ class FieldComponent extends Component {
         );
       } else if (shown == HexType.heavy) {
         (cell.hits > 0 ? crackedRings : heavyRings).addPath(ringHex, centre);
+      }
+      if (shown == HexType.fault) {
+        // A jagged split down the hex. Drawn on the *solid* cell, which is the
+        // only moment the warning is worth anything: once it is open the
+        // regrowth ghost and its two pulses take over, and by then the decision
+        // to commit has already been made.
+        final s = layout.size;
+        faultMarks
+          ..moveTo(centre.dx - s * 0.10, centre.dy - s * 0.42)
+          ..lineTo(centre.dx + s * 0.14, centre.dy - s * 0.10)
+          ..lineTo(centre.dx - s * 0.12, centre.dy + s * 0.10)
+          ..lineTo(centre.dx + s * 0.10, centre.dy + s * 0.42);
       }
       if (shown == HexType.spring) {
         // Three nested chevrons pointing up out of the hex: a coil under
@@ -192,6 +205,11 @@ class FieldComponent extends Component {
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     canvas.drawPath(springMarks, _stroke);
+
+    _stroke
+      ..color = Palette.faultEdge.withValues(alpha: 0.85)
+      ..strokeWidth = 1.6;
+    canvas.drawPath(faultMarks, _stroke);
     _stroke.strokeCap = StrokeCap.butt;
   }
 
@@ -327,6 +345,7 @@ class FieldComponent extends Component {
     HexType.heavy => Palette.heavyTop,
     HexType.anchor => Palette.anchorTop,
     HexType.spring => Palette.springTop,
+    HexType.fault => Palette.faultTop,
   };
 
   static Color _sideOf(HexType type) => switch (type) {
@@ -334,6 +353,7 @@ class FieldComponent extends Component {
     HexType.heavy => Palette.heavySide,
     HexType.anchor => Palette.anchorSide,
     HexType.spring => Palette.springSide,
+    HexType.fault => Palette.faultSide,
   };
 
   static Color _edgeOf(HexType type) => switch (type) {
@@ -341,6 +361,7 @@ class FieldComponent extends Component {
     HexType.heavy => Palette.heavyEdge,
     HexType.anchor => Palette.anchorEdge,
     HexType.spring => Palette.springEdge,
+    HexType.fault => Palette.faultEdge,
   };
 
   /// Darkness away from the dog: one gradient drawn over the finished board.

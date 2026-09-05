@@ -32,7 +32,7 @@ UnitBounds unitBounds(Iterable<HexCoord> coords) {
 /// The outlines a level can be cut to (§3.3).
 ///
 /// Held back until solvability checking was solid, which it now thoroughly is.
-/// Sixty levels of the same ellipse is the single most repetitive thing about a
+/// A whole campaign of the same ellipse is the most repetitive thing about a
 /// generated campaign, and a silhouette costs nothing to vary.
 enum FieldShape { ellipse, bone, fish, paw, crescent, diamond }
 

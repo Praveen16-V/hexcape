@@ -380,6 +380,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         anchorDensity: tuning.anchorDensity,
         heavyDensity: tuning.heavyDensity,
         springDensity: tuning.springDensity,
+        faultDensity: tuning.faultDensity,
         guards: tuning.guardCount,
         guardSpeed: tuning.guardSpeed,
         treats: tuning.treatCount.round(),
@@ -541,7 +542,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     startLevel(level: levelNumber + 1);
   }
 
-  /// Past the sixty authored levels.
+  /// Past the authored campaign.
   bool get isEndless => levelNumber > Campaign.length;
 
   /// How far past them. Endless is counted in depth rather than level number
@@ -583,6 +584,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ..anchorDensity = r.anchorDensity
       ..heavyDensity = r.heavyDensity
       ..springDensity = r.springDensity
+      ..faultDensity = r.faultDensity
       ..guardCount = r.guards
       ..guardSpeed = r.guardSpeed
       ..treatCount = r.treats.toDouble()

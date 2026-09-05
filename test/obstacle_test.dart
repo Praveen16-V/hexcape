@@ -301,6 +301,7 @@ void main() {
         final rules = Campaign.rulesFor(n);
         expect(rules.springDensity, 0);
         expect(rules.guards, 0);
+        expect(rules.faultDensity, 0);
       }
     });
 
@@ -311,10 +312,38 @@ void main() {
       for (var n = 1; n < Campaign.guardsFrom; n++) {
         expect(Campaign.rulesFor(n).guards, 0, reason: 'guards at $n');
       }
+      for (var n = 1; n < Campaign.faultsFrom; n++) {
+        expect(Campaign.rulesFor(n).faultDensity, 0, reason: 'faults at $n');
+      }
       for (var n = Campaign.guardsFrom; n <= Campaign.length; n++) {
         expect(Campaign.rulesFor(n).guards, greaterThan(0));
         expect(Campaign.rulesFor(n).springDensity, greaterThan(0));
       }
+      for (var n = Campaign.faultsFrom; n <= Campaign.length; n++) {
+        expect(Campaign.rulesFor(n).faultDensity, greaterThan(0));
+      }
+    });
+
+    test('the level that announces cracked ground actually has some', () {
+      // Same floor, same reason as springs below: the band curve starts at
+      // zero, so the level carrying the banner would otherwise promise a
+      // mechanic the player never meets.
+      final rules = Campaign.rulesFor(Campaign.faultsFrom);
+      final level = LevelGenerator.generate(
+        LevelSpec(
+          seed: rules.seed,
+          columns: rules.columns,
+          rows: rules.rows,
+          anchorDensity: rules.anchorDensity,
+          heavyDensity: rules.heavyDensity,
+          faultDensity: rules.faultDensity,
+          shape: rules.shape,
+        ),
+      );
+      final faults = level.grid.all
+          .where((c) => c.type == HexType.fault)
+          .length;
+      expect(faults, greaterThanOrEqualTo(4), reason: 'only $faults faults');
     });
 
     test('the level that announces springs actually has some', () {
@@ -351,7 +380,7 @@ void main() {
           announced++;
         }
       }
-      expect(announced, 3);
+      expect(announced, 4);
     });
 
     test('the powerup pool only ever widens', () {

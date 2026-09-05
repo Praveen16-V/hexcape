@@ -11,7 +11,15 @@ void main() {
     });
 
     test('mechanics arrive with relief and a practice level afterward', () {
-      for (final level in [Campaign.springsFrom, Campaign.guardsFrom]) {
+      // All of them, not just the first two: level 41 and the fault
+      // introduction were never checked, and an introduction that fails to
+      // relieve is exactly the regression this test exists to catch.
+      for (final level in [
+        Campaign.springsFrom,
+        Campaign.guardsFrom,
+        41,
+        Campaign.faultsFrom,
+      ]) {
         final before = Campaign.rulesFor(level - 1);
         final intro = Campaign.rulesFor(level);
         final practice = Campaign.rulesFor(level + 1);
@@ -50,14 +58,18 @@ void main() {
         expect(current.guardSpeed, lessThanOrEqualTo(challenge.guardSpeed));
         expect(current.guards, lessThanOrEqualTo(challenge.guards));
       }
-      expect(count, 14);
+      // The exact number is not the invariant — the structure asserted in the
+      // loop above is. Pinning it meant every new band failed this test for
+      // being a new band.
+      expect(count, greaterThanOrEqualTo(14));
     });
 
     test('each band ends at full challenge pressure', () {
       for (final level in [
         Campaign.foundationEnd,
         Campaign.pressureEnd,
-        Campaign.length,
+        Campaign.masteryEnd,
+        Campaign.collapseEnd,
       ]) {
         expect(Campaign.rulesFor(level).pace, LevelPace.challenge);
       }
@@ -98,7 +110,7 @@ void main() {
       for (var level = 1; level <= Campaign.tutorialBand; level++) {
         expect(Campaign.rulesFor(level).pace, LevelPace.learning);
       }
-      for (final level in [61, 100, 1000]) {
+      for (final level in [Campaign.length + 1, 140, 1000]) {
         expect(Campaign.rulesFor(level).pace, LevelPace.endless);
       }
     });

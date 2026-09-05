@@ -407,6 +407,7 @@ TuningConfig tuningFor(LevelRules r) => TuningConfig()
   ..treatTaps = r.treatTaps.toDouble()
   ..regrowDelay = r.regrowDelay
   ..budgetMultiplier = r.budgetMultiplier
+  ..faultDensity = r.faultDensity
   ..hungerSecondsPerCell = r.hungerSecondsPerCell;
 
 LevelSpec specFor(LevelRules r) => LevelSpec(
@@ -416,6 +417,7 @@ LevelSpec specFor(LevelRules r) => LevelSpec(
   anchorDensity: r.anchorDensity,
   heavyDensity: r.heavyDensity,
   springDensity: r.springDensity,
+  faultDensity: r.faultDensity,
   guards: r.guards,
   guardSpeed: r.guardSpeed,
   treats: r.treats,
