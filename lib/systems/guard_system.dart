@@ -29,13 +29,21 @@ class GuardSystem {
   /// no room for them, which is correct: a small or heavily walled field should
   /// quietly carry fewer guards rather than have them crammed on top of the
   /// route.
+  /// Builds patrols and sentries together.
+  ///
+  /// One call rather than two, because separation has to hold *across* the two
+  /// kinds: a sentry laid on top of a patrol would make ground she refuses to
+  /// enter and cannot clear either, which is a wall the player has no way to
+  /// read as one.
   static List<Guard> place({
     required HexGrid grid,
     required math.Random rng,
     required int count,
     double cellsPerSecond = 0.85,
+    int sentries = 0,
   }) {
-    if (count <= 0) {
+    final total = count + sentries;
+    if (total <= 0) {
       return const [];
     }
     final candidates = [
@@ -53,9 +61,9 @@ class GuardSystem {
     final guards = <Guard>[];
     final anchorsOfPatrols = <HexCoord>[];
     var attempts = 0;
-    final maxAttempts = math.max(40, count * 25);
+    final maxAttempts = math.max(40, total * 25);
 
-    while (guards.length < count && attempts < maxAttempts) {
+    while (guards.length < total && attempts < maxAttempts) {
       attempts++;
       final head = candidates[rng.nextInt(candidates.length)];
       if (anchorsOfPatrols.any((a) => a.distanceTo(head) < minSeparation)) {
@@ -66,7 +74,16 @@ class GuardSystem {
         continue;
       }
       anchorsOfPatrols.add(head);
-      guards.add(Guard(patrol: patrol, cellsPerSecond: cellsPerSecond));
+      guards.add(
+        Guard(
+          patrol: patrol,
+          cellsPerSecond: cellsPerSecond,
+          // Patrols first, so a board with room for only some of what was asked
+          // for keeps the mechanic the player has known since level 21 rather
+          // than the one they met most recently.
+          kind: guards.length < count ? GuardKind.patrol : GuardKind.sentry,
+        ),
+      );
     }
     return guards;
   }

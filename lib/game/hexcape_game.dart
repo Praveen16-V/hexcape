@@ -152,7 +152,20 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// something wants it: the dog reads it, the renderer reads it and the catch
   /// check reads it, and all three must agree about the same instant.
   List<Guard> guards = const [];
+
+  /// Ground a patrol is lighting: she refuses to walk into it, and it bites.
   Set<HexCoord> guardedCells = const {};
+
+  /// Ground a sentry is lighting: taps there do nothing.
+  ///
+  /// Deliberately a separate set from [guardedCells], not a flag on it. The two
+  /// are read by different systems — the dog and the catch check take the
+  /// first, tap resolution takes the second — and merging them would give a
+  /// sentry a patrol's teeth and a patrol a sentry's reach.
+  Set<HexCoord> wardedCells = const {};
+
+  /// 1 -> 0 after a tap was refused by the light.
+  double wardFlash = 0;
 
   /// Stops one patrol from billing her every frame she stands in its light.
   double _caughtCooldown = 0;
@@ -382,6 +395,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         springDensity: tuning.springDensity,
         faultDensity: tuning.faultDensity,
         guards: tuning.guardCount,
+        sentries: tuning.sentryCount,
         guardSpeed: tuning.guardSpeed,
         treats: tuning.treatCount.round(),
         powerups: tuning.powerupCount.round(),
@@ -411,6 +425,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     pickups = this.level.pickups;
     guards = this.level.guards;
     guardedCells = const {};
+    wardedCells = const {};
+    wardFlash = 0;
     scentPath = const [];
     _scentFieldVersion = -1;
     _caughtCooldown = 0;
@@ -586,6 +602,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ..springDensity = r.springDensity
       ..faultDensity = r.faultDensity
       ..guardCount = r.guards
+      ..sentryCount = r.sentries
       ..guardSpeed = r.guardSpeed
       ..treatCount = r.treats.toDouble()
       ..powerupCount = r.powerups.toDouble()
@@ -680,6 +697,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     elapsed += dt;
     tapRingFlash = math.max(0, tapRingFlash - dt * 3.2);
+    wardFlash = math.max(0, wardFlash - dt * 3.0);
     barkFlash = math.max(0, barkFlash - dt * 1.6);
     wagBoost = math.max(0, wagBoost - dt * 0.9);
     startleFlash = math.max(0, startleFlash - dt * 4.0);
@@ -751,8 +769,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
       guardedCells = {
         for (final guard in guards)
-          for (final c in guard.lit)
-            if (grid.contains(c)) c,
+          if (!guard.isSentry)
+            for (final c in guard.lit)
+              if (grid.contains(c)) c,
+      };
+      wardedCells = {
+        for (final guard in guards)
+          if (guard.isSentry)
+            for (final c in guard.lit)
+              if (grid.contains(c)) c,
       };
     }
 
@@ -1092,6 +1117,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       case PickupKind.blast:
       case PickupKind.dig:
       case PickupKind.stake:
+      case PickupKind.heel:
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
         // Charges wait for a tap, so they need to say so. Timed effects show
@@ -1409,6 +1435,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       layout: layout,
       dogPosition: dog.position,
       tapRadius: effectiveTapRadius,
+      warded: wardedCells,
     );
 
     // A gated tutorial step refuses everything but the tile it is pointing at,
@@ -1431,6 +1458,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         tapsLeft > 0 &&
         _spendCharge(result.outcome, result.coord!)) {
       return;
+    }
+
+    // HEEL is spent *outside* _spendCharge, which exists to finish a tap. This
+    // one rides along with it: the whole point is to open the corridor ahead
+    // and not have her walk into it while you do, so the carve still has to
+    // happen.
+    if (result.outcome == TapOutcome.hit &&
+        tapsLeft > 0 &&
+        powerups.spendSelected(PickupKind.heel)) {
+      dog.holdFor = ActiveEffects.heelSeconds;
+      sfx.play(Sound.snap);
+      Haptics.medium();
+      announce('Held');
     }
 
     switch (result.outcome) {
@@ -1515,6 +1555,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         juice.shake(1.8);
         sfx.play(Sound.thunk);
         Haptics.heavy();
+
+      case TapOutcome.warded:
+        // Costs nothing and breaks nothing. A sentry rations *when* you may
+        // tap, not how many taps you have — charging a tap for it would make
+        // it a second budget, and breaking the chain would make waiting out a
+        // sweep punish the player twice for one obstacle.
+        grid.at(result.coord!)!.rejectShake = 1;
+        wardFlash = 1;
+        sfx.play(Sound.thunk);
+        Haptics.light();
 
       case TapOutcome.outOfRange:
       case TapOutcome.nothingToClear:

@@ -58,6 +58,7 @@ class Palette {
   static const blast = Color(0xFFFF8A5C);
   static const dig = Color(0xFFD8C08A);
   static const stake = Color(0xFF9FE8C0);
+  static const heel = Color(0xFFFFC4E0);
 
   // Obstacles (§6.1).
   static const springTop = Color(0xFF2E5A57);
@@ -65,6 +66,12 @@ class Palette {
   static const springEdge = Color(0xFF6FE0D0);
   static const guard = Color(0xFFFF6B6B);
   static const guardLight = Color(0x33FF6B6B);
+
+  /// Sentries. A cold searchlight white-blue, as far from the patrol's red as
+  /// the palette allows: the two sweep identically and do completely different
+  /// things, so colour is the only thing telling a player which one is coming.
+  static const sentry = Color(0xFFC8D8FF);
+  static const sentryLight = Color(0x2AC8D8FF);
 
   /// Faults. A warm rust against the field's blues and the spring's teal, so
   /// "this ground is temporary" reads at a glance and never at the same hue as
@@ -85,6 +92,7 @@ class Palette {
     PickupKind.blast => blast,
     PickupKind.dig => dig,
     PickupKind.stake => stake,
+    PickupKind.heel => heel,
   };
 
   // The campaign map (§12.1). One colour per band, so the climb reads as four
@@ -94,6 +102,7 @@ class Palette {
   static const bandPressure = Color(0xFFE8B04B);
   static const bandMastery = Color(0xFFE0708A);
   static const bandCollapse = Color(0xFFD9603F);
+  static const bandVigil = Color(0xFFC8D8FF);
   static const bandEndless = Color(0xFFB48AE0);
 
   static Color forBand(CampaignBand band) => switch (band) {
@@ -102,6 +111,7 @@ class Palette {
     CampaignBand.pressure => bandPressure,
     CampaignBand.mastery => bandMastery,
     CampaignBand.collapse => bandCollapse,
+    CampaignBand.vigil => bandVigil,
     CampaignBand.endless => bandEndless,
   };
 

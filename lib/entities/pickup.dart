@@ -55,7 +55,20 @@ enum PickupKind {
   /// One cell, never a ring. A ring would let a player build a safe highway
   /// across the board, and the whole decision here is the sharpest question the
   /// game can ask: **which single tile must never close?**
-  stake;
+  stake,
+
+  /// One tap that carves as normal *and* holds her still for a moment.
+  ///
+  /// **Patrols have had no answer since level 21.** The guard's own note says
+  /// it: a patrol "is answered by choosing a different *moment*", and the
+  /// hunger clock is what makes waiting cost something — but the player has
+  /// never been able to express that choice, because she never stops. HEEL is
+  /// the missing verb, and a sentry makes it matter twice over.
+  ///
+  /// It holds; it does not steer. "You do not move her" survives intact, and
+  /// the enclosure timer keeps running while she waits, so being held in a
+  /// closing pocket still kills.
+  heel;
 
   bool get isPowerup => this != PickupKind.treat;
 
@@ -71,7 +84,8 @@ enum PickupKind {
   bool get isCharge =>
       this == PickupKind.blast ||
       this == PickupKind.dig ||
-      this == PickupKind.stake;
+      this == PickupKind.stake ||
+      this == PickupKind.heel;
 
   /// How long the effect lasts. Treats and charges are instant, so zero.
   double get duration => switch (this) {
@@ -79,6 +93,7 @@ enum PickupKind {
     PickupKind.blast => 0,
     PickupKind.dig => 0,
     PickupKind.stake => 0,
+    PickupKind.heel => 0,
     PickupKind.freeze => 5.0,
     PickupKind.radiusPlus => 8.0,
     PickupKind.sprint => 6.0,
@@ -95,6 +110,7 @@ enum PickupKind {
     PickupKind.blast => 'BLAST',
     PickupKind.dig => 'DIG',
     PickupKind.stake => 'STAKE',
+    PickupKind.heel => 'HEEL',
   };
 
   /// What the player has to do after explicitly arming a charge. Empty for the
@@ -103,6 +119,7 @@ enum PickupKind {
     PickupKind.blast => 'BLAST armed — tap a tile in reach',
     PickupKind.dig => 'DIG armed — tap a riveted tile',
     PickupKind.stake => 'STAKE armed — tap an open tile to pin it',
+    PickupKind.heel => 'HEEL armed — your next tap also holds her still',
     _ => '',
   };
 
@@ -112,6 +129,7 @@ enum PickupKind {
     PickupKind.blast => 'BLAST ready — tap it above to arm',
     PickupKind.dig => 'DIG ready — tap it above to arm',
     PickupKind.stake => 'STAKE ready — tap it above to arm',
+    PickupKind.heel => 'HEEL ready — tap it above to arm',
     _ => '',
   };
 }
@@ -146,6 +164,10 @@ class ActiveEffects {
 
   /// How far a blast reaches from the tapped hex, in rings.
   static const blastRadius = 1;
+
+  /// How long HEEL holds her. Long enough to open the corridor ahead without
+  /// her drifting into it; short enough that it buys one decision, not a rest.
+  static const heelSeconds = 2.5;
 
   void grant(PickupKind kind) {
     if (!kind.isPowerup) {

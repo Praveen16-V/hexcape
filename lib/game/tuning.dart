@@ -66,6 +66,9 @@ class TuningConfig extends ChangeNotifier {
 
   double springDensity = 0;
   int guardCount = 0;
+
+  /// Warded lights, from [Campaign.sentriesFrom] onward.
+  int sentryCount = 0;
   double guardSpeed = 0.85;
 
   /// Fraction of eligible cells promoted to faults. Zero everywhere until the

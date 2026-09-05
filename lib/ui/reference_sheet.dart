@@ -196,6 +196,16 @@ const allReferenceEntries = <ReferenceEntry>[
   ),
   ReferenceEntry(
     section: ReferenceSection.obstacles,
+    name: 'Warded light',
+    blurb:
+        'A pale light that sweeps like a patrol, but does the opposite: she '
+        'walks through it freely and it never bites — your taps are what it '
+        'refuses. Wait for it to pass, or HEEL and time the gap.',
+    icon: Icons.highlight,
+    unlocksAt: Campaign.sentriesFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.obstacles,
     name: 'Regrowth',
     blurb:
         'Cleared tiles grow back from the outside in. You get a ghost, then '
@@ -273,6 +283,16 @@ const allReferenceEntries = <ReferenceEntry>[
         'One tile, so choose the one that must not close.',
     pickup: PickupKind.stake,
     unlocksAt: Campaign.stakeFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.pickups,
+    name: 'Heel',
+    blurb:
+        'Held until you spend it. Tap HEEL above to arm it, then tap as normal '
+        '— the tile opens and she stands still for a moment instead of walking '
+        'into it. The one way to choose your moment.',
+    pickup: PickupKind.heel,
+    unlocksAt: Campaign.heelFrom,
   ),
   ReferenceEntry(
     section: ReferenceSection.rules,

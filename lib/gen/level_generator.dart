@@ -20,6 +20,7 @@ class LevelSpec {
     this.springDensity = 0,
     this.faultDensity = 0,
     this.guards = 0,
+    this.sentries = 0,
     this.guardSpeed = 0.85,
     this.treats = 3,
     this.powerups = 2,
@@ -63,6 +64,9 @@ class LevelSpec {
   final int guards;
   final double guardSpeed;
 
+  /// How many of the sweeping lights refuse taps rather than block her.
+  final int sentries;
+
   /// How many treats and powerups to scatter beside the route (§6.2).
   final int treats;
   final int powerups;
@@ -91,6 +95,7 @@ class LevelSpec {
     double? springDensity,
     double? faultDensity,
     int? guards,
+    int? sentries,
     int? treats,
     int? powerups,
     double? treatSeconds,
@@ -105,6 +110,7 @@ class LevelSpec {
     springDensity: springDensity ?? this.springDensity,
     faultDensity: faultDensity ?? this.faultDensity,
     guards: guards ?? this.guards,
+    sentries: sentries ?? this.sentries,
     guardSpeed: guardSpeed,
     treats: treats ?? this.treats,
     powerups: powerups ?? this.powerups,
@@ -219,6 +225,7 @@ class LevelGenerator {
       rng: rng,
       count: spec.guards,
       cellsPerSecond: spec.guardSpeed,
+      sentries: spec.sentries,
     );
 
     return GeneratedLevel(

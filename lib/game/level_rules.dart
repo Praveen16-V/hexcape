@@ -19,6 +19,7 @@ class LevelRules {
     this.springDensity = 0,
     this.faultDensity = 0,
     this.guards = 0,
+    this.sentries = 0,
     this.guardSpeed = 0.85,
     this.treats = 0,
     this.powerups = 0,
@@ -57,6 +58,9 @@ class LevelRules {
   /// Patrols (§6.1), from [Campaign.guardsFrom] onward, and how fast they walk.
   final int guards;
   final double guardSpeed;
+
+  /// Warded lights, from [Campaign.sentriesFrom] onward.
+  final int sentries;
 
   final int treats;
   final int powerups;
@@ -160,6 +164,7 @@ enum LevelSignature {
     'Fault line',
     'Cracked ground dominates; carve late and keep moving.',
   ),
+  warded('Warded', 'Sentry light refuses your taps; time the window.'),
   gauntlet('Gauntlet', 'Every unlocked pressure is active at full strength.');
 
   const LevelSignature(this.label, this.description);
@@ -175,7 +180,7 @@ class LevelIdentity {
   final LevelSignature signature;
 }
 
-/// The four stretches of the campaign, plus what lies past it.
+/// The stretches of the campaign, plus what lies past it.
 ///
 /// The bands already existed as numbers the curve interpolated between; naming
 /// them is what lets the map show the climb as four stretches with characters
@@ -186,6 +191,7 @@ enum CampaignBand {
   pressure('Pressure'),
   mastery('Mastery'),
   collapse('Collapse'),
+  vigil('Vigil'),
   endless('Endless');
 
   const CampaignBand(this.label);
@@ -193,16 +199,16 @@ enum CampaignBand {
   final String label;
 }
 
-/// The campaign: eighty levels across five bands, then endless.
+/// The campaign: a hundred levels across six bands, then endless.
 ///
-/// Boards are generated, so a level is parameters plus a seed. Authoring eighty
-/// by hand would be busywork — designing bands and letting the level number
+/// Boards are generated, so a level is parameters plus a seed. Authoring a
+/// hundred by hand would be busywork — designing bands and letting the level number
 /// interpolate inside each gives the same result for a fraction of the effort,
 /// and extends past the end for free.
 class Campaign {
   Campaign._();
 
-  static const length = 80;
+  static const length = 100;
 
   /// Five guided levels, not twelve passive ones. Gating is what makes the
   /// difference: a player cannot skim past a lesson that will not proceed
@@ -223,6 +229,15 @@ class Campaign {
 
   /// The last level of the Collapse band.
   static const collapseEnd = 80;
+
+  /// Warded lights open the Vigil band. They apply pressure to the *tap* rather
+  /// than to the route or the clock, which nothing before them does, so like
+  /// patrols they get a band boundary to themselves.
+  static const sentriesFrom = 81;
+
+  /// HEEL, two levels later — the same meet-it-then-answer-it beat that STAKE
+  /// follows cracked ground with.
+  static const heelFrom = 83;
 
   /// Springs land inside Foundation, once anchors and heavy hexes are familiar
   /// but before the clock gets tight — they are the one obstacle that gives
@@ -276,6 +291,7 @@ class Campaign {
   ];
   static const _masteryPowerups = [..._pressurePowerups, PickupKind.dig];
   static const _collapsePowerups = [..._masteryPowerups, PickupKind.stake];
+  static const _vigilPowerups = [..._collapsePowerups, PickupKind.heel];
 
   /// Authored names turn stable generated boards into places a player can
   /// remember and discuss. Their mechanics still come from the signatures
@@ -363,6 +379,28 @@ class Campaign {
     'Last Footing',
     'Bedrock',
     'Everything Gives',
+    // Vigil (81-100). Named for waiting, watching, and the space between
+    // sweeps.
+    'First Sentry',
+    'Warded Light',
+    'Blind Spot',
+    'Hold Still',
+    'Sweep',
+    'Cold Eye',
+    'The Wait',
+    'Between Passes',
+    'Night Shift',
+    'Lamp Line',
+    'Counted Steps',
+    'Still Water',
+    'Watchtower',
+    'Shuttered',
+    'Two Lights',
+    'Dead Air',
+    'Last Sweep',
+    'Long Watch',
+    'Quiet Hour',
+    'Final Vigil',
   ];
 
   static const _openTrailLevels = {6, 13, 19, 25, 31, 37, 47, 53, 59};
@@ -377,6 +415,11 @@ class Campaign {
   /// level: [LevelSignature.faultLine] carries no anchor or heavy delta, but
   /// keeping the rule visible here is what stops the next one from breaking it.
   static const _faultLineLevels = {61, 62, 65, 68, 71, 74, 77};
+
+  /// Vigil's own, and every entry is a non-challenge level for the same reason
+  /// the others are: a signature that adds walls must never land on a challenge
+  /// peak, or the next peak drops below it and monotonicity fails.
+  static const _wardedLevels = {81, 82, 85, 88, 91, 94, 97};
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
@@ -414,6 +457,9 @@ class Campaign {
     if (level <= collapseEnd) {
       return CampaignBand.collapse;
     }
+    if (level <= length) {
+      return CampaignBand.vigil;
+    }
     return CampaignBand.endless;
   }
 
@@ -440,6 +486,7 @@ class Campaign {
     if (_supplyRunLevels.contains(level)) return LevelSignature.supplyRun;
     if (_breachLevels.contains(level)) return LevelSignature.breach;
     if (_faultLineLevels.contains(level)) return LevelSignature.faultLine;
+    if (_wardedLevels.contains(level)) return LevelSignature.warded;
     return LevelSignature.gauntlet;
   }
 
@@ -450,6 +497,7 @@ class Campaign {
     CampaignBand.pressure => foundationEnd + 1,
     CampaignBand.mastery => pressureEnd + 1,
     CampaignBand.collapse => masteryEnd + 1,
+    CampaignBand.vigil => collapseEnd + 1,
     CampaignBand.endless => length + 1,
   };
 
@@ -499,6 +547,15 @@ class Campaign {
         collapseEnd - masteryEnd,
         n - masteryEnd - 1,
         _collapse,
+        seed: seed,
+      );
+    }
+    if (n <= length) {
+      return _band(
+        n,
+        length - collapseEnd,
+        n - collapseEnd - 1,
+        _vigil,
         seed: seed,
       );
     }
@@ -603,6 +660,7 @@ class Campaign {
     fault: (0.0, 0.0),
     guards: (0, 0),
     guardSpeed: (0.85, 0.85),
+    sentries: (0, 0),
     treats: (3, 3),
     powerups: (2, 2),
     treatSeconds: (5.0, 4.5),
@@ -621,6 +679,7 @@ class Campaign {
     fault: (0.0, 0.0),
     guards: (1, 2),
     guardSpeed: (0.85, 0.95),
+    sentries: (0, 0),
     treats: (3, 4),
     powerups: (2, 3),
     treatSeconds: (4.5, 3.0),
@@ -639,6 +698,7 @@ class Campaign {
     fault: (0.0, 0.0),
     guards: (2, 3),
     guardSpeed: (0.95, 1.10),
+    sentries: (0, 0),
     treats: (4, 4),
     powerups: (3, 3),
     treatSeconds: (3.0, 2.0),
@@ -675,6 +735,7 @@ class Campaign {
     fault: (0.06, 0.18),
     guards: (3, 3),
     guardSpeed: (1.10, 1.10),
+    sentries: (0, 0),
     treats: (4, 4),
     powerups: (3, 3),
     // Still shrinking, and it has to. The clock is flat across this band, so a
@@ -682,6 +743,31 @@ class Campaign {
     // where the game is meant to bite hardest — the mistake `tutorial_test`
     // was written to catch, and which it caught here.
     treatSeconds: (2.0, 1.6),
+    treatTaps: (1, 1),
+    regrow: (3.8, 3.8),
+    budget: (1.06, 1.06),
+    hunger: (0.85, 0.85),
+  );
+
+  /// Vigil (81-100). Warded lights.
+  ///
+  /// Same shape as Collapse and for the same reason: the four numeric axes stay
+  /// pinned at their floors, faults keep climbing, and the band's own new
+  /// pressure — sentries — starts at zero with room to grow. Difficulty here is
+  /// a question of *when* you may act rather than how much you may spend.
+  static const _vigil = (
+    columns: (12, 12),
+    rows: (27, 29),
+    anchor: (0.40, 0.42),
+    heavy: (0.31, 0.32),
+    spring: (0.10, 0.10),
+    fault: (0.18, 0.22),
+    guards: (3, 3),
+    guardSpeed: (1.10, 1.15),
+    sentries: (1, 2),
+    treats: (4, 4),
+    powerups: (3, 3),
+    treatSeconds: (1.6, 1.3),
     treatTaps: (1, 1),
     regrow: (3.8, 3.8),
     budget: (1.06, 1.06),
@@ -700,6 +786,7 @@ class Campaign {
       (double, double) spring,
       (double, double) fault,
       (int, int) guards,
+      (int, int) sentries,
       (double, double) guardSpeed,
       (int, int) treats,
       (int, int) powerups,
@@ -765,6 +852,14 @@ class Campaign {
             )
           : 0,
       guardSpeed: math.max(0.75, baseGuardSpeed - pace.guardSpeedRelief),
+      sentries: level >= sentriesFrom
+          ? math.max(
+              1,
+              _lerpInt(band.sentries, t) +
+                  (pace == LevelPace.combination ? signature.sentryBonus : 0) -
+                  pace.guardRelief,
+            )
+          : 0,
       treats: _lerpInt(band.treats, t) + signature.extraTreats,
       powerups: _lerpInt(band.powerups, t) + signature.extraPowerups,
       offeredPowerups: _powerupsFor(signature, level),
@@ -796,7 +891,9 @@ class Campaign {
         level == guardsFrom ||
         level == 41 ||
         level == faultsFrom ||
-        level == stakeFrom) {
+        level == stakeFrom ||
+        level == sentriesFrom ||
+        level == heelFrom) {
       return LevelPace.introduction;
     }
     if (level == 6 ||
@@ -804,18 +901,22 @@ class Campaign {
         level == guardsFrom + 1 ||
         level == 42 ||
         level == faultsFrom + 1 ||
-        level == stakeFrom + 1) {
+        level == stakeFrom + 1 ||
+        level == sentriesFrom + 1 ||
+        level == heelFrom + 1) {
       return LevelPace.practice;
     }
     if (level == foundationEnd ||
         level == pressureEnd ||
         level == masteryEnd ||
-        level == collapseEnd) {
+        level == collapseEnd ||
+        level == length) {
       return LevelPace.challenge;
     }
     const breathers = {
       13, 16, 19, 25, 28, 31, 34, 37, 44, 47, 50, 53, 56, 59, //
-      67, 70, 73, 76, 79,
+      67, 70, 73, 76, 79, //
+      87, 90, 93, 96, 99,
     };
     if (breathers.contains(level)) return LevelPace.breather;
     const challenges = {
@@ -840,6 +941,11 @@ class Campaign {
       72,
       75,
       78,
+      86,
+      89,
+      92,
+      95,
+      98,
     };
     if (challenges.contains(level)) return LevelPace.challenge;
     return LevelPace.combination;
@@ -863,17 +969,18 @@ class Campaign {
       // Capped rather than merely approached. `t` tends to 1 without reaching
       // it, so these land a rounding error above their ceiling instead of on
       // it — and the ceiling is a real limit, not a decoration.
-      anchorDensity: math.min(0.42, 0.40 + 0.02 * t),
-      heavyDensity: math.min(0.33, 0.31 + 0.02 * t),
+      anchorDensity: math.min(0.44, 0.42 + 0.02 * t),
+      heavyDensity: math.min(0.34, 0.32 + 0.02 * t),
       springDensity: 0.10,
-      faultDensity: 0.09 + 0.03 * t,
+      faultDensity: math.min(0.25, 0.22 + 0.03 * t),
+      sentries: 2,
       guards: 3,
       guardSpeed: math.min(1.25, 1.10 + 0.15 * t),
       treats: 4,
       powerups: 3,
       offeredPowerups: _masteryPowerups,
       powerupRotation: level,
-      treatSeconds: 2,
+      treatSeconds: 1.3,
       treatTaps: 1,
       regrowth: true,
       regrowDelay: math.max(3.2, 3.8 - 0.6 * t),
@@ -900,7 +1007,10 @@ class Campaign {
     if (level < stakeFrom) {
       return _masteryPowerups;
     }
-    return _collapsePowerups;
+    if (level < heelFrom) {
+      return _collapsePowerups;
+    }
+    return _vigilPowerups;
   }
 
   /// The banner for a level, or null on the great majority that introduce
@@ -910,6 +1020,9 @@ class Campaign {
     guardsFrom => 'Patrols sweep the field. She will not walk into the light',
     faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
     stakeFrom => 'STAKE pins one open tile open for good. Arm it from the HUD',
+    sentriesFrom =>
+      'Warded lights refuse your taps. Wait for the sweep to pass',
+    heelFrom => 'HEEL holds her still for a moment. Arm it from the HUD',
     41 => 'DIG breaks one riveted tile. Arm it from the HUD',
     _ => null,
   };
@@ -931,6 +1044,13 @@ class Campaign {
       LevelSignature.faultLine => const [
         PickupKind.sprint,
         PickupKind.stake,
+        PickupKind.freeze,
+      ],
+      // HEEL first: a warded board is a question about timing, and holding her
+      // still is the only direct answer the game has to one.
+      LevelSignature.warded => const [
+        PickupKind.heel,
+        PickupKind.scent,
         PickupKind.freeze,
       ],
       LevelSignature.heavyGround =>
@@ -987,6 +1107,11 @@ extension on LevelSignature {
 
   int get guardBonus => switch (this) {
     LevelSignature.nightWatch => 1,
+    _ => 0,
+  };
+
+  int get sentryBonus => switch (this) {
+    LevelSignature.warded => 1,
     _ => 0,
   };
 

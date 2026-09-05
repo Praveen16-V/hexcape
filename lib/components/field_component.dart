@@ -5,6 +5,7 @@ import 'package:flame/components.dart';
 
 import '../game/hexcape_game.dart';
 import '../hex/hex_cell.dart';
+import '../hex/hex_coord.dart';
 import 'glyphs.dart';
 import '../hex/hex_layout.dart';
 import '../theme/palette.dart';
@@ -301,32 +302,43 @@ class FieldComponent extends Component {
       return;
     }
     final hex = _hexFor(layout);
-    final lit = Path();
-    for (final coord in game.guardedCells) {
-      lit.addPath(hex, layout.toPixel(coord));
-    }
-    _fill.color = Palette.guardLight;
-    canvas.drawPath(lit, _fill);
 
-    _stroke
-      ..color = Palette.guard.withValues(alpha: 0.55)
-      ..strokeWidth = 1.4;
-    canvas.drawPath(lit, _stroke);
+    // The two lights are drawn as two passes rather than one, because they mean
+    // opposite things: red ground is where she will not go, pale ground is
+    // where your taps will not land. A player has to be able to tell at a
+    // glance which of the two is sweeping toward them.
+    _paintLitGround(
+      canvas,
+      hex,
+      layout,
+      game.guardedCells,
+      Palette.guardLight,
+      Palette.guard,
+    );
+    _paintLitGround(
+      canvas,
+      hex,
+      layout,
+      game.wardedCells,
+      Palette.sentryLight,
+      Palette.sentry,
+    );
 
     for (final guard in game.guards) {
       final centre = guard.positionIn(layout);
       final flare = 1 + guard.alertFlash * 0.7;
       final pulse = 0.8 + 0.2 * math.sin(game.elapsed * 4);
+      final colour = guard.isSentry ? Palette.sentry : Palette.guard;
 
       _fill
-        ..color = Palette.guard.withValues(alpha: 0.30 * pulse)
+        ..color = colour.withValues(alpha: 0.30 * pulse)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, layout.size * 0.5);
       canvas.drawCircle(centre, layout.size * 0.75 * flare, _fill);
       _fill.maskFilter = null;
 
       // An eye rather than a person: it is a light, and a body would suggest it
       // could be walked around.
-      _fill.color = Palette.guard.withValues(alpha: 0.9);
+      _fill.color = colour.withValues(alpha: 0.9);
       canvas.drawOval(
         Rect.fromCenter(
           center: centre,
@@ -337,7 +349,44 @@ class FieldComponent extends Component {
       );
       _fill.color = Palette.background;
       canvas.drawCircle(centre, layout.size * 0.13 * flare, _fill);
+
+      // A sentry carries a bar through its pupil — the "no" that the colour
+      // alone would be carrying otherwise, for the same reason every hex type
+      // has a mark as well as a shade.
+      if (guard.isSentry) {
+        _stroke
+          ..color = colour
+          ..strokeWidth = 1.6;
+        canvas.drawLine(
+          centre.translate(-layout.size * 0.30, 0),
+          centre.translate(layout.size * 0.30, 0),
+          _stroke,
+        );
+      }
     }
+  }
+
+  void _paintLitGround(
+    Canvas canvas,
+    Path hex,
+    HexLayout layout,
+    Set<HexCoord> cells,
+    Color fill,
+    Color edge,
+  ) {
+    if (cells.isEmpty) {
+      return;
+    }
+    final lit = Path();
+    for (final coord in cells) {
+      lit.addPath(hex, layout.toPixel(coord));
+    }
+    _fill.color = fill;
+    canvas.drawPath(lit, _fill);
+    _stroke
+      ..color = edge.withValues(alpha: 0.55)
+      ..strokeWidth = 1.4;
+    canvas.drawPath(lit, _stroke);
   }
 
   static Color _topOf(HexType type) => switch (type) {

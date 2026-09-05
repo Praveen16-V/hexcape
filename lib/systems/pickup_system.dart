@@ -168,6 +168,7 @@ class PickupSystem {
       PickupKind.blast => cost.taps <= 6 && cost.steps <= 6,
       PickupKind.dig => cost.taps <= 4 && cost.steps <= 6,
       PickupKind.stake => cost.taps <= 5 && cost.steps <= 6,
+      PickupKind.heel => cost.taps <= 4 && cost.steps <= 5,
     };
   }
 

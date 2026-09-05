@@ -58,7 +58,7 @@ class Strings {
   static const trialSpent = 'You have taken your free look at this one.';
   static const campaignDone = 'Every level cleared';
   static const campaignDoneHint =
-      'Eighty levels, and she found the bone in all of them. '
+      'A hundred levels, and she found the bone in all of them. '
       'Endless keeps going from here, and only gets deeper.';
   static const depth = 'DEPTH';
   static const runEnded = 'Run ended';

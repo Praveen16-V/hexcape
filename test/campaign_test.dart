@@ -157,7 +157,7 @@ void main() {
     });
 
     test('endless keeps climbing but never past its floors', () {
-      for (final level in [81, 100, 190, 400, 2000]) {
+      for (final level in [101, 120, 190, 400, 2000]) {
         final r = Campaign.rulesFor(level);
         expect(r.isEndless, isTrue);
         // Without floors an endless ramp eventually reaches a point no play can
@@ -166,7 +166,7 @@ void main() {
         // finished comfortably — but they are still floors.
         expect(r.budgetMultiplier, greaterThanOrEqualTo(1.03));
         expect(r.hungerSecondsPerCell, greaterThanOrEqualTo(0.78));
-        expect(r.anchorDensity, lessThanOrEqualTo(0.42));
+        expect(r.anchorDensity, lessThanOrEqualTo(0.44));
         expect(r.heavyDensity, lessThanOrEqualTo(0.34));
       }
     });
@@ -194,7 +194,7 @@ void main() {
     });
 
     test('sampled endless levels are solvable too', () {
-      for (final level in [81, 95, 140, 300]) {
+      for (final level in [101, 115, 160, 300]) {
         final generated = LevelGenerator.generate(
           _specFor(Campaign.rulesFor(level)),
         );

@@ -212,7 +212,7 @@ void main() {
           // ignore: avoid_print
           print('  $row');
         }
-        expect(rows, hasLength(5));
+        expect(rows, hasLength(6));
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );

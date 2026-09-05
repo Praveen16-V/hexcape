@@ -99,6 +99,23 @@ void drawPickupGlyph(
           ..lineTo(centre.dx + size * 0.44, centre.dy + size * 0.78),
         stroke,
       );
+    case PickupKind.heel:
+      // A paw over a bar: stay. Reads as an instruction to the dog rather than
+      // a change to the board, which is exactly what it is.
+      canvas.drawCircle(centre.translate(0, -size * 0.14), size * 0.30, stroke);
+      for (var i = -1; i <= 1; i++) {
+        canvas.drawCircle(
+          centre.translate(size * 0.42 * i, -size * 0.62),
+          size * 0.15,
+          stroke,
+        );
+      }
+      canvas.drawPath(
+        Path()
+          ..moveTo(centre.dx - size * 0.85, centre.dy + size * 0.62)
+          ..lineTo(centre.dx + size * 0.85, centre.dy + size * 0.62),
+        stroke,
+      );
     case PickupKind.stake:
       // A peg driven into a baseline. The inverse of DIG's cracked hexagon,
       // and readable as "this ground is fixed" rather than "this ground
