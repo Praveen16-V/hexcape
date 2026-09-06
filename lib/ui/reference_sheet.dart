@@ -229,6 +229,7 @@ const allReferenceEntries = <ReferenceEntry>[
     unlocksAt: Campaign.foundationEnd + 1,
   ),
   ReferenceEntry(
+    section: ReferenceSection.rules,
     name: 'Pets',
     blurb:
         'Each leans the run toward a style — one spots out sooner, one runs '
@@ -993,18 +994,18 @@ class _EntryPainter extends CustomPainter {
       case HexType.mire:
         fill.color = Palette.mireEdge.withValues(alpha: 0.5);
         canvas.drawOval(
-          Rect.fromEllipse(
+          Rect.fromCenter(
             center: centre.translate(-r * 0.16, r * 0.10),
-            radiusX: r * 0.30,
-            radiusY: r * 0.17,
+            width: r * 0.60,
+            height: r * 0.34,
           ),
           fill,
         );
         canvas.drawOval(
-          Rect.fromEllipse(
+          Rect.fromCenter(
             center: centre.translate(r * 0.22, -r * 0.14),
-            radiusX: r * 0.20,
-            radiusY: r * 0.11,
+            width: r * 0.40,
+            height: r * 0.22,
           ),
           fill,
         );
@@ -1035,7 +1036,11 @@ class _EntryPainter extends CustomPainter {
         );
       case HexType.foxfire:
         fill.color = Palette.foxfireEdge;
-        for (final spec in [(0.18, -0.16, 0.11), (-0.20, 0.02, 0.09), (0.02, 0.22, 0.07)]) {
+        for (final spec in [
+          (0.18, -0.16, 0.11),
+          (-0.20, 0.02, 0.09),
+          (0.02, 0.22, 0.07),
+        ]) {
           canvas.drawCircle(
             centre.translate(r * spec.$1, r * spec.$2),
             r * spec.$3,
@@ -1106,14 +1111,20 @@ class _EntryPainter extends CustomPainter {
           Path()
             ..moveTo(centre.dx, centre.dy + r * 0.26)
             ..cubicTo(
-              centre.dx - r * 0.46, centre.dy,
-              centre.dx - r * 0.20, centre.dy - r * 0.36,
-              centre.dx, centre.dy - r * 0.10,
+              centre.dx - r * 0.46,
+              centre.dy,
+              centre.dx - r * 0.20,
+              centre.dy - r * 0.36,
+              centre.dx,
+              centre.dy - r * 0.10,
             )
             ..cubicTo(
-              centre.dx + r * 0.20, centre.dy - r * 0.36,
-              centre.dx + r * 0.46, centre.dy,
-              centre.dx, centre.dy + r * 0.26,
+              centre.dx + r * 0.20,
+              centre.dy - r * 0.36,
+              centre.dx + r * 0.46,
+              centre.dy,
+              centre.dx,
+              centre.dy + r * 0.26,
             )
             ..moveTo(centre.dx - r * 0.10, centre.dy + r * 0.26)
             ..lineTo(centre.dx - r * 0.16, centre.dy + r * 0.46)
@@ -1152,10 +1163,10 @@ class _EntryPainter extends CustomPainter {
       case HexType.switchTile:
         fill.color = Palette.switchEdge;
         canvas.drawOval(
-          Rect.fromEllipse(
+          Rect.fromCenter(
             center: centre.translate(0, r * 0.10),
-            radiusX: r * 0.17,
-            radiusY: r * 0.13,
+            width: r * 0.34,
+            height: r * 0.26,
           ),
           fill,
         );

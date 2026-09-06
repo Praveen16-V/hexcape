@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flame/flame.dart';
 import 'package:flame/events.dart';
@@ -252,7 +253,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// The drawn dog, per coat. Populated at [onLoad]; empty under tests, which
   /// is how the component knows to walk its procedural path instead. Keyed by
   /// pet id rather than by [Pet] so a coat change mid-menu needs no ceremony.
-  final Map<String, Image> petSprites = {};
+  final Map<String, ui.Image> petSprites = {};
 
   /// What the player is holding a finger on, for the inspector card.
   ///
@@ -891,7 +892,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       size: hexSize,
       origin:
           screenCentre -
-          Offset(boardCamera.focus.dx * hexSize, boardCamera.focus.dy * hexSize),
+          Offset(
+            boardCamera.focus.dx * hexSize,
+            boardCamera.focus.dy * hexSize,
+          ),
     );
 
     // Carry the dog across the rescale so a resize mid-run is not a teleport.
@@ -1828,7 +1832,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   bool _spendCharge(TapOutcome outcome, HexCoord coord) {
     // DIG answers both kinds of wall: rivets and overgrowth hearts both
     // report the anchor outcome, by deliberate sharing of the refusal.
-    if (outcome == TapOutcome.anchor && powerups.spendSelected(PickupKind.dig)) {
+    if (outcome == TapOutcome.anchor &&
+        powerups.spendSelected(PickupKind.dig)) {
       _dig(coord);
       return true;
     }
@@ -2095,7 +2100,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         if (v.distance < 1e-6) {
           continue;
         }
-        final cos = (away.dx * v.dx + away.dy * v.dy) / (away.distance * v.distance);
+        final cos =
+            (away.dx * v.dx + away.dy * v.dy) / (away.distance * v.distance);
         if (cos > best) {
           best = cos;
           direction = i;
@@ -2139,7 +2145,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     final cell = grid.at(coord)!;
     cell.type = HexType.anchor;
     cell.state = CellState.solid;
-    if (Pathfinder.reachable(dog.cell, grid.exit, grid.isTraversableInPrinciple)) {
+    if (Pathfinder.reachable(
+      dog.cell,
+      grid.exit,
+      grid.isTraversableInPrinciple,
+    )) {
       if (phase == GamePhase.idle) {
         phase = GamePhase.playing;
       }
@@ -2209,8 +2219,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     }
     cell.charge();
     final partner = cell.partner == null ? null : grid.at(cell.partner!);
-    final partnerGives = partner != null &&
-        (partner.charged || partner.isPassable);
+    final partnerGives =
+        partner != null && (partner.charged || partner.isPassable);
     if (!partnerGives) {
       effects.shatter(layout.toPixel(coord), layout.size, boost: 0.7);
       sfx.play(Sound.crack, gain: 0.7);
@@ -2296,7 +2306,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     juice.shake(2.8);
     sfx.play(Sound.powerup, gain: 0.8);
     Haptics.medium();
-    announce('The field gives back $reopened ${reopened == 1 ? 'tile' : 'tiles'}');
+    announce(
+      'The field gives back $reopened ${reopened == 1 ? 'tile' : 'tiles'}',
+    );
     return true;
   }
 
@@ -2524,7 +2536,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
       if (!cell.isClearable || !cell.revealed) {
         announce(
-          cell.revealed ? 'The mouse cannot get through that' : 'Send the mouse only where you know',
+          cell.revealed
+              ? 'The mouse cannot get through that'
+              : 'Send the mouse only where you know',
           seconds: 2.5,
         );
         final c2 = grid.at(coord);
@@ -2691,7 +2705,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           ..revealed = true;
         sfx.play(Sound.thunk);
         Haptics.heavy();
-        announce('Locked — the crest that matches is somewhere near', seconds: 3);
+        announce(
+          'Locked — the crest that matches is somewhere near',
+          seconds: 3,
+        );
 
       case TapOutcome.tooClose:
         grid.at(result.coord!)!.rejectShake = 1;

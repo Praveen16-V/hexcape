@@ -239,16 +239,20 @@ class FieldComponent extends Component {
         switch (shown) {
           case HexType.mire:
             // Two soft pools — ground you sink into as you watch.
-            mireMarks.addOval(Rect.fromEllipse(
-              center: centre.translate(-s * 0.16, s * 0.10),
-              radiusX: s * 0.26,
-              radiusY: s * 0.15,
-            ));
-            mireMarks.addOval(Rect.fromEllipse(
-              center: centre.translate(s * 0.20, -s * 0.14),
-              radiusX: s * 0.18,
-              radiusY: s * 0.10,
-            ));
+            mireMarks.addOval(
+              Rect.fromCenter(
+                center: centre.translate(-s * 0.16, s * 0.10),
+                width: s * 0.52,
+                height: s * 0.30,
+              ),
+            );
+            mireMarks.addOval(
+              Rect.fromCenter(
+                center: centre.translate(s * 0.20, -s * 0.14),
+                width: s * 0.36,
+                height: s * 0.20,
+              ),
+            );
           case HexType.thicket:
             // Three blades of grass: this cell wants the one next to it read.
             thicketMarks
@@ -271,19 +275,27 @@ class FieldComponent extends Component {
               ..moveTo(centre.dx, centre.dy + s * 0.10)
               ..lineTo(centre.dx, centre.dy + s * 0.22);
           case HexType.foxfire:
-            foxfireMarks.addOval(Rect.fromCircle(
-              center: centre.translate(s * 0.16, -s * 0.14),
-              radius: s * 0.10,
-            ));
-            foxfireMarks.addOval(Rect.fromCircle(
-              center: centre.translate(-s * 0.18, s * 0.02),
-              radius: s * 0.08,
-            ));
-            foxfireMarks.addOval(Rect.fromCircle(
-              center: centre.translate(s * 0.02, s * 0.20),
-              radius: s * 0.06,
-            ));
-            foxfireGlow.addOval(Rect.fromCircle(center: centre, radius: s * 0.5));
+            foxfireMarks.addOval(
+              Rect.fromCircle(
+                center: centre.translate(s * 0.16, -s * 0.14),
+                radius: s * 0.10,
+              ),
+            );
+            foxfireMarks.addOval(
+              Rect.fromCircle(
+                center: centre.translate(-s * 0.18, s * 0.02),
+                radius: s * 0.08,
+              ),
+            );
+            foxfireMarks.addOval(
+              Rect.fromCircle(
+                center: centre.translate(s * 0.02, s * 0.20),
+                radius: s * 0.06,
+              ),
+            );
+            foxfireGlow.addOval(
+              Rect.fromCircle(center: centre, radius: s * 0.5),
+            );
           case HexType.ice:
             // Three parallel streaks skimmed across the face.
             iceMarks
@@ -338,14 +350,20 @@ class FieldComponent extends Component {
             overgrowthMarks
               ..moveTo(centre.dx, centre.dy + s * 0.24)
               ..cubicTo(
-                centre.dx - s * 0.44, centre.dy,
-                centre.dx - s * 0.20, centre.dy - s * 0.34,
-                centre.dx, centre.dy - s * 0.10,
+                centre.dx - s * 0.44,
+                centre.dy,
+                centre.dx - s * 0.20,
+                centre.dy - s * 0.34,
+                centre.dx,
+                centre.dy - s * 0.10,
               )
               ..cubicTo(
-                centre.dx + s * 0.20, centre.dy - s * 0.34,
-                centre.dx + s * 0.44, centre.dy,
-                centre.dx, centre.dy + s * 0.24,
+                centre.dx + s * 0.20,
+                centre.dy - s * 0.34,
+                centre.dx + s * 0.44,
+                centre.dy,
+                centre.dx,
+                centre.dy + s * 0.24,
               )
               ..moveTo(centre.dx - s * 0.10, centre.dy + s * 0.24)
               ..lineTo(centre.dx - s * 0.16, centre.dy + s * 0.44)
@@ -373,24 +391,30 @@ class FieldComponent extends Component {
                 ..lineTo(centre.dx, centre.dy + s * 0.18)
                 ..moveTo(centre.dx - s * 0.30, centre.dy + s * 0.24)
                 ..lineTo(centre.dx + s * 0.30, centre.dy + s * 0.24);
-              gateMarks.addOval(Rect.fromCircle(
-                center: centre.translate(0, -s * 0.12),
-                radius: s * 0.09,
-              ));
+              gateMarks.addOval(
+                Rect.fromCircle(
+                  center: centre.translate(0, -s * 0.12),
+                  radius: s * 0.09,
+                ),
+              );
             }
           case HexType.switchTile:
             // A paw you can press.
-            switchMarks.addOval(Rect.fromEllipse(
-              center: centre.translate(0, s * 0.10),
-              radiusX: s * 0.16,
-              radiusY: s * 0.12,
-            ));
+            switchMarks.addOval(
+              Rect.fromCenter(
+                center: centre.translate(0, s * 0.10),
+                width: s * 0.32,
+                height: s * 0.24,
+              ),
+            );
             for (final toe in [
               centre.translate(-s * 0.18, -s * 0.12),
               centre.translate(0, -s * 0.18),
               centre.translate(s * 0.18, -s * 0.12),
             ]) {
-              switchMarks.addOval(Rect.fromCircle(center: toe, radius: s * 0.06));
+              switchMarks.addOval(
+                Rect.fromCircle(center: toe, radius: s * 0.06),
+              );
             }
           case HexType.mirror:
             // A crescent, filled in as its half of the pair is answered.
@@ -426,10 +450,12 @@ class FieldComponent extends Component {
               ..lineTo(centre.dx + s * 0.30, centre.dy - s * 0.06)
               ..moveTo(centre.dx, centre.dy + s * 0.06)
               ..lineTo(centre.dx, centre.dy + s * 0.16);
-            alarmMarks.addOval(Rect.fromCircle(
-              center: centre.translate(0, s * 0.22),
-              radius: s * 0.06,
-            ));
+            alarmMarks.addOval(
+              Rect.fromCircle(
+                center: centre.translate(0, s * 0.22),
+                radius: s * 0.06,
+              ),
+            );
           case HexType.thatch:
             // Two crossing strands; a tick once she has been — it remembers.
             thatchMarks
@@ -438,18 +464,22 @@ class FieldComponent extends Component {
               ..moveTo(centre.dx + s * 0.3, centre.dy - s * 0.1)
               ..lineTo(centre.dx - s * 0.3, centre.dy + s * 0.1);
             if (cell.crossed) {
-              thatchCrossed.addOval(Rect.fromCircle(
-                center: centre.translate(0, -s * 0.24),
-                radius: s * 0.07,
-              ));
+              thatchCrossed.addOval(
+                Rect.fromCircle(
+                  center: centre.translate(0, -s * 0.24),
+                  radius: s * 0.07,
+                ),
+              );
             }
           case HexType.scaffold:
             // A fuse running through a row of powder dots.
             for (var i = -1; i <= 1; i++) {
-              scaffoldMarks.addOval(Rect.fromCircle(
-                center: centre.translate(s * 0.26 * i, 0),
-                radius: s * 0.055,
-              ));
+              scaffoldMarks.addOval(
+                Rect.fromCircle(
+                  center: centre.translate(s * 0.26 * i, 0),
+                  radius: s * 0.055,
+                ),
+              );
             }
             scaffoldMarks
               ..moveTo(centre.dx - s * 0.26, centre.dy + s * 0.14)
@@ -936,20 +966,16 @@ class FieldComponent extends Component {
     if (!game.tuning.fogEnabled) {
       return;
     }
-    final gloom = game.tuning.gloomEnabled &&
+    final gloom =
+        game.tuning.gloomEnabled &&
         !game.powerups.hasPassive(PickupKind.nightEyes);
     final reach = game.revealRadius;
     final centre = game.dog.position + game.juice.offset;
     final size = game.size;
-    _fill.shader = Gradient.radial(
-      centre,
-      reach * (gloom ? 1.7 : 2.4),
-      [
-        const Color(0x00000000),
-        Palette.background.withValues(alpha: gloom ? 0.72 : 0.55),
-      ],
-      gloom ? const [0.30, 1.0] : const [0.35, 1.0],
-    );
+    _fill.shader = Gradient.radial(centre, reach * (gloom ? 1.7 : 2.4), [
+      const Color(0x00000000),
+      Palette.background.withValues(alpha: gloom ? 0.72 : 0.55),
+    ], gloom ? const [0.30, 1.0] : const [0.35, 1.0]);
     canvas.drawRect(Rect.fromLTWH(0, 0, size.x, size.y), _fill);
     _fill.shader = null;
   }
