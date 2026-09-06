@@ -214,9 +214,8 @@ class DogComponent extends Component {
   }) {
     const frameSize = 320.0;
     final running = moving >= 0.58 || dog.isLaunched;
-    final phase = game.tuning.reducedMotion
-        ? 0
-        : ((dog.gaitPhase % 1.0) * 4).floor().clamp(0, 3);
+    final gait = game.tuning.reducedMotion ? 0.0 : dog.gaitPhase % 1.0;
+    final phase = (gait * 4).floor().clamp(0, 3);
     final frame = forcedFrame ?? (running ? 4 : 0) + phase;
     final side = r * (running ? 3.28 : 3.06);
     final dst = Rect.fromCenter(
@@ -225,12 +224,32 @@ class DogComponent extends Component {
       height: side,
     );
     final paint = _spritePaint(weary);
+
+    // The sprite sheet supplies the strong contact poses; these continuous
+    // transforms supply the in-betweens on every rendered game frame. Keeping
+    // one bitmap pose visible at a time avoids the double-image flicker caused
+    // by cross-fading silhouettes while still making the body travel smoothly
+    // through each stride.
+    final stride = math.sin(gait * math.pi * 2);
+    final step = math.sin(gait * math.pi * 4);
+    final airborne = math.max(0.0, -step);
+    final motion = forcedFrame == null ? moving : 0.0;
+    final strideLift = airborne * r * (running ? 0.075 : 0.045) * motion;
+    final pitch = stride * (running ? 0.035 : 0.018) * motion;
+    final reach = 1 + step * (running ? 0.022 : 0.012) * motion;
+    final compression = 1 - step * (running ? 0.018 : 0.010) * motion;
+
+    canvas.save();
+    canvas.translate(0, -strideLift);
+    canvas.rotate(pitch);
+    canvas.scale(reach, compression);
     canvas.drawImageRect(
       sprite,
       Rect.fromLTWH(frame * frameSize, 0, frameSize, frameSize),
       dst,
       paint,
     );
+    canvas.restore();
   }
 
   /// The art, with the transforms that carry its life applied outside it.

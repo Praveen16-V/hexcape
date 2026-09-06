@@ -132,6 +132,7 @@ class _LevelMapState extends State<LevelMap>
             _CampaignBar(
               stars: progress.totalStars,
               maxStars: Campaign.length * 3,
+              frontier: frontier,
               onBack: widget.onBack,
             ),
             Expanded(
@@ -195,6 +196,73 @@ class _LevelMapState extends State<LevelMap>
                 },
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
+              child: Semantics(
+                button: true,
+                label: frontier > Campaign.length
+                    ? 'Continue to Endless'
+                    : 'Continue level $frontier',
+                child: Material(
+                  color: Palette.backgroundVignette,
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(18),
+                  child: InkWell(
+                    onTap: () => widget.onSelect(frontier),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 11,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.pets_rounded,
+                            size: 18,
+                            color: Palette.forBand(Campaign.bandOf(frontier)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  frontier > Campaign.length
+                                      ? 'ENDLESS TRAIL'
+                                      : 'CONTINUE · LEVEL $frontier',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                Text(
+                                  Campaign.identityFor(frontier).title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -256,11 +324,36 @@ class _MapPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    _paintRegionGround(canvas, size);
     _paintTrail(canvas);
     for (var level = 1; level <= MapLayout.tiles; level++) {
       _paintTile(canvas, level);
     }
     _paintBandLabels(canvas);
+  }
+
+  void _paintRegionGround(Canvas canvas, Size size) {
+    for (var i = 0; i < CampaignBand.values.length; i++) {
+      final band = CampaignBand.values[i];
+      final first = Campaign.firstOf(band);
+      if (first > MapLayout.tiles) break;
+      final next = i + 1 < CampaignBand.values.length
+          ? Campaign.firstOf(CampaignBand.values[i + 1])
+          : MapLayout.tiles + 1;
+      final last = math.min(next - 1, MapLayout.tiles);
+      final top = layout.toPixel(MapLayout.coordFor(first)).dy - layout.size;
+      final bottom = layout.toPixel(MapLayout.coordFor(last)).dy + layout.size;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(10, top, size.width - 10, bottom),
+        const Radius.circular(28),
+      );
+      _fill.color = Palette.forBand(band).withValues(alpha: 0.055);
+      canvas.drawRRect(rect, _fill);
+      _stroke
+        ..color = Palette.forBand(band).withValues(alpha: 0.13)
+        ..strokeWidth = 1;
+      canvas.drawRRect(rect, _stroke);
+    }
   }
 
   /// Names the six bands along the trail's left margin, so the climb ahead
@@ -269,36 +362,23 @@ class _MapPainter extends CustomPainter {
   /// tile already carries its own glyph.
   void _paintBandLabels(Canvas canvas) {
     const bands = CampaignBand.values;
-    var labelBottom = 0.0;
     for (var i = 0; i < bands.length - 1; i++) {
       final band = bands[i];
       final first = Campaign.firstOf(band);
       if (first > MapLayout.tiles) {
         break;
       }
-      final last = math.min(
-        Campaign.firstOf(bands[i + 1]) - 1,
-        MapLayout.tiles,
-      );
       final yStart = layout.toPixel(MapLayout.coordFor(first)).dy;
-      final yEnd = layout.toPixel(MapLayout.coordFor(last)).dy;
-      labelBottom = _paintVerticalLabel(
+      _paintRegionLabel(
         canvas,
         band.label.toUpperCase(),
-        (yStart + yEnd) / 2,
+        yStart - layout.size * 0.72,
         Palette.forBand(band),
-        labelBottom,
       );
     }
   }
 
-  double _paintVerticalLabel(
-    Canvas canvas,
-    String text,
-    double y,
-    Color colour,
-    double previousBottom,
-  ) {
+  void _paintRegionLabel(Canvas canvas, String text, double y, Color colour) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
@@ -312,35 +392,21 @@ class _MapPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    canvas.save();
-    final centreY = math.max(y, previousBottom + 12 + painter.width / 2);
-    _stroke
-      ..color = colour
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(3, centreY - painter.width / 2),
-      Offset(3, centreY + painter.width / 2),
-      _stroke,
-    );
-    canvas.translate(15, centreY);
-    canvas.rotate(-math.pi / 2);
-    painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
-    canvas.restore();
-    return centreY + painter.width / 2;
+    final x = math.max(14.0, (layout.origin.dx - painter.width) / 2);
+    painter.paint(canvas, Offset(x, y - painter.height / 2));
   }
 
   /// The line joining one level to the next. Drawn under the tiles, so it
   /// reads as ground they sit on rather than wire between them.
   void _paintTrail(Canvas canvas) {
     final path = Path();
-    for (var level = 1; level <= MapLayout.tiles; level++) {
+    var previous = layout.toPixel(MapLayout.coordFor(1));
+    path.moveTo(previous.dx, previous.dy);
+    for (var level = 2; level <= MapLayout.tiles; level++) {
       final centre = layout.toPixel(MapLayout.coordFor(level));
-      if (level == 1) {
-        path.moveTo(centre.dx, centre.dy);
-      } else {
-        path.lineTo(centre.dx, centre.dy);
-      }
+      final midY = (previous.dy + centre.dy) / 2;
+      path.cubicTo(previous.dx, midY, centre.dx, midY, centre.dx, centre.dy);
+      previous = centre;
     }
     _stroke
       ..color = Palette.lockedEdge
@@ -380,10 +446,11 @@ class _MapPainter extends CustomPainter {
     final band = Campaign.bandOf(level);
     final colour = Palette.forBand(band);
     final isFrontier = level == frontier;
+    final isFinale = !isEndless && level % 10 == 0;
 
-    final hex = HexLayout.pathFromCorners(
-      HexLayout.cornersAt(centre, layout.size * 0.92),
-    );
+    final nodeRadius = layout.size * (isFinale ? 0.78 : 0.64);
+    final hex = Path()
+      ..addOval(Rect.fromCircle(center: centre, radius: nodeRadius));
 
     if (isFrontier) {
       // Where the player is. A slow breath rather than a flash: the map is a
@@ -417,7 +484,11 @@ class _MapPainter extends CustomPainter {
           : forSale
           ? colour.withValues(alpha: 0.34)
           : Color.lerp(Palette.lockedEdge, colour, 0.20)!
-      ..strokeWidth = isFrontier ? 2.6 : 1.5
+      ..strokeWidth = isFrontier
+          ? 3.0
+          : isFinale
+          ? 2.4
+          : 1.5
       ..strokeCap = StrokeCap.butt
       ..strokeJoin = StrokeJoin.miter;
     canvas.drawPath(hex, _stroke);
@@ -449,6 +520,17 @@ class _MapPainter extends CustomPainter {
           ..lineTo(tip.dx + layout.size * 0.13, tip.dy - layout.size * 0.17)
           ..close(),
         _fill,
+      );
+    }
+
+    if (isFinale) {
+      _paintLabel(
+        canvas,
+        centre.translate(0, -layout.size * 0.9),
+        'FINALE',
+        colour: colour.withValues(alpha: 0.9),
+        size: layout.size * 0.19,
+        weight: FontWeight.w800,
       );
     }
 
@@ -580,60 +662,88 @@ class _CampaignBar extends StatelessWidget {
   const _CampaignBar({
     required this.stars,
     required this.maxStars,
+    required this.frontier,
     required this.onBack,
   });
 
   final int stars;
   final int maxStars;
+  final int frontier;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
+    final band = Campaign.bandOf(frontier);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 8, 20, 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(6, 8, 16, 10),
+      child: Column(
         children: [
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back, size: 21),
-            color: Colors.white70,
-            tooltip: 'Home',
-            visualDensity: VisualDensity.compact,
-          ),
-          const SizedBox(width: 4),
-          const Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'CAMPAIGN',
-                maxLines: 1,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2.4,
+          Row(
+            children: [
+              IconButton(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back, size: 21),
+                color: Colors.white70,
+                tooltip: 'Home',
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'THE LONG TRAIL',
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.8,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${band.label} · LEVEL $frontier',
+                      style: TextStyle(
+                        color: Palette.forBand(band),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Semantics(
-            label: 'Campaign mastery: $stars of $maxStars stars',
-            child: Row(
-              children: [
-                Icon(Icons.circle, size: 9, color: Palette.treat),
-                const SizedBox(width: 5),
-                Text(
-                  '$stars/$maxStars',
-                  style: TextStyle(
-                    color: Palette.treat,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Campaign mastery: $stars of $maxStars stars',
+                child: Row(
+                  children: [
+                    Icon(Icons.circle, size: 9, color: Palette.treat),
+                    const SizedBox(width: 5),
+                    Text(
+                      '$stars/$maxStars',
+                      style: TextStyle(
+                        color: Palette.treat,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: math.min(frontier, Campaign.length) / Campaign.length,
+              minHeight: 4,
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation(Palette.forBand(band)),
             ),
           ),
         ],

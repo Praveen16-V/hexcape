@@ -66,6 +66,18 @@ List<HexCoord> _run(
 
 void main() {
   group('Dog drift', () {
+    test('collision footprint includes both cells at a shared edge', () {
+      const first = HexCoord.zero;
+      const second = HexCoord(1, 0);
+      final position = (_layout.toPixel(first) + _layout.toPixel(second)) / 2;
+      final dog = Dog(position: position, cell: _layout.toHex(position));
+
+      expect(
+        dog.occupiedCells(_layout),
+        containsAll(<HexCoord>[first, second]),
+      );
+    });
+
     test('entering the food hex wins even near its edge', () {
       const exit = HexCoord(0, -1);
       final grid = _field(

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/entities/dog.dart';
 import 'package:hexcape/game/tuning.dart';
+import 'package:hexcape/game/level_rules.dart';
+import 'package:hexcape/gen/level_generator.dart';
 import 'package:hexcape/gen/pathfinder.dart';
 import 'package:hexcape/hex/hex_cell.dart';
 import 'package:hexcape/hex/hex_coord.dart';
@@ -8,12 +10,64 @@ import 'package:hexcape/hex/hex_grid.dart';
 import 'package:hexcape/hex/hex_layout.dart';
 import 'package:hexcape/systems/regrowth_system.dart';
 
+import 'sim/simulated_player.dart' show specFor, tuningFor;
+
 const _layout = HexLayout(size: 22, origin: Offset(400, 400));
 
 /// Carves a zigzag one cell at a time, just ahead of her, with regrowth
 /// running — which is what actually happens in play, unlike a pre-cleared
 /// corridor.
 void main() {
+  test('level 11 route cannot pinch the dog between tiles', () {
+    final rules = Campaign.rulesFor(11);
+    final tuning = tuningFor(rules);
+    final level = LevelGenerator.generate(specFor(rules));
+    final grid = level.grid;
+    final route = grid.truePath;
+    final dog = Dog(position: _layout.toPixel(grid.start), cell: grid.start);
+    // Isolate the authored level-11 throat. Other initially open pockets can
+    // attract the autonomous steering away from the canonical route and test
+    // route choice rather than the reported collision failure.
+    for (final cell in grid.all) {
+      cell.resetToSolid();
+    }
+    for (final coord in route) {
+      grid.at(coord)!.clear(0);
+    }
+
+    const dt = 1 / 60;
+    var now = 0.0;
+    const version = 1;
+    var stalledFrames = 0;
+    while (now < 60 && dog.cell != grid.exit) {
+      now += dt;
+      dog.update(
+        dt: dt,
+        grid: grid,
+        layout: _layout,
+        tuning: tuning,
+        fieldVersion: version,
+        regrowthActive: false,
+      );
+      if (dog.route.length > 1 && dog.speed < 2) {
+        stalledFrames++;
+      } else {
+        stalledFrames = 0;
+      }
+      expect(
+        stalledFrames,
+        lessThan(120),
+        reason:
+            'stuck at ${dog.position} in ${dog.cell} with route ${dog.route}',
+      );
+    }
+    expect(
+      dog.cell,
+      grid.exit,
+      reason: 'start ${grid.start}, route ${route.first} -> ${route.last}',
+    );
+  });
+
   test('a fresh opening always gets her moving', () {
     // The promise the game rests on: you do not steer her, you create the
     // reason she moves. A tap that opens a cell beside her must produce motion

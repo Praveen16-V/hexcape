@@ -157,6 +157,8 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
                               child: Image.asset(
                                 'assets/pets/${widget.pet.id}_move.png',
                                 fit: BoxFit.fill,
+                                filterQuality: FilterQuality.medium,
+                                gaplessPlayback: true,
                                 errorBuilder: (_, _, _) => CustomPaint(
                                   painter: _HomeDogPainter(
                                     pet: widget.pet,

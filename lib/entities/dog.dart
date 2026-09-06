@@ -98,6 +98,11 @@ class Dog {
   int _fieldVersionSeen = -1;
   List<HexCoord> _route = const [];
 
+  /// Time spent having every attempted movement axis rejected. A brief hit is
+  /// an ordinary wall collision; a sustained hit with a route is the rare
+  /// two-wall pinch where sequential collision resolution cannot escape.
+  double _pinchedFor = 0;
+
   /// Cells she is currently refusing to walk into — a guard's lit ground.
   /// Held so the route can be rebuilt when the patrol moves, which is a change
   /// to where she may go without being a change to the field itself.
@@ -526,11 +531,23 @@ class Dog {
         next = slideY;
         velocity = Offset(0, velocity.dy);
       } else {
+        _pinchedFor += dt;
+        if (_pinchedFor >= 0.18 && _route.length > 1) {
+          // Recover inside the same logical open tile. This is deliberately a
+          // small depenetration, not route progress or player assistance: it
+          // only removes the sub-tile offset that wedged her collision disc.
+          final centre = layout.toPixel(cell);
+          if (grid.isPassable(cell)) {
+            position = centre;
+            _pinchedFor = 0;
+          }
+        }
         velocity = Offset.zero;
         return;
       }
     }
     position = next;
+    _pinchedFor = 0;
 
     // The dog is a disc, not a point, so push it clear of any solid hex it
     // overlaps. Two passes settles the corner case of touching two walls at
@@ -645,6 +662,27 @@ class Dog {
   /// most common shape in the game. Staying well under it leaves clearance for
   /// the momentum to carry her through a turn.
   static double collisionRadius(HexLayout layout) => layout.size * 0.34;
+
+  /// Every hex touched by the dog's collision body.
+  ///
+  /// [cell] is selected from the centre point, but while crossing a shared
+  /// edge the dog physically occupies both cells. Regrowth must hold both or
+  /// one side can close into her and pinch her between two walls.
+  Set<HexCoord> occupiedCells(HexLayout layout) {
+    final radius = collisionRadius(layout);
+    final here = layout.toHex(position);
+    final occupied = <HexCoord>{here};
+    for (final candidate in here.neighbours) {
+      final closest = _closestPointOnPolygon(
+        position,
+        layout.corners(candidate),
+      );
+      if ((closest - position).distance < radius) {
+        occupied.add(candidate);
+      }
+    }
+    return occupied;
+  }
 
   static Offset _closestPointOnPolygon(Offset p, List<Offset> polygon) {
     var best = polygon.first;

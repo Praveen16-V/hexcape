@@ -35,6 +35,11 @@ class RegrowthSystem {
     required TuningConfig tuning,
     required HexCoord dogCell,
 
+    /// All cells touched by the dog's collision body. The centre-point
+    /// [dogCell] remains the fallback for callers that do not simulate a
+    /// physical position.
+    Set<HexCoord> dogOccupiedCells = const {},
+
     /// Open ground inside the aura of a living overgrowth heart. Regrowth
     /// there runs at double pace while the heart stands — the heart is the
     /// thing closing the pocket, and digging it out is the answer.
@@ -80,7 +85,10 @@ class RegrowthSystem {
             // A braid waits for its crossing and then closes fast. It never
             // counts down under her feet: the timer is for the tile behind
             // her, which is the one that matters.
-            eligible = cell.crossed && cell.coord != dogCell;
+            eligible =
+                cell.crossed &&
+                cell.coord != dogCell &&
+                !dogOccupiedCells.contains(cell.coord);
             delay = thatchDelay;
           } else {
             eligible = cell.coord.neighbours.any(grid.blocks);
@@ -107,7 +115,9 @@ class RegrowthSystem {
           // The cell the dog is standing in holds at the last pulse instead of
           // closing on top of it. The player always has a way out; staying put
           // until the grace period runs down is what kills them, not this.
-          if (cell.coord == dogCell && cell.regrowT > RegrowAnim.dogHold) {
+          if ((cell.coord == dogCell ||
+                  dogOccupiedCells.contains(cell.coord)) &&
+              cell.regrowT > RegrowAnim.dogHold) {
             cell.regrowT = RegrowAnim.dogHold;
           }
 

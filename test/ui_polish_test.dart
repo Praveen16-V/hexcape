@@ -56,6 +56,7 @@ void main() {
           ..onGameResize(Vector2(size.width, size.height))
           ..startLevel(level: 1);
         var homePressed = false;
+        int? campaignSelected;
         final screens = <String, Widget>{
           'home': HomeScreen(
             progress: progress,
@@ -112,7 +113,7 @@ void main() {
             ),
           'campaign': LevelMap(
             progress: progress,
-            onSelect: (_) {},
+            onSelect: (level) => campaignSelected = level,
             onBack: () {},
             showToken: 1,
           ),
@@ -141,6 +142,12 @@ void main() {
           );
           await tester.pump(const Duration(milliseconds: 450));
           expect(tester.takeException(), isNull, reason: entry.key);
+          if (entry.key == 'campaign') {
+            expect(find.text('THE LONG TRAIL'), findsOneWidget);
+            expect(find.text('CONTINUE · LEVEL 1'), findsOneWidget);
+            await tester.tap(find.text('CONTINUE · LEVEL 1'));
+            expect(campaignSelected, 1);
+          }
           if (entry.key == 'won' || entry.key == 'crushed') {
             homePressed = false;
             await tester.ensureVisible(find.text('Main Menu'));

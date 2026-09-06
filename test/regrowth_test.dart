@@ -135,6 +135,47 @@ void main() {
       },
     );
 
+    test('all cells touched by the dog hold while she crosses an edge', () {
+      const first = HexCoord.zero;
+      const second = HexCoord(1, 0);
+      final grid = _field(cleared: [first, second]);
+      final tuning = TuningConfig()..regrowDelay = 0.1;
+      final system = RegrowthSystem();
+      var now = 0.0;
+
+      for (var i = 0; i < 240; i++) {
+        now += 1 / 60;
+        system.update(
+          dt: 1 / 60,
+          now: now,
+          grid: grid,
+          tuning: tuning,
+          dogCell: first,
+          dogOccupiedCells: {first, second},
+        );
+      }
+
+      expect(grid.at(first)!.state, CellState.regrowing);
+      expect(grid.at(second)!.state, CellState.regrowing);
+      expect(grid.at(first)!.regrowT, RegrowAnim.dogHold);
+      expect(grid.at(second)!.regrowT, RegrowAnim.dogHold);
+
+      // Once her body has cleared the edge, the old tile is allowed to close.
+      for (var i = 0; i < 120; i++) {
+        now += 1 / 60;
+        system.update(
+          dt: 1 / 60,
+          now: now,
+          grid: grid,
+          tuning: tuning,
+          dogCell: second,
+          dogOccupiedCells: {second},
+        );
+      }
+      expect(grid.at(first)!.isSolid, isTrue);
+      expect(grid.at(second)!.isSolid, isFalse);
+    });
+
     test('every cell is warned before it blocks anything', () {
       final grid = _field(cleared: HexCoord.zero.disc(1));
       final tuning = TuningConfig()..regrowDelay = 0.3;

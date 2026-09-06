@@ -1363,6 +1363,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         grid: grid,
         tuning: tuning,
         dogCell: dog.cell,
+        dogOccupiedCells: dog.occupiedCells(layout),
         overgrowthAura: _heartsStanding ? overgrowthAura : const {},
         thatchDelay: tuning.thatchDelay,
         extraDelay: pet.perk.regrowDelta,
