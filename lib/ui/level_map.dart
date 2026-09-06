@@ -471,9 +471,10 @@ class _MapPainter extends CustomPainter {
         _paintLabel(
           canvas,
           // Clear of the third star: the row ends at 0.26 plus its own radius,
-          // and a letter touching the last ring reads as part of it.
+          // and a letter touching the last ring reads as part of it. With two
+          // modes the mark is univocal: absence means Normal, ‘H’ means Hard.
           Offset(centre.dx + layout.size * 0.5, centre.dy + layout.size * 0.44),
-          record.difficulty == Difficulty.easy ? 'E' : 'H',
+          'H',
           colour: colour.withValues(alpha: 0.75),
           size: layout.size * 0.24,
           weight: FontWeight.w800,

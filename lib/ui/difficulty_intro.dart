@@ -61,8 +61,8 @@ class DifficultyIntro extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'The same hundred boards either way. Only the pressure '
-                  'changes.',
+                  'The same hundred-level journey. Hard lays heavier ground, '
+                  'leaner supplies and a merciless clock over it.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.5),

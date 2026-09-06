@@ -46,22 +46,27 @@ class HexGrid {
   /// Whether a tap can do anything to [c] *right now*.
   ///
   /// The grid answers this rather than the cell because [HexType.sunken] needs
-  /// open ground beside it, and a cell cannot see its neighbours. Everything
-  /// that decides what a tap may touch goes through here — tap resolution, the
-  /// editable highlight the renderer draws, the soft-lock check — so they
-  /// cannot disagree about whether a tile is reachable.
+  /// open ground beside it, [HexType.scaffold] needs none beside it, and a
+  /// [HexType.gate] waits on its switch — none of which a cell can see alone.
+  /// Everything that decides what a tap may touch goes through here — tap
+  /// resolution, the editable highlight the renderer draws, the soft-lock
+  /// check — so they cannot disagree about whether a tile is reachable.
   bool isClearable(HexCoord c) {
     final cell = cells[c];
     if (cell == null || !cell.isClearable) {
       return false;
     }
-    if (!cell.type.needsFooting) {
-      return true;
+    if (cell.type.needsFooting) {
+      return hasFooting(c);
     }
-    return hasFooting(c);
+    if (cell.type.needsDistance) {
+      return !hasFooting(c);
+    }
+    return true;
   }
 
-  /// Whether anything open touches [c]. Only sunken ground cares.
+  /// Whether anything open touches [c]. Sunken ground wants one; scaffold
+  /// ground wants none.
   bool hasFooting(HexCoord c) {
     for (final n in c.neighbours) {
       if (cells[n]?.isPassable ?? false) {
@@ -73,23 +78,54 @@ class HexGrid {
 
   bool isAnchor(HexCoord c) => cells[c]?.type == HexType.anchor;
 
+  /// Whether DIG is the thing that removes it: rivets and overgrowth hearts.
+  bool isDiggable(HexCoord c) => cells[c]?.type.isDiggable ?? false;
+
   /// Cells the player could *in principle* travel through, ignoring their
-  /// current state — everything except anchors and empty space. This is the
-  /// graph the soft-lock check runs on (§4).
+  /// current state — everything except the walls and empty space. Closed
+  /// gates count: their switch is somewhere and the pathfinder prices it.
+  /// This is the graph the soft-lock check runs on (§4).
   bool isTraversableInPrinciple(HexCoord c) {
     final cell = cells[c];
-    return cell != null && cell.type != HexType.anchor;
+    return cell != null && !cell.type.blocksTravelInPrinciple;
   }
 
   Iterable<HexCoord> neighboursOf(HexCoord c) =>
       c.neighbours.where(cells.containsKey);
 
   /// Taps still needed to open [c]. Zero for anything already passable, and
-  /// effectively infinite for anchors and empty space.
+  /// effectively infinite for walls and empty space.
   ///
   /// This is the cost function for both par and the budget-aware soft-lock
   /// check, so those two always agree about what a route is worth.
-  int remainingCost(HexCoord c) => cells[c]?.remainingHits ?? (1 << 20);
+  ///
+  /// Two tiles lie *upward*, never downward, because the true cost is split
+  /// across two cells the pathfinder visits one at a time: a closed gate costs
+  /// its own tap and its switch's, and an unopened mirror charges its partner
+  /// too. Overpricing a pair that a route happens to use twice is accepted:
+  /// the error is a slightly generous budget, never an impossible one.
+  int remainingCost(HexCoord c) {
+    final cell = cells[c];
+    if (cell == null) {
+      return 1 << 20;
+    }
+    final base = cell.remainingHits;
+    if (base == 0 || base >= 1 << 20) {
+      return base;
+    }
+    if (cell.isLockedGate) {
+      return base + 1;
+    }
+    if (cell.type == HexType.mirror) {
+      final other = cell.partner == null ? null : cells[cell.partner];
+      final pairOpen =
+          other == null ||
+          other.isPassable ||
+          (cell.charged && other.charged);
+      return pairOpen ? base : base + 1;
+    }
+    return base;
+  }
 
   /// Steps from every cell to the food, routed around anchors.
   ///

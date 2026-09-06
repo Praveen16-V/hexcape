@@ -61,7 +61,7 @@ class SoftlockSystem {
       for (final pickup in pickups)
         if (!pickup.collected &&
             (recoveries.contains(pickup.kind) ||
-                (pickup.kind == PickupKind.treat && treatTaps > 0)))
+                (pickup.kind.refundsTaps && treatTaps > 0)))
           (pickup.kind, pickup.coord),
     ];
     if (identical(grid, _lastGrid) &&
@@ -148,6 +148,8 @@ class SoftlockSystem {
         switch (pickup.$1) {
           case PickupKind.treat:
             allowance += math.max(0, treatTaps);
+          case PickupKind.ration:
+            allowance += ActiveEffects.rationTaps;
           case PickupKind.blast:
             blasts++;
           case PickupKind.dig:
@@ -187,7 +189,7 @@ class SoftlockSystem {
       }
       reachable.add(state.$1);
       for (final next in grid.neighboursOf(state.$1)) {
-        final anchor = grid.isAnchor(next);
+        final anchor = grid.isDiggable(next);
         final spent = state.$2 + (anchor ? 1 : 0);
         if (spent > digs) {
           continue;

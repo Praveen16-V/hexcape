@@ -152,15 +152,39 @@ class _PetRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // The actual dog rather than a colour chip: choosing a coat should
+            // show the dog, and a locked coat still shows *her* — dimmed —
+            // because "what am I working toward" is the reason the picker is
+            // on screen at all.
             Container(
-              width: 34,
-              height: 34,
+              width: 44,
+              height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: unlocked ? pet.body : Palette.lockedTile,
+                color: Colors.white.withValues(alpha: 0.05),
                 border: Border.all(
                   color: unlocked ? pet.dark : Palette.lockedEdge,
                   width: 2,
+                ),
+              ),
+              child: ClipOval(
+                child: Opacity(
+                  opacity: unlocked ? 1 : 0.35,
+                  child: Image.asset(
+                    'assets/pets/${pet.id}.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.centerRight,
+                    errorBuilder: (_, __, ___) => Center(
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: unlocked ? pet.body : Palette.lockedTile,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -189,6 +213,19 @@ class _PetRow extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.42),
                       fontSize: 12,
+                    ),
+                  ),
+                  // What she brings is the reason to want her, so it is
+                  // visible whether or not she is earned yet.
+                  const SizedBox(height: 3),
+                  Text(
+                    '${pet.perk.name} — ${pet.perk.short}',
+                    style: TextStyle(
+                      color: unlocked
+                          ? pet.body.withValues(alpha: 0.92)
+                          : Colors.white.withValues(alpha: 0.30),
+                      fontSize: 11.5,
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],

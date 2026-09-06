@@ -151,10 +151,10 @@ void main() {
   });
 
   group('Pets', () {
-    test('none of them plays differently', () {
-      // The whole reason this is safe to hand out for stars. If a pet ever
-      // carries a number, every level is balanced against whichever one the
-      // player happens to have.
+    test('each leans a run differently rather than outright stronger', () {
+      // The shape the redesign allows and no more: a pet may tilt a run
+      // toward a style, but hers must never be the number that makes her the
+      // strictly right one.
       for (final pet in Pets.all) {
         expect(pet.id, isNotEmpty);
         expect(pet.name, isNotEmpty);

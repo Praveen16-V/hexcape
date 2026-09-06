@@ -8,12 +8,11 @@ import '../theme/palette.dart';
 
 /// The dog, at rest, on the home screen.
 ///
-/// Deliberately not `DogComponent` (`lib/components/dog_component.dart`):
+/// The same art the run draws (`assets/pets/<id>.png`), idling here: a small
+/// breath-scale loop so the still screen still has a heartbeat, nothing more.
+/// Deliberately not `DogComponent` (`lib/components/dog_component.dart`) —
 /// that one is wired to a live `Dog`'s physics, gait and hunger, none of
-/// which exists before a level has started. This redraws the same
-/// silhouette — body, head, ears, tail — standing still, with a small idle
-/// breath and tail wag, so the front door shows whose game this is without
-/// borrowing state that only exists mid-run.
+/// which exists before a level has started.
 class HomeDog extends StatefulWidget {
   const HomeDog({
     required this.pet,
@@ -70,9 +69,22 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
       height: widget.size,
       child: AnimatedBuilder(
         animation: _idle,
-        builder: (context, _) => CustomPaint(
-          painter: _HomeDogPainter(pet: widget.pet, phase: _idle.value),
-        ),
+        builder: (context, _) {
+          // A breath and nothing else: one scale pulse per cycle, slow enough
+          // that reduced-motion users only lose a 3% drift rather than a state
+          // change.
+          final breath = math.sin(_idle.value * math.pi * 2) * 0.014;
+          return Transform.scale(
+            scale: 0.986 + breath,
+            child: Image.asset(
+              'assets/pets/${widget.pet.id}.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => CustomPaint(
+                painter: _HomeDogPainter(pet: widget.pet, phase: _idle.value),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

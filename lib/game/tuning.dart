@@ -75,12 +75,52 @@ class TuningConfig extends ChangeNotifier {
   int sentryCount = 0;
   double guardSpeed = 0.85;
 
+  /// The rest of the light family, from their own campaign gates onward.
+  int beaconCount = 0;
+  int spinnerCount = 0;
+  int runnerCount = 0;
+  int blinkerCount = 0;
+  int wardenCount = 0;
+
   /// Fraction of eligible cells promoted to faults. Zero everywhere until the
   /// campaign introduces them, so the mechanic can ship and be playtested from
   /// the debug panel long before any level references it.
   double faultDensity = 0;
   double slopeDensity = 0;
   double sunkenDensity = 0;
+
+  /// The rebuilt families. All zero until the campaign's own gate for each,
+  /// and all pass-throughs: [LevelRules] writes them per level, the generator
+  /// reads them, and the debug panel can prod them in between.
+  double hardpanDensity = 0;
+  double thatchDensity = 0;
+  double overgrowthDensity = 0;
+  double tremorDensity = 0;
+  double iceDensity = 0;
+  double mireDensity = 0;
+  double eddyDensity = 0;
+  double magnetDensity = 0;
+  double thicketDensity = 0;
+  double sleeperDensity = 0;
+  double foxfireDensity = 0;
+  double scaffoldDensity = 0;
+  double thornDensity = 0;
+  double alarmDensity = 0;
+  int gatePairCount = 0;
+  int mirrorPairCount = 0;
+  bool gloomEnabled = false;
+
+  /// Seconds a crossed one-cross braid holds before snapping shut.
+  double thatchDelay = 0.5;
+
+  /// The tremor vent's rhythm: surge period, and how much of every pending
+  /// close it steals each time it fires.
+  double tremorPeriod = 7.0;
+  double tremorJump = 2.0;
+
+  /// What stepping on contact ground costs: thorn seconds, and the alarm's
+  /// whip on every light.
+  double thornSeconds = 2.0;
 
   /// How long a cleared fault stays open.
   ///
@@ -167,7 +207,7 @@ class TuningConfig extends ChangeNotifier {
   /// Zen mode (§12.3): same puzzle, no regrowth pressure.
   bool zenMode = false;
 
-  /// The player's Easy/Normal/Hard choice for the run about to start.
+  /// The player's Normal/Hard choice for the run about to start.
   ///
   /// Pushed in from [Progress] like the other player settings, or overridden for
   /// a single run from the level detail sheet. Not persisted here: this object

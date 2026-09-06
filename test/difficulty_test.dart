@@ -20,8 +20,30 @@ List<Object?> _fields(LevelRules r) => [
   r.heavyDensity,
   r.springDensity,
   r.faultDensity,
+  r.hardpanDensity,
+  r.thatchDensity,
+  r.overgrowthDensity,
+  r.tremorDensity,
+  r.iceDensity,
+  r.mireDensity,
+  r.eddyDensity,
+  r.magnetDensity,
+  r.thicketDensity,
+  r.sleeperDensity,
+  r.foxfireDensity,
+  r.scaffoldDensity,
+  r.thornDensity,
+  r.alarmDensity,
+  r.gatePairs,
+  r.mirrorPairs,
+  r.gloom,
   r.guards,
   r.sentries,
+  r.beacons,
+  r.spinners,
+  r.runners,
+  r.blinkers,
+  r.wardens,
   r.guardSpeed,
   r.treats,
   r.powerups,
@@ -57,11 +79,24 @@ List<Object?> _board(GeneratedLevel level) => [
 ];
 
 void main() {
-  group('Difficulty', () {
-    test('Normal changes nothing at all', () {
+  group('The two modes', () {
+    test('there are exactly two of them', () {
+      // The design decision, pinned: one adventure and one gauntlet.
+      expect(Difficulty.values, [Difficulty.normal, Difficulty.hard]);
+    });
+
+    test('a saved "easy" key reads as Normal', () {
+      // Old builds could persist the retired mode; it must not crash, and the
+      // run it describes is closest to the adventure.
+      expect(Difficulty.fromKey('easy'), Difficulty.normal);
+      expect(Difficulty.fromKey('hard'), Difficulty.hard);
+      expect(Difficulty.fromKey(null), Difficulty.normal);
+    });
+
+    test('Normal is its own curve; asking for it explicitly changes nothing', () {
       // The guard that protects every existing save file, star record and test
-      // in this suite. If this fails, the whole campaign has quietly shifted
-      // under players who never asked for a difficulty setting.
+      // in this suite: the *default* campaign and the explicitly-normal one
+      // must stay the same rules.
       for (var n = 1; n <= Campaign.length + 20; n++) {
         expect(
           _fields(Campaign.rulesFor(n, difficulty: Difficulty.normal)),
@@ -71,48 +106,113 @@ void main() {
       }
     });
 
-    test('the three guided levels ignore it', () {
+    test('the tutorial ignores both modes', () {
+      // Three scripted levels are a lesson, not a contest. Both modes leave
+      // them alone — rules and boards alike — and Difficulty.tutorialLevels
+      // must stay the campaign's tutorial count, because the constant lives in
+      // this file: level_rules imports difficulty and the arrow runs one way.
+      expect(Difficulty.tutorialLevels, Campaign.tutorialBand);
       for (var n = 1; n <= Campaign.tutorialBand; n++) {
+        final ours = LevelGenerator.generate(specFor(Campaign.rulesFor(n)));
         for (final d in Difficulty.values) {
           expect(
             _fields(Campaign.rulesFor(n, difficulty: d)),
             _fields(Campaign.rulesFor(n)),
             reason: 'tutorial level $n moved on ${d.label}',
           );
+          expect(
+            _board(LevelGenerator.generate(
+              specFor(Campaign.rulesFor(n, difficulty: d)),
+            )),
+            _board(ours),
+            reason: 'tutorial level $n generates a different board on ${d.label}',
+          );
         }
       }
     });
 
+    test('Normal tightens from stage 4 — a little, and on schedule', () {
+      // The adventure shift: modest, and exactly where the user asked for it
+      // (after the tutorial trio). The unnamed default curve is Normal's, so
+      // these assertions compare numbers against themselves through the mode.
+      for (var n = Campaign.tutorialBand + 1; n <= Campaign.length; n++) {
+        final d = Difficulty.normal;
+        expect(d.budgetRelief(n), -0.04, reason: 'budget shift at $n');
+        expect(d.hungerRelief(n), -0.04, reason: 'clock shift at $n');
+        expect(d.regrowRelief(n), -0.3, reason: 'regrowth shift at $n');
+        expect(d.guardSpeedDelta(n), 0.05, reason: 'pace shift at $n');
+        expect(d.guardDelta(n), 0, reason: 'Normal never adds lights');
+        expect(d.revealMultiplierFor(n), 0.92, reason: 'fog shift at $n');
+      }
+      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+        final d = Difficulty.normal;
+        expect(d.budgetRelief(n), 0);
+        expect(d.hungerRelief(n), 0);
+        expect(d.regrowRelief(n), 0);
+        expect(d.guardSpeedDelta(n), 0);
+        expect(d.guardDelta(n), 0);
+        expect(d.revealMultiplierFor(n), 1.0);
+      }
+    });
+
     test(
-      'all three difficulties play the same board',
+      'past the tutorial, Hard plays a heavier board — rules, not luck',
       () {
-        // The invariant the whole design rests on. Anchors, heavies, springs,
-        // faults and pickups are placed from one shared RNG stream, so moving
-        // any density would shift every draw after it and relocate the treats —
-        // which is why difficulty scales none of them. This is the test that
-        // catches anyone adding one later.
-        for (var n = 1; n <= Campaign.length; n++) {
-          final normal = LevelGenerator.generate(specFor(Campaign.rulesFor(n)));
-          for (final d in [Difficulty.easy, Difficulty.hard]) {
-            final other = LevelGenerator.generate(
-              specFor(Campaign.rulesFor(n, difficulty: d)),
-            );
+        // The two-mode promise now reaches the ground itself. Asserted on the
+        // rules rather than the RNG output: a density claim belongs to the
+        // campaign, and a seed-by-seed comparison would pin fates we want the
+        // seeds free to have.
+        for (var n = Campaign.tutorialBand + 1; n <= Campaign.length; n++) {
+          final normal = Campaign.rulesFor(n);
+          final hard = Campaign.rulesFor(n, difficulty: Difficulty.hard);
+
+          for (final family in [
+            ('anchors', normal.anchorDensity, hard.anchorDensity),
+            ('brambles', normal.heavyDensity, hard.heavyDensity),
+            ('springs', normal.springDensity, hard.springDensity),
+            ('cracklines', normal.faultDensity, hard.faultDensity),
+            ('mire', normal.mireDensity, hard.mireDensity),
+            ('thicket', normal.thicketDensity, hard.thicketDensity),
+            ('hardpan', normal.hardpanDensity, hard.hardpanDensity),
+            ('thorns', normal.thornDensity, hard.thornDensity),
+          ]) {
             expect(
-              _board(other),
-              _board(normal),
-              reason: 'level $n generates a different board on ${d.label}',
+              family.$3,
+              greaterThanOrEqualTo(family.$2),
+              reason: 'level $n has fewer ${family.$1} on Hard',
             );
           }
+
+          expect(
+            hard.treats,
+            lessThanOrEqualTo(normal.treats),
+            reason: 'level $n hands out more treats on Hard',
+          );
+          expect(
+            hard.powerups,
+            lessThanOrEqualTo(normal.powerups),
+            reason: 'level $n hands out more powerups on Hard',
+          );
+          expect(
+            hard.treatTaps,
+            lessThanOrEqualTo(normal.treatTaps),
+            reason: 'level $n pays more taps per treat on Hard',
+          );
+          // …but never empty-handed: the floors exist, on both modes.
+          expect(hard.treats, greaterThanOrEqualTo(1));
+          expect(hard.powerups, greaterThanOrEqualTo(1));
+          expect(hard.treatTaps, greaterThanOrEqualTo(1));
         }
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );
 
     test(
-      'no level demands provably optimal play on Hard',
+      'no level is arithmetically impossible, even on Hard',
       () {
-        // The same fairness gate `campaign_sweep_test` walks for Normal. Hard
-        // tightens the budget, so it is the setting that could cross the floor.
+        // Hard's floor is par itself: the level demands essentially perfect
+        // play and nothing else. That is the boundary of "brutal but fair" —
+        // one tap less and the run cannot be completed at all.
         for (var n = 1; n <= Campaign.length; n++) {
           final rules = Campaign.rulesFor(n, difficulty: Difficulty.hard);
           if (!rules.budget) {
@@ -121,71 +221,40 @@ void main() {
           final level = LevelGenerator.generate(specFor(rules));
           final budget = (level.par * rules.budgetMultiplier).ceil();
           expect(
-            budget - level.par,
-            greaterThanOrEqualTo(2),
+            budget,
+            greaterThanOrEqualTo(level.par),
             reason:
-                'level $n on Hard gives ${budget - level.par} spare taps over '
-                'par ${level.par}',
+                'level $n on Hard budget $budget below par ${level.par}',
           );
         }
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );
 
-    test('Easy is never harder than Normal, and Hard never easier', () {
+    test('Hard is never easier than Normal, on any axis', () {
       for (var n = Campaign.tutorialBand + 1; n <= Campaign.length + 20; n++) {
-        final easy = Campaign.rulesFor(n, difficulty: Difficulty.easy);
         final normal = Campaign.rulesFor(n);
         final hard = Campaign.rulesFor(n, difficulty: Difficulty.hard);
 
         expect(
-          easy.budgetMultiplier,
-          greaterThanOrEqualTo(normal.budgetMultiplier),
-          reason: 'level $n: Easy has fewer taps',
-        );
-        expect(
           hard.budgetMultiplier,
           lessThanOrEqualTo(normal.budgetMultiplier),
           reason: 'level $n: Hard has more taps',
-        );
-
-        expect(
-          easy.hungerSecondsPerCell,
-          greaterThanOrEqualTo(normal.hungerSecondsPerCell),
-          reason: 'level $n: Easy has less time',
         );
         expect(
           hard.hungerSecondsPerCell,
           lessThanOrEqualTo(normal.hungerSecondsPerCell),
           reason: 'level $n: Hard has more time',
         );
-
-        expect(
-          easy.guardSpeed,
-          lessThanOrEqualTo(normal.guardSpeed),
-          reason: 'level $n: Easy has faster patrols',
-        );
         expect(
           hard.guardSpeed,
           greaterThanOrEqualTo(normal.guardSpeed),
           reason: 'level $n: Hard has slower patrols',
         );
-
-        expect(
-          easy.guards,
-          lessThanOrEqualTo(normal.guards),
-          reason: 'level $n: Easy has more patrols',
-        );
         expect(
           hard.guards,
           greaterThanOrEqualTo(normal.guards),
           reason: 'level $n: Hard has fewer patrols',
-        );
-
-        expect(
-          easy.regrowDelay,
-          greaterThanOrEqualTo(normal.regrowDelay),
-          reason: 'level $n: Easy regrows faster',
         );
         expect(
           hard.regrowDelay,
@@ -195,21 +264,29 @@ void main() {
       }
     });
 
-    test('a mechanic the campaign has taught never disappears on Easy', () {
-      // Easy quietens patrols; it must not remove them from a level whose whole
-      // point is that patrols exist.
+    test('a taught mechanic survives even Hard', () {
+      // +2 lights per mechanic, floored at one wherever the mechanic exists —
+      // never zero, because a pressure with its answer withheld is not
+      // difficulty.
       for (var n = Campaign.guardsFrom; n <= Campaign.length; n++) {
         expect(
-          Campaign.rulesFor(n, difficulty: Difficulty.easy).guards,
+          Campaign.rulesFor(n, difficulty: Difficulty.hard).guards,
           greaterThanOrEqualTo(1),
-          reason: 'level $n has no patrols at all on Easy',
+          reason: 'level $n has no patrols at all, even on Hard',
         );
       }
       for (var n = Campaign.sentriesFrom; n <= Campaign.length; n++) {
         expect(
-          Campaign.rulesFor(n, difficulty: Difficulty.easy).sentries,
+          Campaign.rulesFor(n, difficulty: Difficulty.hard).sentries,
           greaterThanOrEqualTo(1),
-          reason: 'level $n has no sentries at all on Easy',
+          reason: 'level $n has no sentries at all, even on Hard',
+        );
+      }
+      for (var n = Campaign.blinkerFrom; n <= Campaign.length; n++) {
+        expect(
+          Campaign.rulesFor(n, difficulty: Difficulty.hard).blinkers,
+          greaterThanOrEqualTo(1),
+          reason: 'level $n has no blinkers at all, even on Hard',
         );
       }
     });

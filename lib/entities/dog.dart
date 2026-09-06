@@ -74,6 +74,19 @@ class Dog {
   /// opening" fallback from walking her back and forth over old ground.
   final Set<HexCoord> _visited = {};
 
+  /// The cells she has stood in, in order, deduped at the point of change.
+  /// This is what a WHISTLE walks back along: her own trail, never a
+  /// direction the player points.
+  final List<HexCoord> trail = [];
+
+  /// The cell she stood in [steps] entries back along her trail, or null if
+  /// she has not been anywhere yet. Her current cell is the list's tail, and
+  /// is never *back* — a whistle to where she stands whistles nothing.
+  HexCoord? trailCellBack(int steps) {
+    final index = trail.length - 1 - steps;
+    return index >= 0 ? trail[index] : null;
+  }
+
   Offset _lastPawprintAt = Offset.zero;
   int _fieldVersionSeen = -1;
   List<HexCoord> _route = const [];
@@ -137,11 +150,25 @@ class Dog {
     required int fieldVersion,
     required bool regrowthActive,
     double speedMultiplier = 1.0,
+
+    /// How much of her steering gets through. One everywhere except drift
+    /// ice, where the mechanic is that it barely gets through at all.
+    double controlScale = 1.0,
+
+    /// What the ground under her does to her speed. One everywhere except
+    /// mire, where crossing costs pace rather than taps.
+    double groundSpeedScale = 1.0,
     Set<HexCoord> blocked = const {},
   }) {
     final previousCell = cell;
     cell = layout.toHex(position);
     _visited.add(cell);
+    if (trail.isEmpty || trail.last != cell) {
+      trail.add(cell);
+      if (trail.length > 24) {
+        trail.removeAt(0);
+      }
+    }
     final evicted = _evictIfWalledIn(grid, layout);
 
     // A patrol stepping one cell along changes where she may go without
@@ -173,7 +200,15 @@ class Dog {
     } else if (launchFor > 0) {
       launchFor = math.max(0, launchFor - dt);
     } else {
-      _steer(dt, grid, layout, tuning, speedMultiplier);
+      _steer(
+        dt,
+        grid,
+        layout,
+        tuning,
+        speedMultiplier,
+        controlScale,
+        groundSpeedScale,
+      );
     }
     _move(dt, grid, layout);
     _updateAnimationState(dt, previousVelocity, layout);
@@ -357,6 +392,8 @@ class Dog {
     HexLayout layout,
     TuningConfig tuning,
     double speedMultiplier,
+    double controlScale,
+    double groundSpeedScale,
   ) {
     final aim = _aimPoint(grid, layout);
     _movementAim = aim;
@@ -384,7 +421,8 @@ class Dog {
       // Sprint (§6.2) scales the whole curve rather than raising the floor, so
       // a tight channel is still slower than open ground while it runs — the
       // openness tension survives the powerup instead of being flattened by it.
-      targetSpeed = hexesPerSecond * speedMultiplier * hexWidth;
+      targetSpeed =
+          hexesPerSecond * speedMultiplier * hexWidth * groundSpeedScale;
     }
 
     var desired = Offset.zero;
@@ -402,7 +440,11 @@ class Dog {
 
     // Momentum (§2.2): the dog keeps walking after a gap opens, so overshoot
     // is possible and hesitation has a cost.
-    final blend = (tuning.momentum * dt).clamp(0.0, 1.0);
+    //
+    // Drift ice scales the blend, not the target: she still *wants* the same
+    // thing, she just cannot get there from here — which is exactly what
+    // sliding means.
+    final blend = (tuning.momentum * controlScale * dt).clamp(0.0, 1.0);
     velocity += (desired - velocity) * blend;
   }
 

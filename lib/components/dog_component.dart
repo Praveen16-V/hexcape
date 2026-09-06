@@ -11,15 +11,15 @@ import 'movement_cue.dart';
 
 /// The dog, her pawprints, and the warnings drawn around her.
 ///
-/// She is always upright and mirrored by travel direction rather than rotated to
-/// her heading — a side-view animal rotated to face downward ends up upside
-/// down. Direction still reads, because the head, tail and lean all shift with
-/// where she is going.
+/// She is drawn from art — `assets/pets/<id>.png`, one sprite per coat — under
+/// the same squash-and-stretch, lean and bob the code-drawn body used to
+/// carry, because those transforms are what sell the acceleration. The sprite
+/// itself is a flat side-view dog facing right; travel direction flips it,
+/// and a weary run dims it rather than reshaping it.
 ///
-/// Redrawn after she was described as looking like a toy, and the difference is
-/// almost entirely silhouette: a snout that tapers to a nose, a brow over the
-/// eye, legs with a knee in them, a chest and haunch drawn as one line instead
-/// of a stack of ovals. Still entirely code — no art assets — but animal-shaped.
+/// If her art is absent (a test, an asset bundle not yet loaded), she draws
+/// the way she always did — the procedural path below stands as fallback, so
+/// no context can lose her entirely.
 class DogComponent extends Component {
   DogComponent(this.game) : super(priority: 20);
 
@@ -98,15 +98,58 @@ class DogComponent extends Component {
     canvas.scale(_flip * stretch, squash + breath);
 
     _renderGlow(canvas, r, alert);
-    // Far legs first, then body, then near legs — so she has depth rather than
-    // four legs all pasted on the same plane.
-    _renderLegs(canvas, dog, r, far: true);
-    _renderTail(canvas, dog, r, alert);
-    _renderBody(canvas, r, weary);
-    _renderLegs(canvas, dog, r, far: false);
-    _renderHead(canvas, dog, r, alert, weary, startle);
+
+    final sprite = game.petSprites[_pet.id];
+    if (sprite != null) {
+      _renderSpriteBody(canvas, sprite, r, weary);
+    } else {
+      // The fallback: the full procedural dog, unchanged. She appears in
+      // tests and during the first frames before the bundle answers.
+      _renderLegs(canvas, dog, r, far: true);
+      _renderTail(canvas, dog, r, alert);
+      _renderBody(canvas, r, weary);
+      _renderLegs(canvas, dog, r, far: false);
+      _renderHead(canvas, dog, r, alert, weary, startle);
+    }
 
     canvas.restore();
+  }
+
+  /// The art, with the transforms that carry its life applied outside it.
+  ///
+  /// The sprite is authored facing right, feet on its own baseline, a slight
+  /// transparent margin around the trim. Placed so her feet sit at the shadow
+  /// rather than at her pivot — the shadow is the ground she stands on.
+  void _renderSpriteBody(Canvas canvas, Image sprite, double r, double weary) {
+    const fullH = 278.0;
+    const fullW = 320.0;
+    final h = r * 2.72;
+    final w = h * fullW / fullH;
+    // Feet at 0.78r (the shadow's heart); the trim's bottom margin eats a
+    // little of the height, so the paint rect nudges up to keep her planted.
+    final dst = Rect.fromCenter(
+      center: Offset(0, r * 0.78 - h * 0.45),
+      width: w,
+      height: h,
+    );
+    _fill.maskFilter = null;
+    final paint = Paint();
+    if (weary > 0 || (game.isOver && game.phase == GamePhase.starved)) {
+      // Tired, she drops a little of her colour. Cheaper than a pose, and the
+      // shadow and glow stay untouched by it.
+      final dim = (weary * 0.32 + (game.phase == GamePhase.starved ? 0.5 : 0))
+          .clamp(0.0, 0.7);
+      paint.colorFilter = ColorFilter.mode(
+        Color.lerp(const Color(0xFFFFFFFF), const Color(0xFF8A90A0), dim)!,
+        BlendMode.modulate,
+      );
+    }
+    canvas.drawImageRect(
+      sprite,
+      const Rect.fromLTWH(0, 0, fullW, fullH),
+      dst,
+      paint,
+    );
   }
 
   void _renderShadow(Canvas canvas, double r, double lift) {

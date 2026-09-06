@@ -12,8 +12,14 @@ enum TapOutcome {
   /// the game owns the mutation.
   hit,
 
-  /// The tap landed squarely on an anchor. Reported rather than redirected.
+  /// The tap landed squarely on a wall — a rivet or an overgrowth heart.
+  /// Reported rather than redirected.
   anchor,
+
+  /// The tap landed squarely on a closed lockbar gate. Reported separately
+  /// because the thing to say about it is different: it is not "never", it is
+  /// "not until you have found the switch".
+  locked,
 
   /// Too far from the dog to edit (§2.1).
   outOfRange,
@@ -27,6 +33,10 @@ enum TapOutcome {
   /// to learn that *where they are standing* is what stopped them, and a tap
   /// that quietly did nothing would teach that the tile is simply inert.
   noFooting,
+
+  /// Scaffold ground with open ground already beside it — the inverse refusal.
+  /// The tile does not want you close; carve it from further out.
+  tooClose,
 
   /// Inside a sentry's light, which refuses taps.
   ///
@@ -50,8 +60,8 @@ class TapResult {
 /// forgiveness is what lets difficulty scale through density without punishing
 /// finger precision (§7).
 ///
-/// One deliberate exception: a tap that lands squarely on an anchor is
-/// reported as an anchor, not quietly redirected to a clearable neighbour.
+/// One deliberate exception: a tap that lands squarely on a wall is
+/// reported as a wall, not quietly redirected to a clearable neighbour.
 /// Silently doing something else with a deliberate tap teaches the player the
 /// wrong model of the rules.
 class InputSystem {
@@ -73,23 +83,29 @@ class InputSystem {
 
     final direct = layout.toHex(point);
     final directCell = grid.at(direct);
-    // Checked before the anchor case and before any snapping: a warded tap must
-    // report the light wherever it landed, or a tap into a sentry beside an
-    // anchor would blame the rivets instead.
+    // Checked before the wall case and before any snapping: a warded tap must
+    // report the light wherever it landed, or a tap into a sentry beside a
+    // wall would blame the rivets instead.
     if (warded.contains(direct) && directCell != null) {
       return TapResult(TapOutcome.warded, direct);
     }
-    if (directCell != null && directCell.type == HexType.anchor) {
-      return TapResult(TapOutcome.anchor, direct);
+    if (directCell != null && directCell.reportsRefusal) {
+      return TapResult(
+        directCell.isLockedGate ? TapOutcome.locked : TapOutcome.anchor,
+        direct,
+      );
     }
-    // Checked before the snap for the same reason the anchor case is: a
-    // deliberate tap on sunken ground must say why it failed, not silently
-    // shatter a neighbour the player was not aiming at.
-    if (directCell != null &&
-        directCell.isClearable &&
-        directCell.type.needsFooting &&
-        !grid.hasFooting(direct)) {
-      return TapResult(TapOutcome.noFooting, direct);
+    // Checked before the snap for the same reason the wall case is: a
+    // deliberate tap on ground that refuses *position* must say why it
+    // failed, not silently shatter a neighbour the player was not aiming at.
+    if (directCell != null && directCell.isClearable) {
+      final footed = grid.hasFooting(direct);
+      if (directCell.type.needsFooting && !footed) {
+        return TapResult(TapOutcome.noFooting, direct);
+      }
+      if (directCell.type.needsDistance && footed) {
+        return TapResult(TapOutcome.tooClose, direct);
+      }
     }
 
     bool inReach(HexCoord c) =>

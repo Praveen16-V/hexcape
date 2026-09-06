@@ -21,10 +21,11 @@ class LevelRecord {
 
   /// The setting [stars] was earned on.
   ///
-  /// Stars are scored against the level's *own* tap budget, so an Easy run —
-  /// which widens that budget — earns three of them more easily than a Normal
-  /// one. Recording which setting paid for them is what lets Easy still count
-  /// toward progress without quietly making every star mean less.
+  /// Stars are scored against the level's *own* tap budget, and Hard tightens
+  /// that budget: three stars on Hard are strictly the harder trophy, never a
+  /// cheaper one. Recording which setting paid for them is what the map's
+  /// 'H' badge reads — a Hard clear beside a Normal clear is a different
+  /// thing, and the file should know the difference.
   ///
   /// Records written before this existed read as [Difficulty.normal], which is
   /// what they were.
@@ -45,7 +46,6 @@ class Progress {
 
   static const _unlockedKey = 'unlocked';
   static const _endlessKey = 'endless_best';
-  static const _endlessEasyKey = 'endless_best_easy';
   static const _petKey = 'pet';
 
   // Player settings. Separate keys rather than one blob so a new setting never
@@ -125,18 +125,17 @@ class Progress {
   /// The highest level the player may start. Always at least one.
   int get unlocked => (_prefs.getInt(_unlockedKey) ?? 1).clamp(1, 1 << 20);
 
-  /// The deepest endless board cleared on Normal or Hard.
+  /// The deepest endless board cleared, both modes counted together.
   ///
-  /// The headline record, and deliberately not "the deepest board cleared on
-  /// any setting": Easy widens the budget and slows the patrols, so folding its
-  /// runs in here would let the number climb without the play behind it having
-  /// got any better. Easy keeps its own depth in [endlessBestOn].
+  /// A Hard clear is the strictly harder feat of the same generated run, so
+  /// folding the two costs the record nothing; what the two-mode design won't
+  /// accept is a third number to celebrate.
   int get endlessBest => _prefs.getInt(_endlessKey) ?? 0;
 
-  /// The deepest endless board cleared on one setting.
-  int endlessBestOn(Difficulty difficulty) => difficulty == Difficulty.easy
-      ? _prefs.getInt(_endlessEasyKey) ?? 0
-      : endlessBest;
+  /// The deepest endless board cleared on one setting. With two modes both of
+  /// which crown the deeper run, this is simply [endlessBest] — kept as a call
+  /// site compatible name because three files already ask the question.
+  int endlessBestOn(Difficulty difficulty) => endlessBest;
 
   String get pet => _prefs.getString(_petKey) ?? 'dog';
 
@@ -200,7 +199,7 @@ class Progress {
       // Follows the stars, because it exists to say what they cost. A run that
       // beats the star count owns the badge outright; one that merely matches
       // it upgrades the badge only by having done it on a harder setting. What
-      // this rules out is the one that would sting: a casual Easy replay
+      // this rules out is the one that would sting: a casual replay
       // downgrading a Hard-earned mark on a level already finished.
       difficulty: beatsStars
           ? difficulty
@@ -231,10 +230,7 @@ class Progress {
     if (level <= Campaign.length || level <= endlessBestOn(difficulty)) {
       return;
     }
-    await _prefs.setInt(
-      difficulty == Difficulty.easy ? _endlessEasyKey : _endlessKey,
-      level,
-    );
+    await _prefs.setInt(_endlessKey, level);
   }
 
   Future<void> choosePet(String name) => _prefs.setString(_petKey, name);
