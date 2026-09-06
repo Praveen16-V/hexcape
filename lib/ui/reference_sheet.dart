@@ -138,6 +138,47 @@ List<ReferenceEntry> referenceFor(int unlocked) => [
     if (e.unlocksAt <= unlocked) e,
 ];
 
+/// What a tile is, for the in-place inspector.
+///
+/// The same entries the sheet is built from rather than a second set of copy.
+/// One description of a spring means the card and the sheet cannot drift, and
+/// `screens_test` already refuses to let a type exist without one.
+ReferenceEntry? referenceForHex(HexType type) {
+  for (final e in allReferenceEntries) {
+    if (e.hex == type) return e;
+  }
+  return null;
+}
+
+ReferenceEntry? referenceForPickup(PickupKind kind) {
+  for (final e in allReferenceEntries) {
+    if (e.pickup == kind) return e;
+  }
+  return null;
+}
+
+/// An entry drawn as the game itself draws it.
+///
+/// Public because the inspector card shows the same mark the sheet does, and a
+/// hand-drawn lookalike is exactly how a legend starts lying about the board.
+class ReferenceMark extends StatelessWidget {
+  const ReferenceMark({required this.entry, this.size = 46, super.key});
+
+  final ReferenceEntry entry;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: entry.icon != null
+          ? Icon(entry.icon, color: Palette.dogBody, size: size * 0.52)
+          : CustomPaint(painter: _EntryPainter(entry)),
+    );
+  }
+}
+
 const allReferenceEntries = <ReferenceEntry>[
   ReferenceEntry(
     section: ReferenceSection.hexes,
@@ -183,6 +224,25 @@ const allReferenceEntries = <ReferenceEntry>[
         'way through, but only if you run it in one go.',
     hex: HexType.fault,
     unlocksAt: Campaign.faultsFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.hexes,
+    name: 'Slope',
+    blurb:
+        'Clears in one tap, then pushes her the way the arrow points — not '
+        'the way she was walking. The only tile you can aim in advance, so '
+        'read it before you open it. HEEL will hold her out of one.',
+    hex: HexType.slope,
+    unlocksAt: Campaign.slopesFrom,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.hexes,
+    name: 'Sunken',
+    blurb:
+        'Only clears when something beside it is already open, so you cannot '
+        'reach across it — you have to carve up to it a tile at a time.',
+    hex: HexType.sunken,
+    unlocksAt: Campaign.sunkenFrom,
   ),
   ReferenceEntry(
     section: ReferenceSection.obstacles,
@@ -344,13 +404,7 @@ class _EntryRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 46,
-            height: 46,
-            child: entry.icon != null
-                ? Icon(entry.icon, color: Palette.dogBody, size: 24)
-                : CustomPaint(painter: _EntryPainter(entry)),
-          ),
+          ReferenceMark(entry: entry),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -473,6 +527,28 @@ class _EntryPainter extends CustomPainter {
             ..lineTo(centre.dx + r * 0.12, centre.dy + r * 0.5),
           stroke,
         );
+      case HexType.slope:
+        // An arrow, because the direction *is* the mechanic. The sheet draws
+        // it pointing right; on the board it points wherever the cell does.
+        stroke.color = Palette.slopeEdge;
+        canvas.drawPath(
+          Path()
+            ..moveTo(centre.dx - r * 0.44, centre.dy)
+            ..lineTo(centre.dx + r * 0.34, centre.dy)
+            ..moveTo(centre.dx + r * 0.04, centre.dy - r * 0.3)
+            ..lineTo(centre.dx + r * 0.38, centre.dy)
+            ..lineTo(centre.dx + r * 0.04, centre.dy + r * 0.3),
+          stroke,
+        );
+      case HexType.sunken:
+        // Nested rings, receding. Ground that is further away than it looks.
+        stroke.color = Palette.sunkenEdge;
+        for (final scale in [0.62, 0.4]) {
+          canvas.drawPath(
+            HexLayout.pathFromCorners(HexLayout.cornersAt(centre, r * scale)),
+            stroke,
+          );
+        }
     }
   }
 
@@ -482,6 +558,8 @@ class _EntryPainter extends CustomPainter {
     HexType.anchor => Palette.anchorTop,
     HexType.spring => Palette.springTop,
     HexType.fault => Palette.faultTop,
+    HexType.slope => Palette.slopeTop,
+    HexType.sunken => Palette.sunkenTop,
   };
 
   static Color _edgeOf(HexType type) => switch (type) {
@@ -490,6 +568,8 @@ class _EntryPainter extends CustomPainter {
     HexType.anchor => Palette.anchorEdge,
     HexType.spring => Palette.springEdge,
     HexType.fault => Palette.faultEdge,
+    HexType.slope => Palette.slopeEdge,
+    HexType.sunken => Palette.sunkenEdge,
   };
 
   @override

@@ -380,7 +380,10 @@ void main() {
           announced++;
         }
       }
-      expect(announced, 8);
+      // One per gate. The number is a tripwire, not a target: it goes up only
+      // when a mechanic is added, and a banner on a level that introduces
+      // nothing is the failure this is watching for.
+      expect(announced, 10);
     });
 
     test('the powerup pool only ever widens', () {

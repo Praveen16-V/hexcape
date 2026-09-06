@@ -26,7 +26,9 @@ import '../systems/streak_system.dart';
 import '../systems/reveal_system.dart';
 import '../systems/softlock_system.dart';
 import '../theme/palette.dart';
+import 'board_camera.dart';
 import 'daily.dart';
+import 'difficulty.dart';
 import 'haptics.dart';
 import 'juice.dart';
 import 'level_rules.dart';
@@ -116,6 +118,20 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   late HexLayout layout;
   late Dog dog;
 
+  /// How the board is framed. At [BoardCamera.minZoom] this changes nothing at
+  /// all — see [_recomputeLayout].
+  final BoardCamera boardCamera = BoardCamera();
+
+  /// The silhouette's extent in unit space, cached per level.
+  ///
+  /// [_recomputeLayout] now runs every frame the camera moves rather than only
+  /// on resize, and measuring three hundred cells to rediscover a number that
+  /// changes once per level is the kind of thing that shows up in [frameMs].
+  late UnitBounds _bounds;
+
+  /// The hex size the whole board fits at. [BoardCamera.zoom] multiplies it.
+  double fitHexSize = 1;
+
   final math.Random _idleRng = math.Random();
   final RegrowthSystem _regrowth = RegrowthSystem();
   final HungerSystem hunger = HungerSystem();
@@ -194,6 +210,27 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   /// The coat she is wearing (§9.2). Purely cosmetic — see [Pet].
   Pet pet = Pets.scout;
+
+  /// What the player is holding a finger on, for the inspector card.
+  ///
+  /// The game reports *what* was held, not what to say about it: the copy lives
+  /// with the reference sheet, which is the one place a mechanic is described,
+  /// and a second description here is how a legend starts lying about the
+  /// board.
+  ///
+  /// [hex] is null for ground she has not been near yet. State is never hidden
+  /// — a hole is obviously a hole — but type is, and an inspector that answered
+  /// through the fog would hand the player the obstacle map the fog exists to
+  /// withhold (see [HexCell.revealed]).
+  ({HexCoord coord, PickupKind? pickup, HexType? hex})? inspecting;
+
+  /// Seconds the inspector card has left. It fades on its own rather than
+  /// needing to be dismissed: her clock is running, and a card that has to be
+  /// closed is a card that costs the player time to have opened.
+  double inspectFor = 0;
+
+  /// How long the card stays up.
+  static const inspectSeconds = 3.2;
 
   /// A transient line at the top of the board, for things that need words.
   String? banner;
@@ -332,6 +369,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   EdgeInsets _hudInsets = const EdgeInsets.fromLTRB(14, 96, 14, 48);
   EdgeInsets get hudInsets => _hudInsets;
 
+  /// The screen area the board is framed in — everything the HUD has not
+  /// claimed.
+  ///
+  /// One definition, because three things need to agree about it: the fit
+  /// calculation, the camera's clamp, and the clip that keeps a magnified board
+  /// out from under the HUD.
+  Rect get boardViewport => Rect.fromLTRB(
+    _hudInsets.left,
+    _hudInsets.top,
+    math.max(_hudInsets.left + 1, size.x - _hudInsets.right),
+    math.max(_hudInsets.top + 1, size.y - _hudInsets.bottom),
+  );
+
   /// The HUD reports its measured bounds, including safe areas and text scale.
   void setHudInsets(EdgeInsets insets) {
     if (_hudInsets == insets) return;
@@ -372,6 +422,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   bool get isDaily => daily != null;
 
+  /// The setting this run is actually being played on.
+  ///
+  /// Fixed when the board is built, not read live from [tuning]. The tuning
+  /// object is the *next* run's setting — `_applySettings` rewrites it from
+  /// preferences every time the player touches the settings sheet — so reading
+  /// it here would let someone change the volume mid-level and have the run
+  /// they are playing get recorded under a difficulty they were not playing.
+  ///
+  /// Always [Difficulty.normal] for the daily, whatever the player has chosen
+  /// elsewhere. One board for everyone is what makes a streak worth comparing,
+  /// and that has to cover the fog and the hints as much as the rules.
+  Difficulty difficultyForRun = Difficulty.normal;
+
   /// Starts today's board. Its [levelNumber] is the level it borrows its rules
   /// from, so everything that reasons about difficulty keeps working; only what
   /// gets *written* at the end differs.
@@ -386,9 +449,18 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Builds a level and resets everything that belongs to a run.
   void startLevel({int? level, bool reuseSeed = false}) {
     levelNumber = level ?? levelNumber;
-    rules = daily?.rules ?? Campaign.rulesFor(levelNumber);
+    // The daily is difficulty-less by construction: its rules are precomputed
+    // for the day, and one board for everyone is the whole promise.
+    difficultyForRun = isDaily ? Difficulty.normal : tuning.difficulty;
+    rules =
+        daily?.rules ??
+        Campaign.rulesFor(levelNumber, difficulty: difficultyForRun);
     if (tuning.followCampaign) {
       _applyRules(rules);
+      // Fog is the one difficulty lever with no authored per-level value, so it
+      // is scaled here rather than through the rules.
+      tuning.revealFactor =
+          tuning.revealBase * difficultyForRun.revealMultiplier;
     }
     seed = rules.seed;
 
@@ -401,6 +473,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         heavyDensity: tuning.heavyDensity,
         springDensity: tuning.springDensity,
         faultDensity: tuning.faultDensity,
+        slopeDensity: tuning.slopeDensity,
+        sunkenDensity: tuning.sunkenDensity,
         guards: tuning.guardCount,
         sentries: tuning.sentryCount,
         guardSpeed: tuning.guardSpeed,
@@ -414,9 +488,14 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ),
     );
     grid = this.level.grid;
+    _bounds = unitBounds(grid.cells.keys);
     levelVersion++;
     fieldVersion++;
 
+    // The zoom carries across levels — it is a comfort setting, and a player
+    // who needs the board bigger needs it bigger on the next one too — but the
+    // focus does not, because it points at a board that no longer exists.
+    boardCamera.focus = BoardCamera.centreOf(_bounds);
     _recomputeLayout();
 
     // The dog starts standing in the one open cell on the board. Everything
@@ -559,6 +638,32 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     });
   }
 
+  /// Step the board magnification, wrapping back to fit.
+  ///
+  /// The HUD control is the *only* way to change this, and that is a decision
+  /// rather than an omission. Pinch-to-zoom cannot work here: carving happens
+  /// on tap-*down*, and Flutter delivers a tap-down the instant a finger lands,
+  /// before the gesture arena has decided whether a second finger is coming.
+  /// The first finger of a pinch would clear a tile and spend a tap from a
+  /// rationed budget every time. A tap that costs the player a resource they
+  /// are short of is not a gesture worth having, and moving the carve to
+  /// tap-up to make room for one would put latency on the only action in the
+  /// game.
+  void cycleZoom() {
+    boardCamera.cycle();
+    if (!boardCamera.isFit && _ready) {
+      // Open framed on her rather than gliding in from wherever the last zoom
+      // left the view. Her unit position is the same at every zoom, so this is
+      // read off the layout that is about to be replaced.
+      boardCamera.focus = Offset(
+        (dog.position.dx - layout.origin.dx) / layout.size,
+        (dog.position.dy - layout.origin.dy) / layout.size,
+      );
+    }
+    if (_ready) _recomputeLayout();
+    progress?.setZoom(boardCamera.zoom);
+  }
+
   void retry() => startLevel(reuseSeed: true);
 
   void regenerate() => startLevel();
@@ -612,6 +717,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ..heavyDensity = r.heavyDensity
       ..springDensity = r.springDensity
       ..faultDensity = r.faultDensity
+      ..slopeDensity = r.slopeDensity
+      ..sunkenDensity = r.sunkenDensity
       ..guardCount = r.guards
       ..sentryCount = r.sentries
       ..guardSpeed = r.guardSpeed
@@ -629,30 +736,44 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// than generating a different one.
   void _recomputeLayout() {
     final previous = _ready ? layout : null;
-    final bounds = unitBounds(grid.cells.keys);
+    final bounds = _bounds;
 
     // Cell positions are centres, so allow half a hex of bleed on every side.
     final unitWidth = (bounds.maxX - bounds.minX) + _sqrt3;
     final unitHeight = (bounds.maxY - bounds.minY) + 2.0;
 
-    final availableWidth = math.max(1.0, size.x - _hudInsets.horizontal);
-    final availableHeight = math.max(1.0, size.y - _hudInsets.vertical);
-    final hexSize = math.min(
+    final viewport = boardViewport;
+    final availableWidth = viewport.width;
+    final availableHeight = viewport.height;
+    // The zoom the whole board fits at. Everything the game did before there
+    // was a camera is this number with a multiplier of one.
+    fitHexSize = math.min(
       availableWidth / unitWidth,
       availableHeight / unitHeight,
     );
+    final hexSize = fitHexSize * boardCamera.zoom;
 
-    final unitCentreX = (bounds.minX + bounds.maxX) / 2;
-    final unitCentreY = (bounds.minY + bounds.maxY) / 2;
-    final screenCentre = Offset(
-      _hudInsets.left + availableWidth / 2,
-      _hudInsets.top + availableHeight / 2,
-    );
+    // At fit the board is pinned to its own centre rather than merely clamped
+    // there. The clamp would land on the same point, but 'merely' is doing a
+    // lot of work in a game that asserts every hex corner sits inside the HUD
+    // insets: an exact equality is worth more than a value that rounds to it.
+    if (boardCamera.isFit) {
+      boardCamera.focus = BoardCamera.centreOf(bounds);
+    } else {
+      boardCamera.focus = boardCamera.clampedFocus(
+        bounds: bounds,
+        hexSize: hexSize,
+        viewport: viewport.size,
+      );
+    }
+
+    final screenCentre = viewport.center;
 
     layout = HexLayout(
       size: hexSize,
       origin:
-          screenCentre - Offset(unitCentreX * hexSize, unitCentreY * hexSize),
+          screenCentre -
+          Offset(boardCamera.focus.dx * hexSize, boardCamera.focus.dy * hexSize),
     );
 
     // Carry the dog across the rescale so a resize mid-run is not a teleport.
@@ -669,12 +790,22 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   @override
   void renderTree(Canvas canvas) {
     final shake = juice.offset;
-    if (shake == Offset.zero) {
+    // Magnified, the board is larger than the area it is framed in, so without
+    // this it would slide under the HUD and the level number would be read
+    // against moving hexes. At fit the board already sits inside the insets and
+    // the clip touches nothing, which is why it is only paid for when zoomed.
+    final clip = boardCamera.isFit ? null : boardViewport;
+    if (shake == Offset.zero && clip == null) {
       super.renderTree(canvas);
       return;
     }
     canvas.save();
-    canvas.translate(shake.dx, shake.dy);
+    if (clip != null) {
+      canvas.clipRect(clip);
+    }
+    if (shake != Offset.zero) {
+      canvas.translate(shake.dx, shake.dy);
+    }
     super.renderTree(canvas);
     canvas.restore();
   }
@@ -725,6 +856,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         banner = null;
       }
     }
+    if (inspectFor > 0) {
+      inspectFor -= dt;
+      if (inspectFor <= 0) {
+        inspecting = null;
+      }
+    }
     _decayCellVisuals(dt);
 
     if (step <= 0) {
@@ -745,6 +882,41 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       case GamePhase.softLocked:
         despair = math.min(1, despair + dt * 3);
     }
+
+    _updateCamera(dt);
+  }
+
+  /// Keep the dog framed while the board is magnified.
+  ///
+  /// Nothing here runs at fit, where the whole board is on screen and there is
+  /// by definition nothing to follow.
+  void _updateCamera(double dt) {
+    if (boardCamera.isFit || dt <= 0) {
+      return;
+    }
+    final viewport = boardViewport;
+    final hexSize = layout.size;
+
+    // Her position and heading in unit space, which is the space the camera
+    // thinks in — pixels move under it every time the zoom changes.
+    final dogUnit = Offset(
+      (dog.position.dx - layout.origin.dx) / hexSize,
+      (dog.position.dy - layout.origin.dy) / hexSize,
+    );
+    final heading = Offset(
+      dog.velocity.dx / hexSize,
+      dog.velocity.dy / hexSize,
+    );
+
+    boardCamera.follow(
+      boardCamera.targetFor(dogUnit, heading),
+      Offset(viewport.width / (2 * hexSize), viewport.height / (2 * hexSize)),
+      dt,
+      // Reduced motion means no easing anywhere else in the game; a gliding
+      // viewport is the largest moving thing on screen, so it honours that too.
+      instant: tuning.reducedMotion,
+    );
+    _recomputeLayout();
   }
 
   void _updateRun(double dt) {
@@ -821,6 +993,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     _updateScent();
     _collectPickups();
     _checkSpring();
+    _checkSlope();
     if (playing) {
       _checkCaught();
     }
@@ -971,8 +1144,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Never during the tutorial: a script is already saying something specific
   /// about right now, and two sources of guidance disagreeing is worse than
   /// neither.
+  /// Withheld on Hard by reading the setting here rather than by writing
+  /// `tuning.hintsEnabled`, which mirrors the player's own persisted toggle —
+  /// overwriting that would make their switch appear to flip itself.
   bool get hintVisible =>
       tuning.hintsEnabled &&
+      !difficultyForRun.suppressesHints &&
       tuning.fogEnabled &&
       phase == GamePhase.playing &&
       !isOver &&
@@ -1038,13 +1215,17 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       if (today != null) {
         progress?.recordDailyClear(today);
       } else if (isEndless) {
-        progress?.recordEndlessClear(level: levelNumber);
+        progress?.recordEndlessClear(
+          level: levelNumber,
+          difficulty: difficultyForRun,
+        );
       } else {
         progress?.recordWin(
           level: levelNumber,
           stars: stars,
           taps: taps,
           time: levelTime,
+          difficulty: difficultyForRun,
         );
       }
     }
@@ -1210,6 +1391,41 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     sfx.play(Sound.powerup, gain: 0.7);
     Haptics.medium();
   }
+
+  void _checkSlope() {
+    if (_springCooldown > 0 || dog.isLaunched) {
+      return;
+    }
+    final cell = grid.at(dog.cell);
+    if (cell == null || cell.type != HexType.slope) {
+      return;
+    }
+    // The tile's own direction, never hers. That is the entire difference
+    // between this and a spring, and it is what makes a slope something a
+    // player can route through on purpose.
+    final away =
+        layout.toPixel(dog.cell + HexCoord.directions[cell.slopeDirection]) -
+        layout.toPixel(dog.cell);
+    if (away.distance < 1e-6) {
+      return;
+    }
+    // Shares the spring's cooldown deliberately: it exists to stop two throws
+    // volleying her about with no input in between, and it does not care which
+    // kind of tile did the throwing.
+    _springCooldown = 0.5;
+    dog.launch(away, layout.width * _slopeHexesPerSecond, duration: 0.26);
+    juice.shake(1.6);
+    sfx.play(Sound.powerup, gain: 0.45);
+    Haptics.light();
+  }
+
+  /// How fast a slope pushes her, in hex widths per second.
+  ///
+  /// Well under the spring's, and short with it. A spring is a throw you set up
+  /// and spend; a slope is a lane you either use or stay out of, so it has to
+  /// move her far enough to matter and not so far that reading the arrow stops
+  /// being enough to predict where she lands.
+  static const _slopeHexesPerSecond = 5.0;
 
   /// How fast a spring throws her, in hex widths per second. Paired with the
   /// launch duration in [Dog.launch] this is roughly three cells of travel
@@ -1449,13 +1665,77 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     }
   }
 
+  /// Hold a finger on a tile to be told what it is.
+  ///
+  /// Flame delivers this *after* [onTapDown], never instead of it, because
+  /// Flutter hands over a tap-down the moment a finger lands and only later
+  /// decides the gesture was a hold. That ordering is what makes the feature
+  /// affordable rather than awkward: the tiles a player actually wants to ask
+  /// about are the ones a tap cannot do anything with — a riveted wall, ground
+  /// out of reach, a tile already open — and those all cost nothing to tap. A
+  /// hold on a wall is free. A hold on a tile in reach carves it, but that is
+  /// the tap the player already spent by touching it.
+  @override
+  void onLongTapDown(TapDownEvent event) {
+    if (!_ready || isOver || tutorialReading || !tuning.hintsEnabled) {
+      return;
+    }
+    final point = Offset(event.canvasPosition.x, event.canvasPosition.y);
+    final coord = layout.toHex(point);
+    final cell = grid.at(coord);
+    if (cell == null) {
+      return;
+    }
+
+    // A pickup lying on the ground answers a different question than the
+    // ground does — "is that detour worth it?" — and it is the one the player
+    // has to answer before walking, so it wins the card.
+    PickupKind? pickup;
+    for (final p in pickups) {
+      if (!p.collected && p.coord == coord) {
+        pickup = p.kind;
+        break;
+      }
+    }
+
+    inspecting = (
+      coord: coord,
+      pickup: pickup,
+      hex: cell.revealed ? cell.type : null,
+    );
+    inspectFor = inspectSeconds;
+  }
+
+  /// Show what a held charge does, from the HUD button rather than the board.
+  ///
+  /// A charge is the one thing on screen with no board tile to hold: it sits in
+  /// the HUD until it is spent, which is exactly why it needed a place there in
+  /// the first place, and "what does STAKE actually do" is the question a
+  /// player holding one is most likely to have.
+  void inspectPickup(PickupKind kind) {
+    if (!tuning.hintsEnabled) {
+      return;
+    }
+    inspecting = (coord: dog.cell, pickup: kind, hex: null);
+    inspectFor = inspectSeconds;
+  }
+
   @override
   void onTapDown(TapDownEvent event) {
+    handleBoardTapAt(Offset(event.canvasPosition.x, event.canvasPosition.y));
+  }
+
+  /// A tap on the board, in screen pixels.
+  ///
+  /// Split out from [onTapDown] so the whole of tap handling can be exercised
+  /// without a Flame lifecycle — a `GameWidget` needs async asset loading that
+  /// no other test in this suite pays for, which is why the rules of tapping
+  /// were the one part of the game with no direct test.
+  void handleBoardTapAt(Offset point) {
     if (!_ready || isOver || tutorialReading) {
       return;
     }
 
-    final point = Offset(event.canvasPosition.x, event.canvasPosition.y);
     final result = InputSystem.resolve(
       point: point,
       grid: grid,
@@ -1592,6 +1872,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         wardFlash = 1;
         sfx.play(Sound.thunk);
         Haptics.light();
+
+      case TapOutcome.noFooting:
+        // Costs nothing, for the reason a warded tap does: sunken ground
+        // rations *where* you may carve from, not how many taps you hold. The
+        // shake is on the tile rather than the ring because the ring is not
+        // what refused — the tile is within reach and the player can see that.
+        grid.at(result.coord!)!.rejectShake = 1;
+        sfx.play(Sound.thunk);
+        Haptics.light();
+        announce('Sunken — carve up to it first');
 
       case TapOutcome.outOfRange:
       case TapOutcome.nothingToClear:

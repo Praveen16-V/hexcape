@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'difficulty.dart';
+
 /// The numbers §16 lists as unresolved, exposed as live sliders.
 ///
 /// Speeds are in **hex widths per second** rather than pixels, so the game
@@ -12,6 +14,8 @@ class TuningConfig extends ChangeNotifier {
   static const regrowDelayRange = (1.5, 20.0);
   static const faultDelayRange = (1.0, 6.0);
   static const faultDensityRange = (0.0, 0.25);
+  static const slopeDensityRange = (0.0, 0.20);
+  static const sunkenDensityRange = (0.0, 0.25);
   static const suffocateRange = (0.8, 6.0);
   static const anchorDensityRange = (0.0, 0.45);
   static const heavyDensityRange = (0.0, 0.5);
@@ -75,6 +79,8 @@ class TuningConfig extends ChangeNotifier {
   /// campaign introduces them, so the mechanic can ship and be playtested from
   /// the debug panel long before any level references it.
   double faultDensity = 0;
+  double slopeDensity = 0;
+  double sunkenDensity = 0;
 
   /// How long a cleared fault stays open.
   ///
@@ -93,6 +99,14 @@ class TuningConfig extends ChangeNotifier {
   /// highlight would give anchors away by simply not lighting them, and the fog
   /// would leak the very thing it exists to hide.
   double revealFactor = 2.2;
+
+  /// What [revealFactor] is scaled *from* at the start of each level.
+  ///
+  /// Fog has no authored per-level value — the campaign only says whether it is
+  /// on — so [Difficulty] cannot widen or tighten it through [LevelRules] the
+  /// way it does the budget. It multiplies this instead, which keeps the result
+  /// derived from one fixed base rather than compounding on the last level's.
+  double revealBase = 2.2;
 
   /// Tap budget as a multiple of par. Par is the cheapest possible route, so
   /// this is how much slack a run gets over perfect play.
@@ -152,6 +166,13 @@ class TuningConfig extends ChangeNotifier {
 
   /// Zen mode (§12.3): same puzzle, no regrowth pressure.
   bool zenMode = false;
+
+  /// The player's Easy/Normal/Hard choice for the run about to start.
+  ///
+  /// Pushed in from [Progress] like the other player settings, or overridden for
+  /// a single run from the level detail sheet. Not persisted here: this object
+  /// is the live mirror, and the setting itself lives in preferences.
+  Difficulty difficulty = Difficulty.normal;
 
   /// Developer view of the carved route. Never available to players — showing
   /// the answer would remove the discovery loop the game is built on (§8).

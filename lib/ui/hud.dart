@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../game/board_camera.dart';
 import '../game/hexcape_game.dart';
 import '../game/tutorial.dart';
 import '../l10n/strings.dart';
 import '../entities/pickup.dart';
+import '../hex/hex_cell.dart';
+import '../hex/hex_coord.dart';
+import 'reference_sheet.dart';
 import '../theme/palette.dart';
 
 /// Taps, par and the clock, plus the one-idea-at-a-time onboarding line.
@@ -157,9 +161,17 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                               },
                             ),
                           ),
-                          // The only button on the HUD, and the only way off a
-                          // level that is not winning or losing it.
                           const SizedBox(width: 6),
+                          _ZoomButton(
+                            zoom: game.boardCamera.zoom,
+                            onPressed: () {
+                              game.cycleZoom();
+                              setState(() {});
+                            },
+                          ),
+                          // The way off a level that is not winning or losing
+                          // it.
+                          const SizedBox(width: 2),
                           _PauseButton(onPressed: game.pauseRun),
                         ],
                       ),
@@ -177,14 +189,27 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                         held: game.powerups.heldCharges,
                         selected: game.powerups.selectedCharge,
                         onToggle: game.toggleCharge,
+                        onInspect: game.inspectPickup,
                       ),
                     ],
                   ],
                 ),
                 const Spacer(),
+                // The card takes the hint's slot rather than stacking above it.
+                // Below the board because covering the tile the player is
+                // touching is the one place the answer must not go — and in
+                // *this* slot because it is the same thing the hint line is: a
+                // sentence at the bottom, sized into the HUD insets so the
+                // board is never squeezed by surprise. Showing both at once
+                // would be two voices answering different questions.
                 SizedBox(
                   key: _hintKey,
-                  child: !game.isOver && !(game.tutorial?.isDone ?? true)
+                  child: game.inspecting != null
+                      ? _InspectorCard(
+                          inspecting: game.inspecting!,
+                          fade: (game.inspectFor / 0.6).clamp(0.0, 1.0),
+                        )
+                      : !game.isOver && !(game.tutorial?.isDone ?? true)
                       ? TutorialCard(game: game)
                       : GameHint(
                           text: game.foodReceipt ?? _hintFor(game),
@@ -252,6 +277,135 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
   }
 }
 
+/// What the tile under the player's finger is.
+///
+/// Every explanation the game gives is otherwise transient — a tutorial step
+/// that runs once, a `teaches` line that shows for eight seconds, a banner on
+/// one level and never again — or else it is behind the pause menu, which means
+/// stopping the run to ask. This is the third thing: the answer, where the
+/// question was asked, without leaving the level.
+///
+/// The copy and the drawing both come from [allReferenceEntries], so this
+/// cannot describe a spring differently than the reference sheet does.
+class _InspectorCard extends StatelessWidget {
+  const _InspectorCard({required this.inspecting, required this.fade});
+
+  final ({HexCoord coord, PickupKind? pickup, HexType? hex}) inspecting;
+  final double fade;
+
+  @override
+  Widget build(BuildContext context) {
+    final pickup = inspecting.pickup;
+    final hex = inspecting.hex;
+    final entry = pickup != null
+        ? referenceForPickup(pickup)
+        : hex != null
+        ? referenceForHex(hex)
+        : null;
+
+    // Ground she has not been near yet. The fog is the mechanic; answering
+    // through it would be answering the wrong question.
+    final name = entry?.name ?? 'Unknown ground';
+    final blurb =
+        entry?.blurb ??
+        'She has not been close enough to see what this is yet.';
+
+    return Opacity(
+      opacity: fade,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+        decoration: BoxDecoration(
+          color: Palette.background.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Palette.lockedEdge, width: 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (entry != null)
+              ReferenceMark(entry: entry, size: 34)
+            else
+              const SizedBox(
+                width: 34,
+                height: 34,
+                child: Icon(Icons.blur_on, color: Palette.hudDim, size: 20),
+              ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    blurb,
+                    // Bounded by how big the text already is. At ordinary
+                    // sizes the whole explanation fits; at double scale an
+                    // unbounded blurb would eat the board it is describing, and
+                    // the full text is always a pause away in the reference
+                    // sheet.
+                    maxLines: MediaQuery.textScalerOf(context).scale(12) > 16
+                        ? 2
+                        : 5,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.56),
+                      fontSize: 11.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Magnify the board.
+///
+/// The largest board is twelve columns by twenty-nine rows, and fitting all of
+/// it on a small phone leaves a hex under twenty pixels across. This is the
+/// answer to that, and it is a cycle rather than a slider because the only two
+/// states worth having mid-level are "big enough to read" and "show me
+/// everything" — one tap each.
+///
+/// It changes nothing about the rules. Reach is measured in hex widths, so the
+/// set of tiles a tap can clear is identical at every step.
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({required this.zoom, required this.onPressed});
+
+  final double zoom;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final fit = zoom <= BoardCamera.minZoom;
+    return IconButton(
+      onPressed: onPressed,
+      visualDensity: VisualDensity.standard,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      icon: Icon(
+        fit ? Icons.zoom_in_rounded : Icons.zoom_out_map_rounded,
+        size: 22,
+      ),
+      color: fit ? Palette.hudDim : Palette.hudText,
+      tooltip: fit ? 'Zoom in' : 'Zoom (${zoom.toStringAsFixed(1)}x)',
+    );
+  }
+}
+
 /// Stop the run.
 ///
 /// Deliberately small and unemphatic. It has to be reachable at all times, and
@@ -287,11 +441,17 @@ class _Charges extends StatelessWidget {
     required this.held,
     required this.selected,
     required this.onToggle,
+    required this.onInspect,
   });
 
   final List<({PickupKind kind, int count})> held;
   final PickupKind? selected;
   final ValueChanged<PickupKind> onToggle;
+
+  /// Hold one to be told what it does. The tooltip stays the *action* — arm or
+  /// disarm — because that is what the button does; what the tool is for is a
+  /// different question and gets the same card the board gives.
+  final ValueChanged<PickupKind> onInspect;
 
   @override
   Widget build(BuildContext context) {
@@ -312,6 +472,7 @@ class _Charges extends StatelessWidget {
                   message: '${armed ? 'Disarm' : 'Arm'} ${entry.kind.label}',
                   child: OutlinedButton(
                     onPressed: () => onToggle(entry.kind),
+                    onLongPress: () => onInspect(entry.kind),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(44, 44),
                       padding: const EdgeInsets.symmetric(horizontal: 10),

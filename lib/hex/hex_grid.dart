@@ -43,7 +43,33 @@ class HexGrid {
 
   bool isPassable(HexCoord c) => cells[c]?.isPassable ?? false;
 
-  bool isClearable(HexCoord c) => cells[c]?.isClearable ?? false;
+  /// Whether a tap can do anything to [c] *right now*.
+  ///
+  /// The grid answers this rather than the cell because [HexType.sunken] needs
+  /// open ground beside it, and a cell cannot see its neighbours. Everything
+  /// that decides what a tap may touch goes through here — tap resolution, the
+  /// editable highlight the renderer draws, the soft-lock check — so they
+  /// cannot disagree about whether a tile is reachable.
+  bool isClearable(HexCoord c) {
+    final cell = cells[c];
+    if (cell == null || !cell.isClearable) {
+      return false;
+    }
+    if (!cell.type.needsFooting) {
+      return true;
+    }
+    return hasFooting(c);
+  }
+
+  /// Whether anything open touches [c]. Only sunken ground cares.
+  bool hasFooting(HexCoord c) {
+    for (final n in c.neighbours) {
+      if (cells[n]?.isPassable ?? false) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   bool isAnchor(HexCoord c) => cells[c]?.type == HexType.anchor;
 

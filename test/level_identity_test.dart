@@ -23,7 +23,9 @@ void main() {
       expect(Campaign.signatureFor(7), LevelSignature.closingTrail);
       expect(Campaign.signatureFor(11), LevelSignature.heavyGround);
       expect(Campaign.signatureFor(14), LevelSignature.springLine);
-      expect(Campaign.signatureFor(32), LevelSignature.nightWatch);
+      expect(Campaign.signatureFor(38), LevelSignature.nightWatch);
+      expect(Campaign.signatureFor(29), LevelSignature.faultLine);
+      expect(Campaign.signatureFor(51), LevelSignature.warded);
       expect(Campaign.signatureFor(34), LevelSignature.supplyRun);
       expect(Campaign.signatureFor(41), LevelSignature.breach);
       expect(Campaign.signatureFor(60), LevelSignature.gauntlet);
@@ -34,7 +36,7 @@ void main() {
       final closing = Campaign.rulesFor(7);
       final heavy = Campaign.rulesFor(11);
       final spring = Campaign.rulesFor(14);
-      final watch = Campaign.rulesFor(32);
+      final watch = Campaign.rulesFor(38);
       final supply = Campaign.rulesFor(34);
       final breach = Campaign.rulesFor(41);
 
@@ -48,7 +50,7 @@ void main() {
         spring.springDensity,
         greaterThan(Campaign.rulesFor(13).springDensity),
       );
-      expect(watch.guards, greaterThan(Campaign.rulesFor(31).guards));
+      expect(watch.guards, greaterThan(Campaign.rulesFor(37).guards));
       expect(
         supply.treats + supply.powerups,
         greaterThan(

@@ -102,12 +102,20 @@ class FieldComponent extends Component {
     final crackedRings = Path();
     final springMarks = Path();
     final faultMarks = Path();
+    final slopeMarks = Path();
+    final sunkenMarks = Path();
 
     final rivetHex = HexLayout.pathFromCorners(
       HexLayout.cornersAt(Offset.zero, layout.size * 0.3),
     );
     final ringHex = HexLayout.pathFromCorners(
       HexLayout.cornersAt(Offset.zero, layout.size * 0.52),
+    );
+    final sunkenInner = HexLayout.pathFromCorners(
+      HexLayout.cornersAt(Offset.zero, layout.size * 0.55),
+    );
+    final sunkenCore = HexLayout.pathFromCorners(
+      HexLayout.cornersAt(Offset.zero, layout.size * 0.34),
     );
 
     for (final cell in _drawOrder) {
@@ -145,6 +153,43 @@ class FieldComponent extends Component {
           ..lineTo(centre.dx + s * 0.14, centre.dy - s * 0.10)
           ..lineTo(centre.dx - s * 0.12, centre.dy + s * 0.10)
           ..lineTo(centre.dx + s * 0.10, centre.dy + s * 0.42);
+      }
+      if (shown == HexType.slope) {
+        // An arrow along the direction this cell actually pushes, not a
+        // decorative one. The whole difference between a slope and a spring is
+        // that you can read a slope before you commit to it, and the arrow is
+        // where that promise is kept.
+        final s = layout.size;
+        final step = layout.toPixel(
+          cell.coord + HexCoord.directions[cell.slopeDirection],
+        );
+        final away = step - centre;
+        final length = away.distance;
+        if (length > 1e-6) {
+          final unit = away / length;
+          // Perpendicular, for the two barbs of the head.
+          final side = Offset(-unit.dy, unit.dx);
+          final tip = centre + unit * (s * 0.46);
+          final tail = centre - unit * (s * 0.42);
+          final base = centre + unit * (s * 0.10);
+          slopeMarks
+            ..moveTo(tail.dx, tail.dy)
+            ..lineTo(tip.dx, tip.dy)
+            ..moveTo(base.dx + side.dx * s * 0.26, base.dy + side.dy * s * 0.26)
+            ..lineTo(tip.dx, tip.dy)
+            ..lineTo(
+              base.dx - side.dx * s * 0.26,
+              base.dy - side.dy * s * 0.26,
+            );
+        }
+      }
+      if (shown == HexType.sunken) {
+        // Rings receding inward: ground that is further away than it looks,
+        // and cannot be reached across. Whether it is reachable *right now* is
+        // already answered by the editable highlight, which asks the grid.
+        sunkenMarks
+          ..addPath(sunkenInner, centre)
+          ..addPath(sunkenCore, centre);
       }
       if (shown == HexType.spring) {
         // Three nested chevrons pointing up out of the hex: a coil under
@@ -211,7 +256,17 @@ class FieldComponent extends Component {
       ..color = Palette.faultEdge.withValues(alpha: 0.85)
       ..strokeWidth = 1.6;
     canvas.drawPath(faultMarks, _stroke);
+
+    _stroke
+      ..color = Palette.slopeEdge.withValues(alpha: 0.9)
+      ..strokeWidth = 1.6;
+    canvas.drawPath(slopeMarks, _stroke);
     _stroke.strokeCap = StrokeCap.butt;
+
+    _stroke
+      ..color = Palette.sunkenEdge.withValues(alpha: 0.55)
+      ..strokeWidth = 1.2;
+    canvas.drawPath(sunkenMarks, _stroke);
   }
 
   /// The nudge for a player who has stopped getting anywhere (§8).
@@ -395,6 +450,8 @@ class FieldComponent extends Component {
     HexType.anchor => Palette.anchorTop,
     HexType.spring => Palette.springTop,
     HexType.fault => Palette.faultTop,
+    HexType.slope => Palette.slopeTop,
+    HexType.sunken => Palette.sunkenTop,
   };
 
   static Color _sideOf(HexType type) => switch (type) {
@@ -403,6 +460,8 @@ class FieldComponent extends Component {
     HexType.anchor => Palette.anchorSide,
     HexType.spring => Palette.springSide,
     HexType.fault => Palette.faultSide,
+    HexType.slope => Palette.slopeSide,
+    HexType.sunken => Palette.sunkenSide,
   };
 
   static Color _edgeOf(HexType type) => switch (type) {
@@ -411,6 +470,8 @@ class FieldComponent extends Component {
     HexType.anchor => Palette.anchorEdge,
     HexType.spring => Palette.springEdge,
     HexType.fault => Palette.faultEdge,
+    HexType.slope => Palette.slopeEdge,
+    HexType.sunken => Palette.sunkenEdge,
   };
 
   /// Darkness away from the dog: one gradient drawn over the finished board.

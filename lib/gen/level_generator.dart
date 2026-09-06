@@ -19,6 +19,8 @@ class LevelSpec {
     this.heavyDensity = 0.18,
     this.springDensity = 0,
     this.faultDensity = 0,
+    this.slopeDensity = 0,
+    this.sunkenDensity = 0,
     this.guards = 0,
     this.sentries = 0,
     this.guardSpeed = 0.85,
@@ -54,6 +56,21 @@ class LevelSpec {
   /// need no solvability check — a spring costs the same single tap a plain hex
   /// does, and only changes what happens after it opens.
   final double springDensity;
+
+  /// Fraction promoted to slope. Never blocks — a slope costs the same single
+  /// tap a plain hex does and only changes what happens after she steps on it.
+  final double slopeDensity;
+
+  /// Fraction promoted to sunken.
+  ///
+  /// Needs no solvability check either, and the argument is worth writing down
+  /// because it is not the same one the others make. Sunken ground *is*
+  /// clearable; what it refuses is being cleared from a distance. Any route the
+  /// pathfinder finds is walked one cell at a time, so by the time she is beside
+  /// a sunken tile the cell she is standing in is open and the tile is footed.
+  /// A route through sunken ground therefore always costs exactly what
+  /// [Pathfinder] already thinks it costs.
+  final double sunkenDensity;
 
   /// Fraction promoted to fault. Like heavy and spring these never block, so
   /// they need no solvability check — a fault costs the same single tap a plain
@@ -194,6 +211,8 @@ class LevelGenerator {
     _placeHeavies(grid, sorted, spec, rng);
     _placeSprings(grid, sorted, spec, rng);
     _placeFaults(grid, sorted, spec, rng);
+    _placeSlopes(grid, sorted, spec, rng);
+    _placeSunken(grid, sorted, spec, rng);
 
     final par = Pathfinder.cheapestCost(
       start,
@@ -440,6 +459,132 @@ class LevelGenerator {
       }
       grid.cells[c]!.type = HexType.spring;
       placed.add(c);
+    }
+  }
+
+  /// Slopes, in short runs pointing the same way.
+  ///
+  /// The shape is the mechanic, exactly as it is for faults. A lone slope is a
+  /// one-cell shove — noise. Two or three in a row pointing the same way is a
+  /// *lane*, which is a thing a player can decide to enter or avoid, and
+  /// deciding is the whole point of making the direction visible.
+  static void _placeSlopes(
+    HexGrid grid,
+    List<HexCoord> sorted,
+    LevelSpec spec,
+    math.Random rng,
+  ) {
+    if (spec.slopeDensity <= 0) {
+      return;
+    }
+    final protected = <HexCoord>{
+      grid.start,
+      grid.exit,
+      ...grid.start.neighbours,
+      ...grid.exit.neighbours,
+    };
+    final candidates = [
+      for (final c in sorted)
+        if (!protected.contains(c) && grid.cells[c]!.type == HexType.plain) c,
+    ];
+    if (candidates.isEmpty) {
+      return;
+    }
+
+    final target = (candidates.length * spec.slopeDensity).round();
+    final placed = <HexCoord>[];
+    var attempts = 0;
+    final maxAttempts = math.max(40, target * 12);
+
+    while (placed.length < target && attempts < maxAttempts) {
+      attempts++;
+      final head = candidates[rng.nextInt(candidates.length)];
+      if (grid.cells[head]!.type != HexType.plain) {
+        continue;
+      }
+      if (placed.any((p) => p.distanceTo(head) < 3)) {
+        continue;
+      }
+      final direction = rng.nextInt(HexCoord.directions.length);
+      final step = HexCoord.directions[direction];
+      final run = 2 + rng.nextInt(2);
+      var c = head;
+      for (var i = 0; i < run; i++) {
+        final cell = grid.cells[c];
+        if (cell == null ||
+            cell.type != HexType.plain ||
+            protected.contains(c)) {
+          break;
+        }
+        cell.type = HexType.slope;
+        // Every tile in a run points the same way, which is what makes it a
+        // lane rather than a scatter of shoves.
+        cell.slopeDirection = direction;
+        placed.add(c);
+        c = c + step;
+      }
+    }
+  }
+
+  /// Sunken ground, in small patches.
+  ///
+  /// Patches rather than lines or singles: the pressure is "you cannot reach
+  /// across this", and one tile is a pebble you step over without noticing.
+  /// Three or four together is a piece of ground you have to walk *into*.
+  static void _placeSunken(
+    HexGrid grid,
+    List<HexCoord> sorted,
+    LevelSpec spec,
+    math.Random rng,
+  ) {
+    if (spec.sunkenDensity <= 0) {
+      return;
+    }
+    final protected = <HexCoord>{
+      grid.start,
+      grid.exit,
+      ...grid.start.neighbours,
+      ...grid.exit.neighbours,
+    };
+    final candidates = [
+      for (final c in sorted)
+        if (!protected.contains(c) && grid.cells[c]!.type == HexType.plain) c,
+    ];
+    if (candidates.isEmpty) {
+      return;
+    }
+
+    final target = (candidates.length * spec.sunkenDensity).round();
+    final placed = <HexCoord>[];
+    var attempts = 0;
+    final maxAttempts = math.max(40, target * 12);
+
+    while (placed.length < target && attempts < maxAttempts) {
+      attempts++;
+      final seed = candidates[rng.nextInt(candidates.length)];
+      if (grid.cells[seed]!.type != HexType.plain) {
+        continue;
+      }
+      if (placed.any((p) => p.distanceTo(seed) < 3)) {
+        continue;
+      }
+      final patch = [seed, ...seed.neighbours]..shuffle(rng);
+      final size = 2 + rng.nextInt(3);
+      var taken = 0;
+      for (final c in patch) {
+        if (taken >= size) {
+          break;
+        }
+        final cell = grid.cells[c];
+        if (cell == null ||
+            cell.type != HexType.plain ||
+            protected.contains(c)) {
+          continue;
+        }
+        cell.type = HexType.sunken;
+        placed.add(c);
+        taken++;
+      }
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/progress.dart';
 import '../theme/palette.dart';
+import 'difficulty_picker.dart';
 
 /// The player's own settings, as distinct from the debug panel.
 ///
@@ -80,17 +81,30 @@ class _SettingsSheetState extends State<SettingsSheet> {
               ),
             ),
             const SizedBox(height: 18),
+            const Text(
+              'Difficulty',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            DifficultyPicker(
+              value: _p.difficulty,
+              onChanged: (d) => _apply(() => _p.setDifficulty(d)),
+            ),
+            const SizedBox(height: 16),
             _Slider(
               label: 'Volume',
               value: _p.volume,
-              display: _p.volume <= 0
-                  ? 'Off'
-                  : '${(_p.volume * 100).round()}%',
+              display: _p.volume <= 0 ? 'Off' : '${(_p.volume * 100).round()}%',
               onChanged: (v) => _apply(() => _p.setVolume(v)),
             ),
             _Toggle(
               label: 'Regrowth sound',
-              blurb: 'The warning before a tile snaps shut. Off by default — '
+              blurb:
+                  'The warning before a tile snaps shut. Off by default — '
                   'you still feel it.',
               value: _p.regrowthSound,
               onChanged: (v) => _apply(() => _p.setRegrowthSound(v)),
@@ -109,7 +123,8 @@ class _SettingsSheetState extends State<SettingsSheet> {
             ),
             _Toggle(
               label: 'Nudges',
-              blurb: 'An arrow points the way when you have been stuck a while.',
+              blurb:
+                  'An arrow points the way when you have been stuck a while.',
               value: _p.hints,
               onChanged: (v) => _apply(() => _p.setHints(v)),
             ),
@@ -136,7 +151,8 @@ class _SettingsSheetState extends State<SettingsSheet> {
             const SizedBox(height: 10),
             _Toggle(
               label: 'Developer tools',
-              blurb: 'The tuning panel: sliders, a level jump, and a button '
+              blurb:
+                  'The tuning panel: sliders, a level jump, and a button '
                   'that erases your progress. Off unless you mean it.',
               value: _p.developerTools,
               onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),

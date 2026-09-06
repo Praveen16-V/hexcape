@@ -138,6 +138,11 @@ void main() {
         game.powerups.grant(PickupKind.blast);
         game.powerups.grant(PickupKind.dig);
         game.announce('Open a tile beside her to widen the path');
+        // The inspector card carries the longest copy the HUD ever shows, so
+        // it is laid out here at every size and text scale rather than only
+        // where it happens to be triggered.
+        game.grid.at(game.dog.cell)!.revealed = true;
+        game.inspectPickup(PickupKind.stake);
         final capture = GlobalKey();
         Widget screen() => MaterialApp(
           home: MediaQuery(

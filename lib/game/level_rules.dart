@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../entities/pickup.dart';
 import '../gen/silhouette.dart';
+import 'difficulty.dart';
 
 /// Everything that makes one level what it is.
 ///
@@ -18,6 +19,8 @@ class LevelRules {
     this.heavyDensity = 0,
     this.springDensity = 0,
     this.faultDensity = 0,
+    this.slopeDensity = 0,
+    this.sunkenDensity = 0,
     this.guards = 0,
     this.sentries = 0,
     this.guardSpeed = 0.85,
@@ -54,6 +57,12 @@ class LevelRules {
   /// Cracked ground, from [Campaign.faultsFrom] onward. Zero until then, so
   /// every level that shipped before faults existed is untouched.
   final double faultDensity;
+
+  /// Slopes, from [Campaign.slopesFrom] onward.
+  final double slopeDensity;
+
+  /// Sunken ground, from [Campaign.sunkenFrom] onward.
+  final double sunkenDensity;
 
   /// Patrols (§6.1), from [Campaign.guardsFrom] onward, and how fast they walk.
   final int guards;
@@ -234,14 +243,53 @@ class Campaign {
   /// The last level of the Collapse band.
   static const collapseEnd = 80;
 
-  /// Warded lights open the Vigil band. They apply pressure to the *tap* rather
-  /// than to the route or the clock, which nothing before them does, so like
-  /// patrols they get a band boundary to themselves.
-  static const sentriesFrom = 81;
+  /// Warded lights. They apply pressure to the *tap* rather than to the route
+  /// or the clock, which nothing before them does.
+  ///
+  /// **Moved back from 81, and that is the point.** They used to open the Vigil
+  /// band, which meant levels 21 to 60 — forty levels, the bulk of the campaign
+  /// — drew from one unchanging bag: anchors, heavies, springs, patrols,
+  /// regrowth, fog, budget and hunger. Every board in that stretch was a
+  /// different arrangement of the same eight things, and no amount of density
+  /// tuning makes the fortieth one feel unlike the twentieth.
+  ///
+  /// Vigil keeps its identity: sentries still *peak* there, two at a time with
+  /// the warded signature on top. It simply stops being the first sighting.
+  static const sentriesFrom = 51;
 
   /// HEEL, two levels later — the same meet-it-then-answer-it beat that STAKE
   /// follows cracked ground with.
-  static const heelFrom = 83;
+  static const heelFrom = sentriesFrom + 2;
+
+  /// Slopes, opening the Collapse band.
+  ///
+  /// Collapse and Vigil have a real structural problem that predates them: the
+  /// band records pin budget, hunger and regrowth flat at Mastery's floors —
+  /// deliberately, because below about 1.06x par a level demands provably
+  /// optimal play — so the whole felt climb of the last forty levels rode on
+  /// fault density alone. That was already thin when cracked ground arrived at
+  /// 61 and it is untenable now that it arrives at [faultsFrom]. These two
+  /// bands need an axis of their own, and these are it.
+  static const slopesFrom = 63;
+
+  /// Sunken ground, opening Vigil's own climb.
+  ///
+  /// One new axis per flat band, which is the shape of the problem: Collapse
+  /// and Vigil both pin the same four numbers at the same floors, so each needs
+  /// something of its own to climb on rather than sharing one.
+  ///
+  /// Twenty levels after slopes, and that gap is deliberate. A slope changes
+  /// where *she* goes; sunken ground changes where *you may carve from*. Two
+  /// new questions about position back to back is one question the player never
+  /// separates into two.
+  static const sunkenFrom = 83;
+
+  /// DIG, which is the answer to riveted ground.
+  ///
+  /// Named rather than written as a bare 41 in three places, because the pool,
+  /// the banner and the pace beat all have to agree about it and two of them
+  /// used to say `41` in a literal.
+  static const digFrom = 41;
 
   /// Springs land inside Foundation, once anchors and heavy hexes are familiar
   /// but before the clock gets tight — they are the one obstacle that gives
@@ -249,23 +297,28 @@ class Campaign {
   /// player learn to aim one rather than merely survive it.
   static const springsFrom = 9;
 
-  /// Cracked ground opens the Collapse band.
-  ///
-  /// Set before the band exists, and deliberately: the mechanic ships first,
-  /// behind a density of zero, so it can be built and played from the debug
-  /// panel without any level referencing it. Until the campaign reaches here
-  /// this reads as "never", which is exactly right.
   /// Fog, on the first level of the real game.
   static const fogFrom = tutorialBand + 1;
 
-  static const faultsFrom = 61;
+  /// Cracked ground.
+  ///
+  /// **Moved back from 61** for the reason [sentriesFrom] was: it used to open
+  /// the Collapse band, so the first two thirds of the campaign never saw it.
+  /// Here it lands mid-Pressure, once patrols have been learned, and Collapse
+  /// still owns its peak density.
+  ///
+  /// It is the only pressure in the game that closes the route *ahead* of her —
+  /// regrowth only ever eats the corridor behind — so having it arrive this
+  /// late meant sixty levels in which carving far ahead was strictly optimal
+  /// and nothing contested it.
+  static const faultsFrom = 29;
 
   /// STAKE, two levels after the pressure it answers.
   ///
   /// Meet the crack, practise it, *then* be handed the tool that pins ground
   /// open. Arriving with the mechanic would let a player neutralise it before
   /// they had understood what it does to them.
-  static const stakeFrom = 63;
+  static const stakeFrom = faultsFrom + 2;
 
   /// Patrols open the Pressure band. They apply *timing*, which nothing before
   /// them does, so they get a band boundary to themselves rather than being
@@ -274,6 +327,19 @@ class Campaign {
 
   /// Enough springs on a board to be met rather than merely present.
   static const _springIntroDensity = 0.03;
+
+  /// Enough slopes on a board to be met rather than merely present.
+  ///
+  /// They are laid in runs of two or three, so this is about two lanes. Without
+  /// it the level that *announces* slopes generated exactly one tile on a
+  /// board of two hundred and fifty — the same trap springs and faults each
+  /// fell into, and for the same reason: a band curve that starts at zero puts
+  /// nothing on the board at the gate, which is the one level where the player
+  /// has been promised something.
+  static const _slopeIntroDensity = 0.05;
+
+  /// Enough sunken ground to be walked into rather than stepped around.
+  static const _sunkenIntroDensity = 0.10;
 
   /// Enough cracked ground on a board to be met rather than merely present.
   ///
@@ -284,21 +350,10 @@ class Campaign {
   /// three separate lines, so the banner describes something they will meet.
   static const _faultIntroDensity = 0.08;
 
-  /// The powerup pool, widening. Early levels offer the two that need no
-  /// explanation; each later band adds one that does.
-  static const _foundationPowerups = [
-    PickupKind.freeze,
-    PickupKind.radiusPlus,
-    PickupKind.sprint,
-  ];
-  static const _pressurePowerups = [
-    ..._foundationPowerups,
-    PickupKind.scent,
-    PickupKind.blast,
-  ];
-  static const _masteryPowerups = [..._pressurePowerups, PickupKind.dig];
-  static const _collapsePowerups = [..._masteryPowerups, PickupKind.stake];
-  static const _vigilPowerups = [..._collapsePowerups, PickupKind.heel];
+  /// The fastest a patrol moves in the campaign, matching the top of [_vigil]'s
+  /// own range. Named because [Difficulty] shifts it by its own step, and a
+  /// ceiling that has to move needs somewhere to move from.
+  static const _guardSpeedCeiling = 1.15;
 
   /// Authored names turn stable generated boards into places a player can
   /// remember and discuss. Their mechanics still come from the signatures
@@ -411,22 +466,36 @@ class Campaign {
   ];
 
   static const _openTrailLevels = {6, 13, 19, 25, 31, 37, 47, 53, 59};
-  static const _closingTrailLevels = {7, 17, 23, 35, 45};
-  static const _heavyGroundLevels = {11, 26, 38, 57};
-  static const _springLineLevels = {9, 10, 14, 29, 48};
-  static const _nightWatchLevels = {21, 22, 32, 51};
+  static const _closingTrailLevels = {7, 17, 23};
+  static const _heavyGroundLevels = {11, 26, 65, 74};
+  static const _springLineLevels = {9, 10, 14, 48, 64};
+  static const _nightWatchLevels = {21, 22, 32, 38};
   static const _supplyRunLevels = {16, 28, 34, 44, 50, 56};
   static const _breachLevels = {41, 42, 54};
 
-  /// Collapse's own signature. Every entry is deliberately a non-challenge
-  /// level: [LevelSignature.faultLine] carries no anchor or heavy delta, but
-  /// keeping the rule visible here is what stops the next one from breaking it.
-  static const _faultLineLevels = {61, 62, 65, 68, 71, 74, 77};
+  /// Every entry is deliberately a non-challenge level:
+  /// [LevelSignature.faultLine] carries no anchor or heavy delta, but keeping
+  /// the rule visible here is what stops the next one from breaking it.
+  ///
+  /// No longer Collapse's alone. Cracked ground now arrives at
+  /// [faultsFrom] — mid-Pressure — so the signature that is *about* it reaches
+  /// back that far too, taking levels that were a fourth spring board and a
+  /// third heavy board. Collapse still owns the density.
+  static const _faultLineLevels = {
+    29, 35, 45, //
+    61, 62, 68, 71, 77,
+  };
 
-  /// Vigil's own, and every entry is a non-challenge level for the same reason
-  /// the others are: a signature that adds walls must never land on a challenge
-  /// peak, or the next peak drops below it and monotonicity fails.
-  static const _wardedLevels = {81, 82, 85, 88, 91, 94, 97};
+  /// Every entry is a non-challenge level for the same reason the others are: a
+  /// signature that adds walls must never land on a challenge peak, or the next
+  /// peak drops below it and monotonicity fails.
+  ///
+  /// Reaches back to [sentriesFrom] now, for the reason [_faultLineLevels]
+  /// does. Vigil still doubles the lights.
+  static const _wardedLevels = {
+    51, 57, //
+    81, 82, 85, 88, 91, 94, 97,
+  };
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
@@ -516,7 +585,17 @@ class Campaign {
   /// `copyWith` on [LevelRules]: a copy of twenty-five fields silently drops
   /// whichever one is added next, and the failure would be a daily board that
   /// quietly stopped matching the level it claims to be built from.
-  static LevelRules rulesFor(int level, {int? seed}) {
+  ///
+  /// [difficulty] is the player's Easy/Normal/Hard choice, folded into the same
+  /// clamped expressions [LevelPace] already nudges. It is threaded through here
+  /// for the same reason [seed] is, and [Difficulty.normal] changes nothing at
+  /// all. The three guided levels ignore it: a lesson that has to land is not
+  /// the place to be negotiating pressure.
+  static LevelRules rulesFor(
+    int level, {
+    int? seed,
+    Difficulty difficulty = Difficulty.normal,
+  }) {
     final n = math.max(1, level);
     if (n <= tutorialBand) {
       return _tutorial(n, seed: seed);
@@ -528,6 +607,7 @@ class Campaign {
         n - tutorialBand - 1,
         _foundation,
         seed: seed,
+        difficulty: difficulty,
       );
     }
     if (n <= pressureEnd) {
@@ -537,6 +617,7 @@ class Campaign {
         n - foundationEnd - 1,
         _pressure,
         seed: seed,
+        difficulty: difficulty,
       );
     }
     if (n <= masteryEnd) {
@@ -546,6 +627,7 @@ class Campaign {
         n - pressureEnd - 1,
         _mastery,
         seed: seed,
+        difficulty: difficulty,
       );
     }
     if (n <= collapseEnd) {
@@ -555,6 +637,7 @@ class Campaign {
         n - masteryEnd - 1,
         _collapse,
         seed: seed,
+        difficulty: difficulty,
       );
     }
     if (n <= length) {
@@ -564,9 +647,10 @@ class Campaign {
         n - collapseEnd - 1,
         _vigil,
         seed: seed,
+        difficulty: difficulty,
       );
     }
-    return _endless(n, seed: seed);
+    return _endless(n, seed: seed, difficulty: difficulty);
   }
 
   // -------------------------------------------------------------------------
@@ -657,6 +741,8 @@ class Campaign {
     heavy: (0.16, 0.21),
     spring: (0.0, 0.06),
     fault: (0.0, 0.0),
+    slope: (0.0, 0.0),
+    sunken: (0.0, 0.0),
     guards: (0, 0),
     guardSpeed: (0.85, 0.85),
     sentries: (0, 0),
@@ -675,7 +761,12 @@ class Campaign {
     anchor: (0.27, 0.33),
     heavy: (0.21, 0.26),
     spring: (0.06, 0.08),
-    fault: (0.0, 0.0),
+    // Cracked ground arrives here now, at [faultsFrom]. The floor covers the
+    // introduction itself; from there the curve climbs on its own, which is
+    // what keeps consecutive boards from being the same board.
+    fault: (0.0, 0.085),
+    slope: (0.0, 0.0),
+    sunken: (0.0, 0.0),
     guards: (1, 2),
     guardSpeed: (0.85, 0.95),
     sentries: (0, 0),
@@ -694,10 +785,14 @@ class Campaign {
     anchor: (0.33, 0.38),
     heavy: (0.26, 0.30),
     spring: (0.08, 0.10),
-    fault: (0.0, 0.0),
+    fault: (0.085, 0.12),
+    slope: (0.0, 0.0),
+    sunken: (0.0, 0.0),
     guards: (2, 3),
     guardSpeed: (0.95, 1.10),
-    sentries: (0, 0),
+    // Warded light from level fifty-one. One at a time here; Vigil is where
+    // they double.
+    sentries: (0, 1),
     treats: (4, 4),
     powerups: (3, 3),
     treatSeconds: (3.5, 2.8),
@@ -731,10 +826,14 @@ class Campaign {
     // placed, so these numbers buy roughly half what their face value suggests.
     // At (0.03, 0.09) the band averaged two cracks a board, which is not a
     // gradient, and this band has no other one.
-    fault: (0.06, 0.18),
+    fault: (0.12, 0.19),
+    // The band's new axis, and the first thing in it that is not a density it
+    // already had.
+    slope: (0.04, 0.11),
+    sunken: (0.0, 0.0),
     guards: (3, 3),
     guardSpeed: (1.10, 1.10),
-    sentries: (0, 0),
+    sentries: (1, 1),
     treats: (4, 4),
     powerups: (3, 3),
     // Still shrinking, and it has to. The clock is flat across this band, so a
@@ -760,7 +859,9 @@ class Campaign {
     anchor: (0.40, 0.42),
     heavy: (0.31, 0.32),
     spring: (0.10, 0.10),
-    fault: (0.18, 0.22),
+    fault: (0.19, 0.23),
+    slope: (0.11, 0.14),
+    sunken: (0.05, 0.16),
     guards: (3, 3),
     guardSpeed: (1.10, 1.15),
     sentries: (1, 2),
@@ -784,6 +885,8 @@ class Campaign {
       (double, double) heavy,
       (double, double) spring,
       (double, double) fault,
+      (double, double) slope,
+      (double, double) sunken,
       (int, int) guards,
       (int, int) sentries,
       (double, double) guardSpeed,
@@ -797,6 +900,7 @@ class Campaign {
     })
     band, {
     int? seed,
+    Difficulty difficulty = Difficulty.normal,
   }) {
     final t = span <= 1 ? 0.0 : index / (span - 1);
     final pace = paceFor(level);
@@ -827,13 +931,19 @@ class Campaign {
       seed: seed ?? seedFor(level),
       columns: _lerpInt(band.columns, t),
       rows: _lerpInt(band.rows, t),
+      // A signature may only take walls away on a relieved beat, never add
+      // them. Level 41 is where the two rules met: it introduces DIG *and*
+      // carries [LevelSignature.breach], whose whole subject is riveted ground,
+      // so the signature was quietly cancelling the relief the introduction had
+      // promised. The introduction wins — meeting a new idea with more walls
+      // than the level before is the opposite of an introduction.
       anchorDensity: math.max(
         0,
-        baseAnchor - pace.anchorRelief + signature.anchorDelta,
+        baseAnchor - pace.anchorRelief + pace.allow(signature.anchorDelta),
       ),
       heavyDensity: math.max(
         0,
-        baseHeavy - pace.heavyRelief + signature.heavyDelta,
+        baseHeavy - pace.heavyRelief + pace.allow(signature.heavyDelta),
       ),
       // Floored, not merely interpolated. The band's own curve starts at zero,
       // so the level that *announces* springs would generate one on a
@@ -845,28 +955,62 @@ class Campaign {
               baseSpring * pace.obstacleMultiplier * signature.springMultiplier,
             )
           : 0,
-      // Floored on the introduction level for the same reason springs are: a
-      // banner promising cracked ground on a board that generates none is a
-      // promise the level does not keep.
-      faultDensity: level >= faultsFrom
-          ? math.max(
-              _faultIntroDensity,
-              baseFault * pace.obstacleMultiplier * signature.faultMultiplier,
-            )
+      // Floored *at the introduction* for the same reason springs are: a banner
+      // promising cracked ground on a board that generates none is a promise
+      // the level does not keep.
+      //
+      // Only there, though, and only for the practice beat after it. The floor
+      // used to apply at every level past the gate, which was invisible while
+      // the gate sat at 61 and the band curve started just under it — but with
+      // cracked ground arriving at 29 it pinned the density to one number for
+      // nearly thirty levels, and a mechanic that is present at exactly the
+      // same strength for thirty levels running is wallpaper.
+      // Floored at the introduction and the practice beat after it, exactly as
+      // springs and faults are, and for exactly the same reason.
+      slopeDensity: level >= slopesFrom
+          ? (level <= slopesFrom + 1
+                ? math.max(_slopeIntroDensity, _lerp(band.slope, t))
+                : _lerp(band.slope, t) * pace.obstacleMultiplier)
           : 0,
+      sunkenDensity: level >= sunkenFrom
+          ? (level <= sunkenFrom + 1
+                ? math.max(_sunkenIntroDensity, _lerp(band.sunken, t))
+                : _lerp(band.sunken, t) * pace.obstacleMultiplier)
+          : 0,
+      faultDensity: level >= faultsFrom
+          ? (level <= faultsFrom + 1
+                ? math.max(_faultIntroDensity, baseFault)
+                : baseFault *
+                      pace.obstacleMultiplier *
+                      signature.faultMultiplier)
+          : 0,
+      // Floored at one wherever the mechanic exists at all, so Easy quietens a
+      // patrol level without turning it into a level with no patrols — the
+      // campaign taught this idea deliberately and must not un-teach it.
       guards: level >= guardsFrom
           ? math.max(
               1,
               baseGuards -
                   pace.guardRelief +
+                  difficulty.guardDelta +
                   (pace == LevelPace.combination ? signature.guardBonus : 0),
             )
           : 0,
-      guardSpeed: math.max(0.75, baseGuardSpeed - pace.guardSpeedRelief),
+      // Ceilinged at Vigil's own fastest patrol, shifted by exactly the step
+      // difficulty is pushing with — so Hard's cap is the campaign's cap plus
+      // one Hard step rather than a new number with no argument behind it.
+      guardSpeed: math.max(
+        0.75,
+        math.min(
+          _guardSpeedCeiling + difficulty.guardSpeedDelta,
+          baseGuardSpeed - pace.guardSpeedRelief + difficulty.guardSpeedDelta,
+        ),
+      ),
       sentries: level >= sentriesFrom
           ? math.max(
               1,
               _lerpInt(band.sentries, t) +
+                  difficulty.guardDelta +
                   (pace == LevelPace.combination ? signature.sentryBonus : 0) -
                   pace.guardRelief,
             )
@@ -881,13 +1025,27 @@ class Campaign {
       regrowth: true,
       regrowDelay: math.max(
         3.2,
-        baseRegrow + pace.regrowRelief + signature.regrowDelta,
+        baseRegrow +
+            pace.regrowRelief +
+            difficulty.regrowRelief +
+            signature.regrowDelta,
       ),
       fog: true,
       budget: true,
-      budgetMultiplier: baseBudget + pace.budgetRelief,
+      // Floored at the fairness limit `campaign_sweep_test` enforces: below
+      // about 1.06 a level demands provably optimal play. Both floors here are
+      // no-ops at [Difficulty.normal] — the bands never go under them on their
+      // own — so they cost Hard its last two bands, where budget and hunger are
+      // already pinned, and Hard leans on patrols, regrowth and fog instead.
+      budgetMultiplier: math.max(
+        1.06,
+        baseBudget + pace.budgetRelief + difficulty.budgetRelief,
+      ),
       hunger: true,
-      hungerSecondsPerCell: baseHunger + pace.hungerRelief + hungerRelief,
+      hungerSecondsPerCell: math.max(
+        0.85,
+        baseHunger + pace.hungerRelief + hungerRelief + difficulty.hungerRelief,
+      ),
       pace: pace,
     );
   }
@@ -900,21 +1058,29 @@ class Campaign {
     if (level > length) return LevelPace.endless;
     if (level == springsFrom ||
         level == guardsFrom ||
-        level == 41 ||
+        level == digFrom ||
         level == faultsFrom ||
+        level == slopesFrom ||
+        level == sunkenFrom ||
         level == stakeFrom ||
         level == sentriesFrom ||
         level == heelFrom) {
       return LevelPace.introduction;
     }
+    // A practice beat follows every new *hazard* — springs, patrols, cracked
+    // ground, warded light — because a hazard has to be survived before it can
+    // be understood. It does not follow a new *tool*: STAKE and HEEL each
+    // arrive two levels after the pressure they answer, which already had its
+    // practice level, and spending a second one on the answer buys nothing and
+    // costs the band a level with any pressure in it.
     if (level == 6 ||
         level == springsFrom + 1 ||
         level == guardsFrom + 1 ||
-        level == 42 ||
+        level == digFrom + 1 ||
         level == faultsFrom + 1 ||
-        level == stakeFrom + 1 ||
-        level == sentriesFrom + 1 ||
-        level == heelFrom + 1) {
+        level == slopesFrom + 1 ||
+        level == sunkenFrom + 1 ||
+        level == sentriesFrom + 1) {
       return LevelPace.practice;
     }
     if (level == foundationEnd ||
@@ -969,7 +1135,11 @@ class Campaign {
   /// that becomes arithmetically impossible is not difficulty, it is a wall with
   /// a number on it. These floors sit just beyond the hardest campaign level, so
   /// the climb is still felt without becoming a lie.
-  static LevelRules _endless(int level, {int? seed}) {
+  static LevelRules _endless(
+    int level, {
+    int? seed,
+    Difficulty difficulty = Difficulty.normal,
+  }) {
     final beyond = level - length;
     final t = 1 - math.pow(0.97, beyond).toDouble();
     return LevelRules(
@@ -984,22 +1154,44 @@ class Campaign {
       heavyDensity: math.min(0.34, 0.32 + 0.02 * t),
       springDensity: 0.10,
       faultDensity: math.min(0.25, 0.22 + 0.03 * t),
-      sentries: 2,
-      guards: 3,
-      guardSpeed: math.min(1.25, 1.10 + 0.15 * t),
+      slopeDensity: math.min(0.15, 0.12 + 0.03 * t),
+      sunkenDensity: math.min(0.16, 0.13 + 0.03 * t),
+      // Endless keeps its own floors and ceilings — they sit just past the
+      // hardest campaign level rather than at the campaign's limits — and
+      // difficulty moves inside them, shifting the patrol ceiling by its own
+      // step exactly as the bands do.
+      sentries: math.max(1, 2 + difficulty.guardDelta),
+      guards: math.max(1, 3 + difficulty.guardDelta),
+      guardSpeed: math.max(
+        0.75,
+        math.min(
+          1.25 + difficulty.guardSpeedDelta,
+          1.10 + 0.15 * t + difficulty.guardSpeedDelta,
+        ),
+      ),
       treats: 4,
       powerups: 3,
-      offeredPowerups: _masteryPowerups,
+      // Everything, which past level a hundred it always should have been.
+      // This used to name Mastery's pool, so endless ran cracked ground at 0.22
+      // and two sentries while offering neither STAKE nor HEEL — the two tools
+      // that answer them. A pressure with its answer withheld is not difficulty.
+      offeredPowerups: poolFor(level),
       powerupRotation: level,
       treatSeconds: 1.3,
       treatTaps: 1,
       regrowth: true,
-      regrowDelay: math.max(3.2, 3.8 - 0.6 * t),
+      regrowDelay: math.max(3.2, 3.8 - 0.6 * t + difficulty.regrowRelief),
       fog: true,
       budget: true,
-      budgetMultiplier: math.max(1.03, 1.06 - 0.03 * t),
+      budgetMultiplier: math.max(
+        1.03,
+        1.06 - 0.03 * t + difficulty.budgetRelief,
+      ),
       hunger: true,
-      hungerSecondsPerCell: math.max(0.78, 0.85 - 0.07 * t),
+      hungerSecondsPerCell: math.max(
+        0.78,
+        0.85 - 0.07 * t + difficulty.hungerRelief,
+      ),
       pace: LevelPace.endless,
     );
   }
@@ -1008,21 +1200,23 @@ class Campaign {
   /// Keyed on the level rather than the band, because STAKE arrives two levels
   /// into Collapse rather than with it — a band-keyed pool would offer it on 61
   /// and 62, before the level that introduces it.
-  static List<PickupKind> poolFor(int level) {
-    if (level <= foundationEnd) {
-      return _foundationPowerups;
-    }
-    if (level <= pressureEnd) {
-      return _pressurePowerups;
-    }
-    if (level < stakeFrom) {
-      return _masteryPowerups;
-    }
-    if (level < heelFrom) {
-      return _collapsePowerups;
-    }
-    return _vigilPowerups;
-  }
+  /// Which powerups may drop on a level, widening as the campaign climbs.
+  ///
+  /// Driven by the gates rather than by the bands. It used to be a ladder of
+  /// band comparisons, which was only correct while every tool happened to
+  /// arrive on a band boundary: with STAKE inside Pressure, `level <=
+  /// pressureEnd` returned the pool without it and the level that *announced*
+  /// STAKE could not drop one. A gate is the single fact about when a tool
+  /// exists, so this asks the gates.
+  static List<PickupKind> poolFor(int level) => [
+    PickupKind.freeze,
+    PickupKind.radiusPlus,
+    PickupKind.sprint,
+    if (level > foundationEnd) ...[PickupKind.scent, PickupKind.blast],
+    if (level >= digFrom) PickupKind.dig,
+    if (level >= stakeFrom) PickupKind.stake,
+    if (level >= heelFrom) PickupKind.heel,
+  ];
 
   /// The banner for a level, or null on the great majority that introduce
   /// nothing.
@@ -1038,7 +1232,9 @@ class Campaign {
     sentriesFrom =>
       'Warded lights refuse your taps. Wait for the sweep to pass',
     heelFrom => 'HEEL holds her still for a moment. Arm it from the HUD',
-    41 => 'DIG breaks one riveted tile. Arm it from the HUD',
+    slopesFrom => 'Arrows push her the way they point. Read one before you open it',
+    sunkenFrom => 'Sunken ground only clears from beside it. Carve up to it',
+    digFrom => 'DIG breaks one riveted tile. Arm it from the HUD',
     _ => null,
   };
 
@@ -1096,32 +1292,88 @@ class Campaign {
       (range.$1 + (range.$2 - range.$1) * t).round();
 }
 
+/// What each signature does to the band's numbers.
+///
+/// **Every signature spikes one axis and suppresses the others**, which is the
+/// difference between a level that has a character and a level that is merely
+/// a little denser than the last one. The bands interpolate every density
+/// together, so consecutive levels differ by fractions of a percent; without
+/// contrast here, level 34 and level 35 are the same board with different
+/// furniture and the campaign reads as one long climb rather than a sequence of
+/// places.
+///
+/// The suppressions matter more than the spikes. A spring level with the band's
+/// full wall density is a gauntlet that happens to have springs; take the walls
+/// down and it becomes a level *about* momentum, because momentum now has
+/// somewhere to go. The same argument runs through all of them: two pressures
+/// at full strength read as noise, and the player cannot tell which one the
+/// level was asking about.
+///
+/// Total pressure stays roughly flat, which is what keeps this out of the
+/// difficulty curve's way. Signatures land on combination and breather levels;
+/// the challenge peaks are all [LevelSignature.gauntlet], which zeroes every
+/// entry here and is where the band's own numbers are felt undiluted.
 extension on LevelSignature {
   double get anchorDelta => switch (this) {
-    LevelSignature.openTrail => -0.03,
-    LevelSignature.heavyGround => -0.012,
-    LevelSignature.breach => 0.025,
+    LevelSignature.openTrail => -0.05,
+    LevelSignature.heavyGround => -0.03,
+    // A patrol is a moving wall. Static ones on top of it make the board
+    // crowded rather than tense.
+    LevelSignature.nightWatch => -0.04,
+    // The light is the wall here.
+    LevelSignature.warded => -0.04,
+    // Cracked ground closes the route ahead; walls close it to the side. Both
+    // at once is a maze and a race at the same time, which is two levels.
+    LevelSignature.faultLine => -0.045,
+    LevelSignature.springLine => -0.035,
+    LevelSignature.closingTrail => -0.03,
+    // The detour has to be walkable or the reward is scenery.
+    LevelSignature.supplyRun => -0.02,
+    // The one signature that adds them: rivets are the whole subject.
+    LevelSignature.breach => 0.05,
     _ => 0,
   };
 
   double get heavyDelta => switch (this) {
-    LevelSignature.openTrail => -0.02,
-    LevelSignature.heavyGround => 0.045,
+    LevelSignature.openTrail => -0.035,
+    LevelSignature.heavyGround => 0.07,
+    // Rivets are the story; rings dilute it into "expensive ground" generally.
+    LevelSignature.breach => -0.04,
+    LevelSignature.nightWatch => -0.03,
+    LevelSignature.warded => -0.035,
+    LevelSignature.faultLine => -0.04,
+    LevelSignature.springLine => -0.03,
+    LevelSignature.closingTrail => -0.02,
     _ => 0,
   };
 
   double get springMultiplier => switch (this) {
-    LevelSignature.springLine => 1.65,
+    LevelSignature.springLine => 2.1,
+    // Free distance undercuts a level whose point is that every step is
+    // expensive, or that you have to be somewhere at a particular moment.
+    LevelSignature.heavyGround || LevelSignature.breach => 0.3,
+    LevelSignature.nightWatch || LevelSignature.warded => 0.5,
     _ => 1,
   };
 
   double get faultMultiplier => switch (this) {
-    LevelSignature.faultLine => 1.7,
+    LevelSignature.faultLine => 2.2,
+    // Regrowth and cracked ground are both "the floor is leaving"; running them
+    // together at full strength means the player cannot tell which one took the
+    // tile they were standing on.
+    LevelSignature.closingTrail => 0.4,
+    LevelSignature.heavyGround ||
+    LevelSignature.breach ||
+    LevelSignature.springLine => 0.3,
+    LevelSignature.nightWatch || LevelSignature.warded => 0.4,
     _ => 1,
   };
 
   int get guardBonus => switch (this) {
     LevelSignature.nightWatch => 1,
+    // A warded board is a question about when you may *act*; a patrol asks when
+    // she may *walk*. Asking both at once is the gauntlet's job.
+    LevelSignature.warded => -1,
     _ => 0,
   };
 
@@ -1141,12 +1393,28 @@ extension on LevelSignature {
   };
 
   double get regrowDelta => switch (this) {
-    LevelSignature.closingTrail => -0.65,
+    LevelSignature.closingTrail => -1.0,
+    // Cracked ground is already closing the field. Regrowth at full speed on
+    // top of it is the same pressure charged twice.
+    LevelSignature.faultLine => 0.9,
     _ => 0,
   };
 }
 
+
 extension on LevelPace {
+  /// A signature's wall delta, as this beat will permit it.
+  ///
+  /// Relieved beats — an introduction and the practice level after it — take
+  /// the reductions and refuse the additions. Everywhere else it passes
+  /// through untouched.
+  double allow(double delta) => switch (this) {
+    LevelPace.introduction ||
+    LevelPace.practice ||
+    LevelPace.breather => math.min(0, delta),
+    _ => delta,
+  };
+
   double get budgetRelief => switch (this) {
     LevelPace.introduction => 0.16,
     LevelPace.practice => 0.11,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'game/daily.dart';
+import 'game/difficulty.dart';
 import 'game/entitlements.dart';
 import 'game/haptics.dart';
 import 'game/hexcape_game.dart';
@@ -15,6 +16,7 @@ import 'game/tuning.dart';
 import 'l10n/strings.dart';
 import 'theme/palette.dart';
 import 'ui/debug_panel.dart';
+import 'ui/difficulty_intro.dart';
 import 'ui/home_screen.dart';
 import 'ui/hud.dart';
 import 'ui/level_detail.dart';
@@ -94,6 +96,7 @@ class _GameShellState extends State<GameShell>
   late final TuningConfig _tuning = TuningConfig();
   late final HexcapeGame _game = HexcapeGame(tuning: _tuning)
     ..progress = widget.progress
+    ..boardCamera.zoom = widget.progress.zoom
     ..pet = Pets.byId(widget.progress.pet, stars: widget.progress.totalStars);
 
   late final AnimationController _ticker = AnimationController(
@@ -127,6 +130,9 @@ class _GameShellState extends State<GameShell>
   void initState() {
     super.initState();
     _applySettings();
+    if (!widget.progress.difficultyChosen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _askDifficulty());
+    }
     // Nothing awaits this. The free game must never wait on billing, which is
     // unavailable on some devices and absent entirely offline.
     _store
@@ -152,11 +158,29 @@ class _GameShellState extends State<GameShell>
       ..regrowthSound = p.regrowthSound
       ..reducedMotion = p.reducedMotion
       ..hintsEnabled = p.hints
+      ..difficulty = p.difficulty
       ..developerTools = p.developerTools;
     Haptics.enabled = p.haptics;
     if (_game.isReady) {
       _game.syncDeveloperTools();
     }
+  }
+
+  /// Asks the one-time difficulty question, on the first launch only.
+  Future<void> _askDifficulty() async {
+    if (!mounted) {
+      return;
+    }
+    await DifficultyIntro.show(
+      context,
+      onChoose: (d) async {
+        Navigator.of(context).pop();
+        await widget.progress.setDifficulty(d);
+        if (mounted) {
+          setState(_applySettings);
+        }
+      },
+    );
   }
 
   Future<void> _openReference() async {
@@ -225,20 +249,42 @@ class _GameShellState extends State<GameShell>
         initialZen: _activeLevel == level && _game.isReady && !_game.isOver
             ? _tuning.zenMode
             : false,
+        // A run already going is being played at whatever it started on; any
+        // other level opens at whatever the next one would start at — the saved
+        // setting, unless a previous sheet overrode it for this session.
+        initialDifficulty:
+            _activeLevel == level && _game.isReady && !_game.isOver
+            ? _game.difficultyForRun
+            : _tuning.difficulty,
         onUnlock: () {
           Navigator.of(context).pop();
           _openPaywall();
         },
-        onPlay: ({required bool zen, required bool restart}) {
-          Navigator.of(context).pop();
-          // Compared before it is written, or the comparison is always false.
-          // Switching Zen on has to rebuild the board: the run in progress was
-          // played under the other set of rules and its result would be
-          // recorded — or not recorded — under this one.
-          final modeChanged = zen != _tuning.zenMode;
-          _tuning.zenMode = zen;
-          _openLevel(level, restart: restart || modeChanged);
-        },
+        onPlay:
+            ({
+              required bool zen,
+              required Difficulty difficulty,
+              required bool restart,
+            }) {
+              Navigator.of(context).pop();
+              // Compared before it is written, or the comparison is always
+              // false. Switching Zen on has to rebuild the board: the run in
+              // progress was played under the other set of rules and its result
+              // would be recorded — or not recorded — under this one. The same
+              // goes for difficulty, which changes the budget and the clock.
+              final modeChanged =
+                  zen != _tuning.zenMode ||
+                  difficulty != _game.difficultyForRun;
+              _tuning
+                ..zenMode = zen
+                // Deliberately not written back to [Progress]: picking Hard for
+                // one wall of a level is not the same as saying the whole
+                // campaign should be Hard from now on. It holds for the session
+                // the way Zen does, and the next thing to touch Settings puts
+                // the saved setting back.
+                ..difficulty = difficulty;
+              _openLevel(level, restart: restart || modeChanged);
+            },
       ),
     );
   }

@@ -1,17 +1,34 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'daily.dart';
+import 'difficulty.dart';
 import 'level_rules.dart';
 
 /// What a player has done with one level.
 class LevelRecord {
-  const LevelRecord({this.stars = 0, this.bestTaps = 0, this.bestTime = 0});
+  const LevelRecord({
+    this.stars = 0,
+    this.bestTaps = 0,
+    this.bestTime = 0,
+    this.difficulty = Difficulty.normal,
+  });
 
   final int stars;
 
   /// Zero means never finished.
   final int bestTaps;
   final double bestTime;
+
+  /// The setting [stars] was earned on.
+  ///
+  /// Stars are scored against the level's *own* tap budget, so an Easy run —
+  /// which widens that budget — earns three of them more easily than a Normal
+  /// one. Recording which setting paid for them is what lets Easy still count
+  /// toward progress without quietly making every star mean less.
+  ///
+  /// Records written before this existed read as [Difficulty.normal], which is
+  /// what they were.
+  final Difficulty difficulty;
 
   bool get played => stars > 0;
 }
@@ -28,6 +45,7 @@ class Progress {
 
   static const _unlockedKey = 'unlocked';
   static const _endlessKey = 'endless_best';
+  static const _endlessEasyKey = 'endless_best_easy';
   static const _petKey = 'pet';
 
   // Player settings. Separate keys rather than one blob so a new setting never
@@ -38,7 +56,10 @@ class Progress {
   static const _hapticsKey = 'opt_haptics';
   static const _reducedMotionKey = 'opt_reduced_motion';
   static const _hintsKey = 'opt_hints';
+  static const _difficultyKey = 'opt_difficulty';
+  static const _difficultyChosenKey = 'opt_difficulty_chosen';
   static const _developerKey = 'opt_developer';
+  static const _zoomKey = 'opt_zoom';
   static const _ownedKey = 'owns_full';
   static const _trialKey = 'trial_used';
 
@@ -76,16 +97,25 @@ class Progress {
           stars: _prefs.getInt(key) ?? 0,
           bestTaps: existing.bestTaps,
           bestTime: existing.bestTime,
+          difficulty: existing.difficulty,
         ),
         'taps' => LevelRecord(
           stars: existing.stars,
           bestTaps: _prefs.getInt(key) ?? 0,
           bestTime: existing.bestTime,
+          difficulty: existing.difficulty,
         ),
         'time' => LevelRecord(
           stars: existing.stars,
           bestTaps: existing.bestTaps,
           bestTime: _prefs.getDouble(key) ?? 0,
+          difficulty: existing.difficulty,
+        ),
+        'diff' => LevelRecord(
+          stars: existing.stars,
+          bestTaps: existing.bestTaps,
+          bestTime: existing.bestTime,
+          difficulty: Difficulty.fromKey(_prefs.getString(key)),
         ),
         _ => existing,
       };
@@ -95,7 +125,18 @@ class Progress {
   /// The highest level the player may start. Always at least one.
   int get unlocked => (_prefs.getInt(_unlockedKey) ?? 1).clamp(1, 1 << 20);
 
+  /// The deepest endless board cleared on Normal or Hard.
+  ///
+  /// The headline record, and deliberately not "the deepest board cleared on
+  /// any setting": Easy widens the budget and slows the patrols, so folding its
+  /// runs in here would let the number climb without the play behind it having
+  /// got any better. Easy keeps its own depth in [endlessBestOn].
   int get endlessBest => _prefs.getInt(_endlessKey) ?? 0;
+
+  /// The deepest endless board cleared on one setting.
+  int endlessBestOn(Difficulty difficulty) => difficulty == Difficulty.easy
+      ? _prefs.getInt(_endlessEasyKey) ?? 0
+      : endlessBest;
 
   String get pet => _prefs.getString(_petKey) ?? 'dog';
 
@@ -139,14 +180,16 @@ class Progress {
     required int stars,
     required int taps,
     required double time,
+    Difficulty difficulty = Difficulty.normal,
   }) async {
     if (level > Campaign.length) {
-      await recordEndlessClear(level: level);
+      await recordEndlessClear(level: level, difficulty: difficulty);
       return;
     }
     final existing = recordFor(level);
+    final beatsStars = stars > existing.stars;
     final merged = LevelRecord(
-      stars: stars > existing.stars ? stars : existing.stars,
+      stars: beatsStars ? stars : existing.stars,
       // Zero means "never finished", so any real result beats it.
       bestTaps: existing.bestTaps == 0 || taps < existing.bestTaps
           ? taps
@@ -154,12 +197,24 @@ class Progress {
       bestTime: existing.bestTime == 0 || time < existing.bestTime
           ? time
           : existing.bestTime,
+      // Follows the stars, because it exists to say what they cost. A run that
+      // beats the star count owns the badge outright; one that merely matches
+      // it upgrades the badge only by having done it on a harder setting. What
+      // this rules out is the one that would sting: a casual Easy replay
+      // downgrading a Hard-earned mark on a level already finished.
+      difficulty: beatsStars
+          ? difficulty
+          : stars == existing.stars &&
+                difficulty.rank > existing.difficulty.rank
+          ? difficulty
+          : existing.difficulty,
     );
     _records[level] = merged;
 
     await _prefs.setInt('lvl_${level}_stars', merged.stars);
     await _prefs.setInt('lvl_${level}_taps', merged.bestTaps);
     await _prefs.setDouble('lvl_${level}_time', merged.bestTime);
+    await _prefs.setString('lvl_${level}_diff', merged.difficulty.storageKey);
 
     if (level + 1 > unlocked) {
       await _prefs.setInt(_unlockedKey, level + 1);
@@ -169,11 +224,17 @@ class Progress {
   /// Records only the deepest endless board cleared. Endless has no stars,
   /// per-level records or unlock chain: every new run starts at depth one and
   /// the single score is how far that run got.
-  Future<void> recordEndlessClear({required int level}) async {
-    if (level <= Campaign.length || level <= endlessBest) {
+  Future<void> recordEndlessClear({
+    required int level,
+    Difficulty difficulty = Difficulty.normal,
+  }) async {
+    if (level <= Campaign.length || level <= endlessBestOn(difficulty)) {
       return;
     }
-    await _prefs.setInt(_endlessKey, level);
+    await _prefs.setInt(
+      difficulty == Difficulty.easy ? _endlessEasyKey : _endlessKey,
+      level,
+    );
   }
 
   Future<void> choosePet(String name) => _prefs.setString(_petKey, name);
@@ -203,6 +264,35 @@ class Progress {
 
   bool get hints => _prefs.getBool(_hintsKey) ?? true;
   Future<void> setHints(bool on) => _prefs.setBool(_hintsKey, on);
+
+  /// How far the board is magnified, as a [BoardCamera] step.
+  ///
+  /// A comfort setting rather than a per-level one, so it persists like volume
+  /// does: a player who needs the board bigger needs it bigger tomorrow too.
+  double get zoom => (_prefs.getDouble(_zoomKey) ?? 1.0).clamp(1.0, 3.0);
+  Future<void> setZoom(double v) => _prefs.setDouble(_zoomKey, v);
+
+  /// How hard the campaign plays. Defaults to the setting the game shipped
+  /// with, so an existing player's game does not change under them.
+  Difficulty get difficulty =>
+      Difficulty.fromKey(_prefs.getString(_difficultyKey));
+
+  Future<void> setDifficulty(Difficulty d) async {
+    await _prefs.setString(_difficultyKey, d.storageKey);
+    await _prefs.setBool(_difficultyChosenKey, true);
+  }
+
+  /// Whether the player has been asked to pick a difficulty yet.
+  ///
+  /// A separate flag rather than "is the difficulty key absent", because those
+  /// stop being the same question the moment someone picks Normal: the stored
+  /// value would be indistinguishable from the default and they would be asked
+  /// again on the next launch.
+  ///
+  /// True for existing players, who have been playing the campaign as authored
+  /// and should not be interrupted to be told they were on Normal all along.
+  bool get difficultyChosen =>
+      _prefs.getBool(_difficultyChosenKey) ?? unlocked > 1;
 
   /// The tuning panel.
   ///

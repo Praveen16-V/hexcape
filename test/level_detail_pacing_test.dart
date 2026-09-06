@@ -29,7 +29,8 @@ void main() {
               level: entry.key,
               progress: progress,
               inProgress: false,
-              onPlay: ({required zen, required restart}) {},
+              onPlay:
+                  ({required zen, required difficulty, required restart}) {},
               onUnlock: () {},
             ),
           ),
@@ -76,7 +77,8 @@ void main() {
               level: Campaign.length,
               progress: progress,
               inProgress: false,
-              onPlay: ({required zen, required restart}) {},
+              onPlay:
+                  ({required zen, required difficulty, required restart}) {},
               onUnlock: () {},
             ),
           ),

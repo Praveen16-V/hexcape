@@ -21,6 +21,13 @@ enum TapOutcome {
   /// In range, but nothing left to clear there.
   nothingToClear,
 
+  /// Sunken ground with nothing open beside it.
+  ///
+  /// Reported rather than swallowed, for the reason [warded] is: the player has
+  /// to learn that *where they are standing* is what stopped them, and a tap
+  /// that quietly did nothing would teach that the tile is simply inert.
+  noFooting,
+
   /// Inside a sentry's light, which refuses taps.
   ///
   /// Reported rather than silently swallowed or redirected to a neighbour: the
@@ -75,13 +82,22 @@ class InputSystem {
     if (directCell != null && directCell.type == HexType.anchor) {
       return TapResult(TapOutcome.anchor, direct);
     }
+    // Checked before the snap for the same reason the anchor case is: a
+    // deliberate tap on sunken ground must say why it failed, not silently
+    // shatter a neighbour the player was not aiming at.
+    if (directCell != null &&
+        directCell.isClearable &&
+        directCell.type.needsFooting &&
+        !grid.hasFooting(direct)) {
+      return TapResult(TapOutcome.noFooting, direct);
+    }
 
     bool inReach(HexCoord c) =>
         (layout.toPixel(c) - dogPosition).distance <= tapRadius;
 
     // An exact hit wins outright. Resolving the hex actually under the finger
     // first means a deliberate tap is never reinterpreted as something else.
-    if (directCell != null && directCell.isClearable && inReach(direct)) {
+    if (directCell != null && grid.isClearable(direct) && inReach(direct)) {
       return TapResult(TapOutcome.hit, direct);
     }
 

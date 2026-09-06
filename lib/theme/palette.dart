@@ -80,6 +80,20 @@ class Palette {
   static const faultSide = Color(0xFF2E1B18);
   static const faultEdge = Color(0xFFD9603F);
 
+  /// Slopes. A warm amber that reads as *motion* rather than as danger — it is
+  /// the one obstacle besides a spring that gives you something, and it must
+  /// not be mistaken for the rust of ground that is about to leave.
+  static const slopeTop = Color(0xFF4C4326);
+  static const slopeSide = Color(0xFF2C2716);
+  static const slopeEdge = Color(0xFFE0B457);
+
+  /// Sunken ground. Deliberately the dimmest tile on the board: it is ground
+  /// you cannot reach yet, and it should read as being further away than
+  /// everything around it.
+  static const sunkenTop = Color(0xFF232C3E);
+  static const sunkenSide = Color(0xFF141A27);
+  static const sunkenEdge = Color(0xFF5C7398);
+
   /// The colour of a pickup, in one place. This switch used to be copied into
   /// the field renderer, the powerup ring and back again, so adding a kind meant
   /// finding all of them.

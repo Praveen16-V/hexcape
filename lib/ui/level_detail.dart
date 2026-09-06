@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../game/difficulty.dart';
 import '../game/entitlements.dart';
 import '../game/level_rules.dart';
 import '../game/progress.dart';
 import '../gen/silhouette.dart';
 import '../l10n/strings.dart';
 import '../theme/palette.dart';
+import 'difficulty_picker.dart';
 
 /// What a level is, before you commit to it.
 ///
@@ -20,6 +22,7 @@ class LevelDetail extends StatefulWidget {
     required this.inProgress,
     required this.onPlay,
     required this.onUnlock,
+    this.initialDifficulty = Difficulty.normal,
     this.initialZen = false,
     super.key,
   });
@@ -35,8 +38,17 @@ class LevelDetail extends StatefulWidget {
   /// existing board must be rebuilt, so the action stops calling itself Resume.
   final bool initialZen;
 
-  /// [zen] and [restart] are the two choices this sheet can make.
-  final void Function({required bool zen, required bool restart}) onPlay;
+  /// The difficulty this sheet opens on: the player's setting, or the one a
+  /// resumable run is already being played at.
+  final Difficulty initialDifficulty;
+
+  /// [zen], [difficulty] and [restart] are the choices this sheet can make.
+  final void Function({
+    required bool zen,
+    required Difficulty difficulty,
+    required bool restart,
+  })
+  onPlay;
 
   /// Opens the offer, for a level that is past the free campaign.
   final VoidCallback onUnlock;
@@ -47,17 +59,18 @@ class LevelDetail extends StatefulWidget {
 
 class _LevelDetailState extends State<LevelDetail> {
   late bool _zen;
+  late Difficulty _difficulty;
 
   @override
   void initState() {
     super.initState();
     _zen = widget.initialZen;
+    _difficulty = widget.initialDifficulty;
   }
 
   @override
   Widget build(BuildContext context) {
     final level = widget.level;
-    final rules = Campaign.rulesFor(level);
     final record = widget.progress.recordFor(level);
     final access = Entitlements.accessTo(
       level,
@@ -66,6 +79,11 @@ class _LevelDetailState extends State<LevelDetail> {
       trialUsed: widget.progress.trialUsed,
     );
     final trial = access == LevelAccess.trial;
+    // The one free look past the paywall is pinned to Normal. It exists to show
+    // what the level actually is before asking for money, and a preview the
+    // player can quietly soften — or sharpen — is not that.
+    final difficulty = trial ? Difficulty.normal : _difficulty;
+    final rules = Campaign.rulesFor(level, difficulty: difficulty);
     // The trial is playable, so it takes the same body as an open level — the
     // records, the brief, the play button. Only the framing above it differs.
     final unlocked = access == LevelAccess.open || trial;
@@ -73,7 +91,10 @@ class _LevelDetailState extends State<LevelDetail> {
     final endless = level > Campaign.length;
     final colour = Palette.forBand(band);
     final identity = rules.identity;
-    final canResume = widget.inProgress && _zen == widget.initialZen;
+    final canResume =
+        widget.inProgress &&
+        _zen == widget.initialZen &&
+        difficulty == widget.initialDifficulty;
 
     return Container(
       decoration: const BoxDecoration(
@@ -172,7 +193,9 @@ class _LevelDetailState extends State<LevelDetail> {
                   const SizedBox(height: 14),
                 ],
                 if (endless)
-                  _EndlessRecord(bestLevel: widget.progress.endlessBest)
+                  _EndlessRecord(
+                    bestLevel: widget.progress.endlessBestOn(difficulty),
+                  )
                 else if (record.played)
                   _Records(record: record)
                 else
@@ -191,8 +214,18 @@ class _LevelDetailState extends State<LevelDetail> {
                   mastered: widget.progress.masteredLevels,
                 ),
                 const SizedBox(height: 14),
-                _Contains(rules: rules),
+                LevelContainsChips(rules: rules),
                 const SizedBox(height: 18),
+                // Not offered on the three guided levels, which ignore the
+                // setting: a lesson that has to land is not a negotiation.
+                if (!rules.isTutorial) ...[
+                  DifficultyPicker(
+                    value: difficulty,
+                    enabled: !trial,
+                    onChanged: (d) => setState(() => _difficulty = d),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 // Only offered where it means something: with regrowth switched
                 // off already, "no regrowth" is not a mode.
                 if (rules.regrowth && !endless) ...[
@@ -205,7 +238,11 @@ class _LevelDetailState extends State<LevelDetail> {
                 SizedBox(
                   height: 52,
                   child: FilledButton(
-                    onPressed: () => widget.onPlay(zen: _zen, restart: false),
+                    onPressed: () => widget.onPlay(
+                      zen: _zen,
+                      difficulty: difficulty,
+                      restart: false,
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: colour,
                       foregroundColor: Palette.background,
@@ -233,7 +270,11 @@ class _LevelDetailState extends State<LevelDetail> {
                 ),
                 if (canResume)
                   TextButton(
-                    onPressed: () => widget.onPlay(zen: _zen, restart: true),
+                    onPressed: () => widget.onPlay(
+                      zen: _zen,
+                      difficulty: difficulty,
+                      restart: true,
+                    ),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.white.withValues(alpha: 0.5),
                     ),
@@ -465,6 +506,12 @@ class _Records extends StatelessWidget {
           label: 'Best time',
           value: '${record.bestTime.toStringAsFixed(1)}s',
         ),
+        // Named only where it is not Normal, so the ordinary case stays a clean
+        // row of three figures rather than every level explaining itself.
+        if (record.difficulty != Difficulty.normal) ...[
+          const SizedBox(width: 18),
+          _Figure(label: 'Earned on', value: record.difficulty.label),
+        ],
       ],
     );
   }
@@ -534,13 +581,23 @@ class _Figure extends StatelessWidget {
 /// Not a spoiler: the board is still hidden by fog, and knowing a level has
 /// patrols is the same thing the banner already tells you the moment you arrive.
 /// It is the difference between choosing a level and being handed one.
-class _Contains extends StatelessWidget {
-  const _Contains({required this.rules});
+/// The pressures this level actually applies, as tags.
+///
+/// Public so a test can hold it against [LevelRules] directly: the row is
+/// derived from the rules rather than authored per level, and the failure it
+/// had — three mechanics missing for as long as it existed — is invisible from
+/// the outside and silent in every screenshot.
+class LevelContainsChips extends StatelessWidget {
+  const LevelContainsChips({required this.rules, super.key});
 
   final LevelRules rules;
 
   @override
   Widget build(BuildContext context) {
+    // Every pressure the level actually applies, and *only* the ones it does.
+    // Heavy ground, cracked ground and sentries were missing here for as long
+    // as this row has existed, so a Collapse level's brief promised nothing
+    // about the mechanic the whole band is built on.
     final tags = <String>[
       '${rules.pace.label} pace',
       if (rules.regrowth) 'Regrowth',
@@ -548,8 +605,13 @@ class _Contains extends StatelessWidget {
       if (rules.hunger) 'Clock',
       if (rules.budget) 'Tap budget',
       if (rules.anchorDensity > 0) 'Walls',
+      if (rules.heavyDensity > 0) 'Heavy ground',
       if (rules.springDensity > 0) 'Springs',
+      if (rules.faultDensity > 0) 'Cracked ground',
+      if (rules.slopeDensity > 0) 'Slopes',
+      if (rules.sunkenDensity > 0) 'Sunken ground',
       if (rules.guards > 0) 'Patrols',
+      if (rules.sentries > 0) 'Warded lights',
     ];
     if (tags.isEmpty) {
       return const SizedBox.shrink();

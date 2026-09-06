@@ -43,7 +43,43 @@ enum HexType {
   /// each, so the route through a crack is cheaper than the detour around it —
   /// but it has to be run in one continuous push. Cheap-and-timed against
   /// expensive-and-safe is a live choice, which more walls would not be.
-  fault;
+  fault,
+
+  /// Clears in one tap, then pushes her one *fixed* direction when she steps
+  /// on it — the direction drawn on the tile, not the one she was walking.
+  ///
+  /// The plannable inverse of [spring], and that contrast is the whole reason
+  /// it exists. A spring adds distance to a decision the player already made;
+  /// it is a gift precisely because it is uncontrollable, and you set one up
+  /// rather than aim it. A slope is aimed *for* you and says so before you
+  /// commit, which makes it the first thing in the game you can route
+  /// *through* on purpose rather than merely survive.
+  ///
+  /// It is also the answer to a real gap: nothing in the game ever moved her
+  /// somewhere she could see in advance, so HEEL — the one verb that stops her
+  /// — had exactly one use, waiting out a patrol. A slope you do not want to
+  /// take is the second.
+  ///
+  /// The direction lives on the cell rather than in the type, because a type
+  /// per direction would be six enum entries, six palette colours and six
+  /// reference entries for one idea. See [HexCell.slopeDirection].
+  slope,
+
+  /// Clears in one tap, but only when something beside it is already open.
+  ///
+  /// The one pressure the game never applied: **you cannot carve at a
+  /// distance.** Every other obstacle costs taps, seconds or a direction; none
+  /// of them cost *position*. [fault]'s own note names the consequence that had
+  /// gone unopposed — carving far ahead of her is strictly optimal and costs
+  /// nothing — and a fault answers it with a clock. This answers it with
+  /// geometry: sunken ground has to be reached, one tile at a time, from ground
+  /// that is already open.
+  ///
+  /// Never a soft-lock, and the argument is short: she always stands in an open
+  /// cell, so every tile touching her is footed by definition. It bites at
+  /// *range*, which is exactly where it is meant to, and it is the first thing
+  /// REACH has to think about rather than simply enjoy.
+  sunken;
 
   /// Taps needed to clear one of these from solid.
   int get hitsRequired => this == HexType.heavy ? 2 : 1;
@@ -52,6 +88,15 @@ enum HexType {
 
   /// Whether this closes on its own clock rather than by bordering a wall.
   bool get closesOnItsOwn => this == HexType.fault;
+
+  /// Whether a tap needs open ground beside this before it can do anything.
+  ///
+  /// Asked of the *grid* rather than the cell wherever it matters, because a
+  /// cell cannot see its neighbours — see [HexGrid.isClearable].
+  bool get needsFooting => this == HexType.sunken;
+
+  /// Whether stepping on this throws her.
+  bool get throwsHer => this == HexType.spring || this == HexType.slope;
 }
 
 /// Where a cell is in the clear/regrow cycle.
@@ -126,6 +171,14 @@ class HexCell {
 
   /// Taps already landed on this cell since it was last solid.
   int hits = 0;
+
+  /// Which way a [HexType.slope] pushes her, as an index into
+  /// [HexCoord.directions]. Meaningless on every other type.
+  ///
+  /// Fixed when the level is generated and drawn on the tile, because a slope
+  /// the player cannot read before stepping on it is a spring with worse
+  /// manners.
+  int slopeDirection = 0;
 
   /// Whether the player has learned what this cell *is*.
   ///

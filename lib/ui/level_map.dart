@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../game/difficulty.dart';
 import '../game/entitlements.dart';
 import '../game/haptics.dart';
 import '../game/level_rules.dart';
@@ -462,6 +463,22 @@ class _MapPainter extends CustomPainter {
 
     if (campaignPlayed) {
       _paintStars(canvas, centre, record.stars, colour);
+      // One letter beside the stars where they were not earned on Normal. The
+      // detail sheet is where it says the word; here there is room for a mark
+      // and nothing more, and a tile that stayed silent about it would make the
+      // star row quietly mean two different things.
+      if (record.difficulty != Difficulty.normal) {
+        _paintLabel(
+          canvas,
+          // Clear of the third star: the row ends at 0.26 plus its own radius,
+          // and a letter touching the last ring reads as part of it.
+          Offset(centre.dx + layout.size * 0.5, centre.dy + layout.size * 0.44),
+          record.difficulty == Difficulty.easy ? 'E' : 'H',
+          colour: colour.withValues(alpha: 0.75),
+          size: layout.size * 0.24,
+          weight: FontWeight.w800,
+        );
+      }
     }
   }
 

@@ -101,7 +101,8 @@ void main() {
               level: level,
               progress: progress,
               inProgress: false,
-              onPlay: ({required zen, required restart}) {},
+              onPlay:
+                  ({required zen, required difficulty, required restart}) {},
               onUnlock: () {},
             ),
           ),
@@ -138,7 +139,7 @@ void main() {
             progress: progress,
             inProgress: true,
             initialZen: false,
-            onPlay: ({required zen, required restart}) {},
+            onPlay: ({required zen, required difficulty, required restart}) {},
             onUnlock: () {},
           ),
         ),
