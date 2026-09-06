@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flame/flame.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/widgets.dart';
@@ -183,6 +184,37 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// 1 -> 0 after a tap was refused by the light.
   double wardFlash = 0;
 
+  /// The ring where a living overgrowth heart doubles the closing pace,
+  /// computed once at level build from the board's hearts.
+  Set<HexCoord> overgrowthAura = const {};
+
+  /// Whether any heart still stands — the aura means nothing once they are dug.
+  bool get heartsStand => _heartsStanding;
+  bool _heartsStanding = false;
+  List<HexCoord> _heartCells = const [];
+
+  /// Lamps planted by the BEACON charge, as cells. They hold a bubble of
+  /// revealed ground for the rest of the run.
+  List<HexCoord> beaconsLit = const [];
+
+  /// The tremor vents' shared countdown to the next surge, and the flash it
+  /// leaves. Vents are all wired to the same rhythm so the board warns in one
+  /// voice rather than as a scatter of asynchronous alarms.
+  double tremorAt = double.infinity;
+  double tremorFlash = 0;
+  List<HexCoord> _tremorCells = const [];
+
+  /// Seconds of alarm-speed sweeping left, after she steps on a bell.
+  double alarmFor = 0;
+
+  /// The tiles the field most recently closed, oldest last, capped — what
+  /// REWIND reads. Regrowth, cracklines, braids and warden wakes all count;
+  /// anything that closed counts once, whoever closed it.
+  final List<HexCoord> recentlyClosed = [];
+
+  /// Stops one thorn pad from billing her every frame she stands on it.
+  double _thornCooldown = 0;
+
   /// Stops one patrol from billing her every frame she stands in its light.
   double _caughtCooldown = 0;
 
@@ -208,8 +240,19 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// seconds of nothing at all is well past deliberation.
   static const hintAfter = 7.0;
 
+  /// When the nudge actually arrives for the current pet. Scout reads sooner;
+  /// nothing makes it later — the perk axis moves one way by design, because
+  /// a pet that punishes its player is not a pet.
+  double get effectiveHintAfter =>
+      math.max(2.0, hintAfter - pet.perk.hintBeforeBy);
+
   /// The coat she is wearing (§9.2). Purely cosmetic — see [Pet].
   Pet pet = Pets.scout;
+
+  /// The drawn dog, per coat. Populated at [onLoad]; empty under tests, which
+  /// is how the component knows to walk its procedural path instead. Keyed by
+  /// pet id rather than by [Pet] so a coat change mid-menu needs no ceremony.
+  final Map<String, Image> petSprites = {};
 
   /// What the player is holding a finger on, for the inspector card.
   ///
@@ -404,6 +447,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // ones — a game that starts mute and finds its voice a second later feels
     // broken rather than loading.
     await sfx.load();
+    // The dog's coats. Missing art is survivable: the component falls back to
+    // drawing her procedurally, which is how tests keep running her without
+    // an asset bundle.
+    for (final pet in Pets.all) {
+      try {
+        petSprites[pet.id] = await Flame.images.load('pets/${pet.id}.png');
+      } catch (_) {
+        // Leave the coat undelivered; she draws her fallback.
+      }
+    }
     await addAll([FieldComponent(this), effects, DogComponent(this)]);
     // Whatever the map asked for while audio was still loading, else wherever
     // the player got to. Without honouring the request here, tapping a level
@@ -458,9 +511,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     if (tuning.followCampaign) {
       _applyRules(rules);
       // Fog is the one difficulty lever with no authored per-level value, so it
-      // is scaled here rather than through the rules.
+      // is scaled here rather than through the rules. Both modes leave the
+      // tutorial's fog exactly as scripted — the lesson reads first.
       tuning.revealFactor =
-          tuning.revealBase * difficultyForRun.revealMultiplier;
+          tuning.revealBase * difficultyForRun.revealMultiplierFor(levelNumber);
     }
     seed = rules.seed;
 
@@ -475,10 +529,32 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         faultDensity: tuning.faultDensity,
         slopeDensity: tuning.slopeDensity,
         sunkenDensity: tuning.sunkenDensity,
+        hardpanDensity: tuning.hardpanDensity,
+        thatchDensity: tuning.thatchDensity,
+        overgrowthDensity: tuning.overgrowthDensity,
+        tremorDensity: tuning.tremorDensity,
+        iceDensity: tuning.iceDensity,
+        mireDensity: tuning.mireDensity,
+        eddyDensity: tuning.eddyDensity,
+        magnetDensity: tuning.magnetDensity,
+        thicketDensity: tuning.thicketDensity,
+        sleeperDensity: tuning.sleeperDensity,
+        foxfireDensity: tuning.foxfireDensity,
+        scaffoldDensity: tuning.scaffoldDensity,
+        thornDensity: tuning.thornDensity,
+        alarmDensity: tuning.alarmDensity,
+        gatePairs: tuning.gatePairCount,
+        mirrorPairs: tuning.mirrorPairCount,
+        gloom: tuning.gloomEnabled,
         guards: tuning.guardCount,
         sentries: tuning.sentryCount,
+        beacons: tuning.beaconCount,
+        spinners: tuning.spinnerCount,
+        runners: tuning.runnerCount,
+        blinkers: tuning.blinkerCount,
+        wardens: tuning.wardenCount,
         guardSpeed: tuning.guardSpeed,
-        treats: tuning.treatCount.round(),
+        treats: tuning.treatCount.round() + pet.perk.extraTreats,
         powerups: tuning.powerupCount.round(),
         treatSeconds: tuning.treatSeconds,
         treatTaps: tuning.treatTaps.round(),
@@ -513,6 +589,26 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     guardedCells = const {};
     wardedCells = const {};
     wardFlash = 0;
+    _heartCells = [
+      for (final cell in grid.all)
+        if (cell.type == HexType.overgrowth) cell.coord,
+    ];
+    _heartsStanding = _heartCells.isNotEmpty;
+    overgrowthAura = _heartsStanding
+        ? {for (final h in _heartCells) ...h.disc(2)}
+        : const {};
+    beaconsLit = const [];
+    _tremorCells = [
+      for (final cell in grid.all)
+        if (cell.type == HexType.tremor) cell.coord,
+    ];
+    tremorAt = _tremorCells.isEmpty
+        ? double.infinity
+        : tuning.tremorPeriod * 0.6; // first surge comes early enough to teach
+    tremorFlash = 0;
+    alarmFor = 0;
+    recentlyClosed.clear();
+    _thornCooldown = 0;
     scentPath = const [];
     _scentFieldVersion = -1;
     _caughtCooldown = 0;
@@ -719,8 +815,30 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       ..faultDensity = r.faultDensity
       ..slopeDensity = r.slopeDensity
       ..sunkenDensity = r.sunkenDensity
+      ..hardpanDensity = r.hardpanDensity
+      ..thatchDensity = r.thatchDensity
+      ..overgrowthDensity = r.overgrowthDensity
+      ..tremorDensity = r.tremorDensity
+      ..iceDensity = r.iceDensity
+      ..mireDensity = r.mireDensity
+      ..eddyDensity = r.eddyDensity
+      ..magnetDensity = r.magnetDensity
+      ..thicketDensity = r.thicketDensity
+      ..sleeperDensity = r.sleeperDensity
+      ..foxfireDensity = r.foxfireDensity
+      ..scaffoldDensity = r.scaffoldDensity
+      ..thornDensity = r.thornDensity
+      ..alarmDensity = r.alarmDensity
+      ..gatePairCount = r.gatePairs
+      ..mirrorPairCount = r.mirrorPairs
+      ..gloomEnabled = r.gloom
       ..guardCount = r.guards
       ..sentryCount = r.sentries
+      ..beaconCount = r.beacons
+      ..spinnerCount = r.spinners
+      ..runnerCount = r.runners
+      ..blinkerCount = r.blinkers
+      ..wardenCount = r.wardens
       ..guardSpeed = r.guardSpeed
       ..treatCount = r.treats.toDouble()
       ..powerupCount = r.powerups.toDouble()
@@ -947,29 +1065,81 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     _caughtCooldown = math.max(0, _caughtCooldown - dt);
     _springCooldown = math.max(0, _springCooldown - dt);
+    _thornCooldown = math.max(0, _thornCooldown - dt);
+    alarmFor = math.max(0, alarmFor - dt);
 
     // Patrols step before she does, so the ground she is refusing to enter is
     // where the light is *now* rather than where it was last frame. The other
     // order leaves her walking into a cell the light has already reached.
+    //
+    // One pace for every light on the board: SLOWBEAT halves it, an alarm
+    // bell whips it. Both act on the *shared* rhythm because that is what the
+    // player learns to read — a board whose lights each ran their own tempo
+    // would have no beat to catch.
+    final lightPace =
+        (powerups.slowbeatActive ? ActiveEffects.slowbeatFactor : 1.0) *
+        (alarmFor > 0 ? ActiveEffects.alarmFactor : 1.0);
     if (guards.isNotEmpty) {
       if (playing) {
         for (final guard in guards) {
-          guard.update(dt);
+          guard.update(dt * lightPace);
         }
       }
+      // The two rule-sets stay separate sets, now split by what each kind
+      // does rather than by an isSentry flag: red light for her body, pale
+      // light for your hands, and never one borrowed throne for both.
       guardedCells = {
         for (final guard in guards)
-          if (!guard.isSentry)
+          if (guard.blocksDog)
             for (final c in guard.lit)
               if (grid.contains(c)) c,
       };
       wardedCells = {
         for (final guard in guards)
-          if (guard.isSentry)
+          if (guard.wardsTaps)
             for (final c in guard.lit)
               if (grid.contains(c)) c,
       };
+      // A warden closes whatever open ground it is standing over. The closing
+      // still runs the warning animation — it starts partway in, which is the
+      // light itself making the threat legible — so the fairness contract
+      // (warned, never sudden) survives a moving mechanic.
+      for (final guard in guards) {
+        if (guard.kind == GuardKind.warden && phase == GamePhase.playing) {
+          for (final c in guard.lit) {
+            final cell = grid.at(c);
+            if (cell == null ||
+                cell.state != CellState.open ||
+                cell.pinned ||
+                c == dog.cell) {
+              continue;
+            }
+            cell.state = CellState.regrowing;
+            cell.regrowT = math.max(cell.regrowT, 0.30);
+          }
+        }
+      }
     }
+
+    // Tremor vents: one shared rhythm while any vent stands. The surge pulls
+    // pending closures forward — it never starts a close that was not already
+    // gradually coming, which is what keeps a board-wide event fair.
+    if (playing && elapsed >= tremorAt) {
+      final standing = _tremorCells.where((c) => grid.at(c)?.isSolid ?? false);
+      if (standing.isEmpty) {
+        tremorAt = double.infinity;
+      } else {
+        tremorAt = elapsed + tuning.tremorPeriod + tuning.tremorPeriod * 0.6;
+        RegrowthSystem.surge(grid, tuning.tremorJump);
+        tremorFlash = 1;
+        fieldVersion++;
+        juice.shake(3.0);
+        if (sfx.play(Sound.warn, gain: 0.7, minInterval: 0.9)) {
+          Haptics.medium();
+        }
+      }
+    }
+    tremorFlash = math.max(0, tremorFlash - dt * 1.4);
 
     // Captured before she moves, not after: taken afterwards it can only ever
     // equal her current cell, and the hint would never see her make progress.
@@ -979,6 +1149,22 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // it the other way round leaves a one-frame window in which she can step
     // into a cell that is already past its snap threshold and get sealed inside
     // a wall.
+    //
+    // What the ground under her does this frame: ice mutes her steering, mire
+    // halves her stride, and both go silent while SUREPAWS is running — that
+    // immunity being the whole point of the pickup.
+    final under = grid.at(dog.cell);
+    final surepaw = powerups.surepawsActive;
+    final onIce =
+        !surepaw &&
+        under != null &&
+        under.type == HexType.ice &&
+        under.isPassable;
+    final onMire =
+        !surepaw &&
+        under != null &&
+        under.type == HexType.mire &&
+        under.isPassable;
     dog.update(
       dt: dt,
       grid: grid,
@@ -986,16 +1172,36 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       tuning: tuning,
       fieldVersion: fieldVersion,
       regrowthActive: playing && tuning.regrowthEnabled && !tuning.zenMode,
-      speedMultiplier: powerups.speedMultiplier,
-      blocked: guardedCells,
+      // A pet's pace rides the same slot as a sprint's: one multiplier, one
+      // place, and no second speed channel to mis-balance.
+      speedMultiplier: powerups.speedMultiplier * pet.perk.speedScale,
+      // A cloak parts the patrol light: the refusal and the bite both go quiet.
+      blocked: powerups.cloakActive ? const {} : guardedCells,
+      controlScale: onIce ? 0.22 : 1.0,
+      groundSpeedScale: onMire ? 0.5 : 1.0,
     );
+
+    // Eddy and magnet are *continuous* forces, unlike the throws: they lean on
+    // her velocity for as long as she stands on them, which is what makes them
+    // readable instead of startling.
+    if (!surepaw && under != null && under.type.pushesContinuously) {
+      final centre = layout.toPixel(dog.cell);
+      final away = dog.position - centre;
+      if (away.distance > 1e-4) {
+        final push = layout.width * 1.35 * dt / away.distance;
+        dog.velocity += under.type == HexType.eddy ? away * push : -away * push;
+      }
+    }
 
     _updateScent();
     _collectPickups();
-    _checkSpring();
-    _checkSlope();
+    if (!surepaw) {
+      _checkSpring();
+      _checkSlope();
+    }
     if (playing) {
       _checkCaught();
+      _checkContacts();
     }
     _noticeBone();
 
@@ -1036,6 +1242,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         grid: grid,
         tuning: tuning,
         dogCell: dog.cell,
+        overgrowthAura: _heartsStanding ? overgrowthAura : const {},
+        thatchDelay: tuning.thatchDelay,
+        extraDelay: pet.perk.regrowDelta,
       );
       if (events.warned.isNotEmpty) {
         firstRegrowthAt ??= elapsed;
@@ -1052,6 +1261,13 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         fieldVersion++;
         for (final coord in events.snapped) {
           effects.ripple(layout.toPixel(coord), layout.size);
+          // REWIND's ledger. Capped rather than compounding: the field only
+          // owes recent history, and an unbounded list of every tile that ever
+          // closed would make REWIND a map-size rewind.
+          recentlyClosed.add(coord);
+          if (recentlyClosed.length > 12) {
+            recentlyClosed.removeAt(0);
+          }
         }
         juice.shake(2.4);
         // A tile slamming shut within reach of her is worth a flinch. Reacting
@@ -1104,11 +1320,46 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     }
 
     if (dog.enclosedFor >= tuning.suffocateSeconds) {
+      // The keepsake is the one mercy in the game, and this is the sharper of
+      // the two deaths it answers: the ground letting go, not the clock.
+      if (powerups.consumePassive(PickupKind.keepsake)) {
+        var freed = 0;
+        for (final n in [dog.cell, ...dog.cell.disc(1)]) {
+          final c = grid.at(n);
+          if (c == null || !c.isSolid || c.type == HexType.anchor) {
+            continue;
+          }
+          c
+            ..revealed = true
+            ..clear(elapsed);
+          effects.shatter(layout.toPixel(n), layout.size, boost: 1.3);
+          freed++;
+        }
+        dog.enclosedFor = 0;
+        if (freed > 0) {
+          fieldVersion++;
+          juice.freeze(0.05);
+          sfx.play(Sound.powerup);
+          Haptics.heavy();
+          announce('The keepsake bursts the field open', seconds: 3);
+          return;
+        }
+        // Nothing around her would break — anchors hold. The mercy refunds.
+        powerups.grant(PickupKind.keepsake);
+      }
       _crush();
       return;
     }
 
     if (playing && tuning.hungerEnabled && hunger.isStarved) {
+      if (powerups.consumePassive(PickupKind.keepsake)) {
+        hunger.feed(ActiveEffects.keepsakeSeconds);
+        startleFlash = 1;
+        sfx.play(Sound.powerup);
+        Haptics.heavy();
+        announce('The keepsake feeds her once more', seconds: 3);
+        return;
+      }
       _starve();
       return;
     }
@@ -1124,7 +1375,14 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           tapsLeft: tapsLeft,
           pickups: pickups,
           treatTaps: tuning.treatTaps.round(),
-          blastCharges: powerups.chargesOf(PickupKind.blast),
+          // A maul spends like a one-ring blast, so it counts toward the same
+          // recovery maths — a run holding one may end nowhere the checker
+          // could not have reached. The count folds into blast's allowance
+          // rather than getting a column of its own, because the cheque is
+          // "one tap, several hexes open" either way, maul simply narrower.
+          blastCharges:
+              powerups.chargesOf(PickupKind.blast) +
+              powerups.chargesOf(PickupKind.maul),
           digCharges: powerups.chargesOf(PickupKind.dig),
         )) {
       lockedByBudget = Pathfinder.reachable(
@@ -1149,15 +1407,18 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// overwriting that would make their switch appear to flip itself.
   bool get hintVisible =>
       tuning.hintsEnabled &&
-      !difficultyForRun.suppressesHints &&
-      tuning.fogEnabled &&
       phase == GamePhase.playing &&
       !isOver &&
       (tutorial?.isDone ?? true) &&
-      sinceProgress >= hintAfter;
+      // The waystone is the one key the fog answers by itself: a quiet bow in
+      // the exit's direction, asking nothing of the clock or the setting.
+      (powerups.hasPassive(PickupKind.waystone) ||
+          (!difficultyForRun.suppressesHints &&
+              tuning.fogEnabled &&
+              sinceProgress >= hintAfter));
 
   double get hintStrength =>
-      ((sinceProgress - hintAfter) / 1.2).clamp(0.0, 1.0);
+      ((sinceProgress - effectiveHintAfter) / 1.2).clamp(0.0, 1.0);
 
   /// Which way the food is, routed around walls (§8).
   ///
@@ -1186,17 +1447,32 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   }
 
   double get revealRadius => math.max(
-    RevealSystem.radiusFor(baseTapRadius, tuning.revealFactor),
+    RevealSystem.radiusFor(baseTapRadius, tuning.revealFactor) *
+        powerups.revealMultiplier *
+        pet.perk.revealScale,
     effectiveTapRadius * 1.2,
   );
 
-  void _revealAround() => RevealSystem.reveal(
-    grid: grid,
-    layout: layout,
-    dogPosition: dog.position,
-    dogCell: dog.cell,
-    radius: revealRadius,
-  );
+  void _revealAround() {
+    RevealSystem.reveal(
+      grid: grid,
+      layout: layout,
+      dogPosition: dog.position,
+      dogCell: dog.cell,
+      radius: revealRadius,
+    );
+    // Planted beacons hold their own bubble of sight for the rest of the run:
+    // the whole point is a place staying known after she leaves it.
+    for (final lamp in beaconsLit) {
+      RevealSystem.reveal(
+        grid: grid,
+        layout: layout,
+        dogPosition: layout.toPixel(lamp),
+        dogCell: lamp,
+        radius: ActiveEffects.beaconRadius * layout.width,
+      );
+    }
+  }
 
   void _win() {
     phase = GamePhase.won;
@@ -1301,37 +1577,61 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     if (taken == null) {
       return;
     }
+    _takePickup(taken);
+  }
+
+  /// One pickup arriving, by whatever route — her paws, or a HARVEST.
+  ///
+  /// Split from [_collectPickups] because the magnet's whole trick is that the
+  /// pickup never moves. The economy logic (what a treat pays, what a charge
+  /// announces) must live in exactly one place or the two paths will disagree
+  /// about what a pouch doubles.
+  void _takePickup(Pickup taken) {
     switch (taken.kind) {
       case PickupKind.treat:
         wagBoost = 1;
         sfx.play(Sound.treat);
+        // A pouch is the one merchant on the board, and it deals only in
+        // treats — spend it the moment it doubles one.
+        final doubled = powerups.consumePassive(PickupKind.pouch) ? 2 : 1;
         final beforeFood = hunger.remaining;
-        hunger.feed(tuning.treatSeconds);
+        hunger.feed(tuning.treatSeconds * doubled);
         final secondsAdded = hunger.remaining - beforeFood;
-        final tapsAdded = tuning.treatTaps.round();
+        final tapsAdded = tuning.treatTaps.round() * doubled;
         tapBudget += tapsAdded;
         foodSecondsRefunded += secondsAdded;
         foodTapsRefunded += tapsAdded;
         final receipt = <String>[
           if (tuning.hungerEnabled) '+${secondsAdded.toStringAsFixed(1)}s',
           if (budgetLimited) '+$tapsAdded ${tapsAdded == 1 ? 'tap' : 'taps'}',
+          if (doubled > 1) 'pouch',
         ];
         foodReceipt = receipt.isEmpty ? 'Bone collected' : receipt.join(' · ');
         foodReceiptFor = 2.5;
-      case PickupKind.freeze:
-      case PickupKind.radiusPlus:
-      case PickupKind.sprint:
-      case PickupKind.scent:
-      case PickupKind.blast:
-      case PickupKind.dig:
-      case PickupKind.stake:
-      case PickupKind.heel:
+      case PickupKind.ration:
+        // Taps, nothing else: the budget rescue, priced like a treat minus
+        // the seconds.
+        wagBoost = 1;
+        sfx.play(Sound.treat);
+        final tapsAdded = ActiveEffects.rationTaps;
+        tapBudget += tapsAdded;
+        foodTapsRefunded += tapsAdded;
+        foodReceipt = '+$tapsAdded taps';
+        foodReceiptFor = 2.5;
+      default:
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
         // Charges wait for a tap, so they need to say so. Timed effects show
-        // themselves as the ring closing round her and need no words.
+        // themselves as the ring closing round her; passives say once what
+        // they are, then quietly stay.
         if (taken.kind.isCharge) {
           announce(taken.kind.readyHint);
+        } else if (taken.kind.isPassive) {
+          announce(
+            taken.kind == PickupKind.keepsake
+                ? 'KEEPSAKE — one mercy, carried now'
+                : '${taken.kind.label} — yours for the rest of the run',
+          );
         }
     }
     effects.shatter(
@@ -1364,7 +1664,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           dog.cell,
           grid.exit,
           grid.isTraversableInPrinciple,
-          (c) => grid.cells[c]?.remainingHits ?? (1 << 20),
+          grid.remainingCost,
         ) ??
         const [];
   }
@@ -1440,12 +1740,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   static const guardBiteSeconds = 3.0;
 
   void _checkCaught() {
+    if (powerups.cloakActive) {
+      return;
+    }
     if (_caughtCooldown > 0 || !guardedCells.contains(dog.cell)) {
       return;
     }
     _caughtCooldown = 1.6;
     if (tuning.hungerEnabled) {
-      hunger.bite(guardBiteSeconds);
+      hunger.bite(guardBiteSeconds * difficultyForRun.biteScale);
     }
     startleFlash = 1;
     barkFlash = 1;
@@ -1458,6 +1761,46 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     final nearest = _nearestGuardPosition();
     if (nearest != null) {
       dog.launch(dog.position - nearest, layout.width * 5.5, duration: 0.22);
+    }
+  }
+
+  /// What standing on a tile does to her, once she is actually on it.
+  ///
+  /// One check for all three contact ideas, because they share an ordering
+  /// rule: they fire on the tile she *arrived* at, never under the one she is
+  /// leaving, and never at all while IRONPAW is worn.
+  void _checkContacts() {
+    final cell = grid.at(dog.cell);
+    if (cell == null || !cell.isPassable) {
+      return;
+    }
+    // Crossing a braid marks it: its closing clock only starts when she
+    // leaves, and it only closes because she came.
+    if (cell.type == HexType.thatch && !cell.crossed) {
+      cell.crossed = true;
+    }
+    if (powerups.hasPassive(PickupKind.ironpaw)) {
+      return;
+    }
+    if (cell.type == HexType.thorn && _thornCooldown <= 0) {
+      _thornCooldown = 1.2;
+      if (tuning.hungerEnabled) {
+        hunger.bite(tuning.thornSeconds * difficultyForRun.biteScale);
+      }
+      startleFlash = 1;
+      juice.shake(2.6);
+      sfx.play(Sound.crack, gain: 0.7);
+      Haptics.medium();
+    }
+    // An alarm re-arms only once the hurry has run out — standing on the bell
+    // cannot keep the lights whipped forever.
+    if (cell.type == HexType.alarm && alarmFor <= 0) {
+      alarmFor = ActiveEffects.alarmSeconds * difficultyForRun.rhythmScale;
+      wardFlash = 1;
+      juice.shake(3.4);
+      sfx.play(Sound.warn, gain: 0.9);
+      Haptics.heavy();
+      announce('Alarm — the lights hurry');
     }
   }
 
@@ -1478,24 +1821,97 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   /// Spends a held charge, if one applies to what was just tapped. Returns
   /// whether it did, in which case the tap is finished.
+  ///
+  /// One tool is armed at a time, so the checks below never race — their order
+  /// is just reading order, from the most surprising target (a wall becoming
+  /// ground, ground becoming a wall) to the plainest one (a bigger carve).
   bool _spendCharge(TapOutcome outcome, HexCoord coord) {
-    if (outcome == TapOutcome.anchor &&
-        powerups.spendSelected(PickupKind.dig)) {
+    // DIG answers both kinds of wall: rivets and overgrowth hearts both
+    // report the anchor outcome, by deliberate sharing of the refusal.
+    if (outcome == TapOutcome.anchor && powerups.spendSelected(PickupKind.dig)) {
       _dig(coord);
       return true;
     }
-    // Checked before blast, which also accepts `nothingToClear`. Only one tool
-    // can be armed at a time so they cannot both fire, but the order makes the
-    // more specific case the one that reads first.
+    // Checked before blast, which also accepts `nothingToClear`.
     if (outcome == TapOutcome.nothingToClear &&
         (grid.at(coord)?.isSolid ?? true) == false &&
         powerups.spendSelected(PickupKind.stake)) {
       _stake(coord);
       return true;
     }
+    if (outcome == TapOutcome.hit) {
+      // SEED builds rather than opens — the exact inverse of DIG. Only plain
+      // ground may be taken; spending a wall-making tool on a mechanic's tile
+      // would quietly erase it.
+      if (powerups.selectedCharge == PickupKind.seed) {
+        final cell = grid.at(coord)!;
+        if (cell.type != HexType.plain) {
+          announce('Seed takes plain ground only', seconds: 2.5);
+          return false; // stays armed; the tap then falls through and carves
+        }
+        if (!powerups.spendSelected(PickupKind.seed)) {
+          return false;
+        }
+        final ok = _seed(coord);
+        if (!ok) {
+          // The field refused: hand the charge back. A tool that fails must
+          // never cost the player its bullet.
+          powerups.grant(PickupKind.seed);
+          announce('Walling that would seal her in', seconds: 2.5);
+          return false;
+        }
+        return true;
+      }
+      // MAUL: one tap, any clearable tile, fully open — hardpan included, and
+      // a mirror answered alone, which is the one way around its pairing.
+      if (powerups.selectedCharge == PickupKind.maul &&
+          powerups.spendSelected(PickupKind.maul)) {
+        _maul(coord);
+        return true;
+      }
+      // TROWEL: the line carve. The tapped tile and the two straight ahead.
+      if (powerups.selectedCharge == PickupKind.trowel &&
+          powerups.spendSelected(PickupKind.trowel)) {
+        _trowel(coord);
+        return true;
+      }
+    }
     if ((outcome == TapOutcome.hit || outcome == TapOutcome.nothingToClear) &&
         powerups.spendSelected(PickupKind.blast)) {
       _blast(coord);
+      return true;
+    }
+    return false;
+  }
+
+  /// Spends an armed charge that needs no particular tile — REWIND, HARVEST,
+  /// WHISTLE and BEACON encode *when*, not *where*, so any tap discharges
+  /// them. Returns true when the tap was the discharge.
+  bool _spendTargetFree() {
+    final armed = powerups.selectedCharge;
+    if (armed == null || armed.needsTarget) {
+      return false;
+    }
+    if (armed == PickupKind.rewind) {
+      if (!_rewind()) {
+        return false; // nothing has closed yet; stays armed
+      }
+      powerups.spendSelected(armed);
+      return true;
+    }
+    if (armed == PickupKind.whistle) {
+      if (!_whistle()) {
+        return false; // no trail yet; stays armed
+      }
+      powerups.spendSelected(armed);
+      return true;
+    }
+    if (armed == PickupKind.harvest && powerups.spendSelected(armed)) {
+      _harvest();
+      return true;
+    }
+    if (armed == PickupKind.beacon && powerups.spendSelected(armed)) {
+      _plantBeacon();
       return true;
     }
     return false;
@@ -1559,6 +1975,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       cell
         ..revealed = true
         ..clear(elapsed);
+      _tripSwitchFor(cell);
       effects.shatter(layout.toPixel(coord), layout.size, boost: 1.3);
       opened++;
     }
@@ -1582,16 +1999,23 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     );
   }
 
-  /// The only thing in the game that removes an anchor.
+  /// The only thing in the game that removes an anchor — or a heart. DIG
+  /// converts the tile to plain ground first, which both opens it and, for
+  /// overgrowth, cuts the aura: whatever the tile *was* stops being true.
   void _dig(HexCoord coord) {
     if (phase == GamePhase.idle) {
       phase = GamePhase.playing;
     }
     taps++;
-    grid.at(coord)!
+    final cell = grid.at(coord)!;
+    final wasHeart = cell.type == HexType.overgrowth;
+    cell
       ..type = HexType.plain
       ..revealed = true
       ..clear(elapsed);
+    if (wasHeart) {
+      _refreshHearts();
+    }
     // Walls define every distance on the board, so removing one invalidates the
     // field she steers by. Without this she keeps routing around a hole.
     grid.invalidateTopology();
@@ -1609,6 +2033,356 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       dogCell: dog.cell,
       carved: false,
     );
+  }
+
+  /// Whether any heart still stands, recomputed when one is dug out.
+  void _refreshHearts() {
+    _heartsStanding = _heartCells.any(
+      (c) => grid.at(c)?.type == HexType.overgrowth,
+    );
+    if (!_heartsStanding) {
+      announce('The overgrowth’s grip lets go', seconds: 3);
+    }
+  }
+
+  /// MAUL: one tile answers one strike, whatever it was. Even a mirror, which
+  /// otherwise insists on being answered twice — the pair rule reads the open
+  /// half and opens the other when it next charges.
+  void _maul(HexCoord coord) {
+    if (phase == GamePhase.idle) {
+      phase = GamePhase.playing;
+    }
+    taps++;
+    final cell = grid.at(coord)!;
+    cell
+      ..revealed = true
+      ..clear(elapsed);
+    _tripSwitchFor(cell);
+    if (cell.type == HexType.overgrowth) {
+      _refreshHearts();
+    }
+    fieldVersion++;
+    effects.shatter(layout.toPixel(coord), layout.size, boost: 1.5);
+    juice.shake(4.5);
+    sfx.play(Sound.crush, gain: 0.9);
+    Haptics.heavy();
+    tapRingFlash = 1;
+    streak.register(
+      grid: grid,
+      tapped: coord,
+      dogCell: dog.cell,
+      carved: false,
+    );
+  }
+
+  /// TROWEL: the tapped tile and the two cells straight ahead of it, from her.
+  /// The direction is from her position rather than along screen axes, so the
+  /// trail runs *away from her* — the only heading the game means anything by.
+  void _trowel(HexCoord coord) {
+    if (phase == GamePhase.idle) {
+      phase = GamePhase.playing;
+    }
+    taps++;
+    final centre = layout.toPixel(coord);
+    final away = centre - dog.position;
+    var direction = 0;
+    if (away.distance > 1e-6) {
+      // Rank the six hex directions by how closely their vector from the
+      // tapped cell continues the line she → the tap.
+      var best = -1.0;
+      for (var i = 0; i < HexCoord.directions.length; i++) {
+        final v = layout.toPixel(coord + HexCoord.directions[i]) - centre;
+        if (v.distance < 1e-6) {
+          continue;
+        }
+        final cos = (away.dx * v.dx + away.dy * v.dy) / (away.distance * v.distance);
+        if (cos > best) {
+          best = cos;
+          direction = i;
+        }
+      }
+    }
+    var opened = 0;
+    var cursor = coord;
+    for (var i = 0; i < 3; i++) {
+      final cell = grid.at(cursor);
+      if (cell == null || !cell.isClearable) {
+        break; // the trail stops at the first tile it cannot carry to
+      }
+      cell
+        ..revealed = true
+        ..clear(elapsed);
+      _tripSwitchFor(cell);
+      effects.shatter(layout.toPixel(cursor), layout.size, boost: 1.2);
+      opened++;
+      cursor += HexCoord.directions[direction];
+    }
+    if (opened > 0) {
+      fieldVersion++;
+    }
+    juice.shake(3.4);
+    sfx.play(Sound.snap, gain: 0.85);
+    Haptics.medium();
+    tapRingFlash = 1;
+    streak.register(
+      grid: grid,
+      tapped: coord,
+      dogCell: dog.cell,
+      carved: opened > 0,
+    );
+  }
+
+  /// SEED: plain ground becomes a wall — *if* the field still answers. This is
+  /// the one player action that makes ground worse, so it is the one action
+  /// that gets the generator's own solvability check before it commits.
+  bool _seed(HexCoord coord) {
+    final cell = grid.at(coord)!;
+    cell.type = HexType.anchor;
+    cell.state = CellState.solid;
+    if (Pathfinder.reachable(dog.cell, grid.exit, grid.isTraversableInPrinciple)) {
+      if (phase == GamePhase.idle) {
+        phase = GamePhase.playing;
+      }
+      taps++;
+      grid.invalidateTopology();
+      fieldVersion++;
+      effects.ripple(layout.toPixel(coord), layout.size);
+      sfx.play(Sound.thunk);
+      Haptics.medium();
+      announce('Wall raised');
+      return true;
+    }
+    cell
+      ..type = HexType.plain
+      ..state = CellState.solid;
+    return false;
+  }
+
+  /// ECHO's mirrored strike, the opposite bank of her. Uses the same carve
+  /// rules as a tap — hit costs and pairwork included — otherwise the echo
+  /// would secretly be a weaker maul. Skips over what a tap cannot touch.
+  void _echoStrike(HexCoord tapped) {
+    if (phase == GamePhase.idle) {
+      phase = GamePhase.playing;
+    }
+    final mirrored = HexCoord(
+      2 * dog.cell.q - tapped.q,
+      2 * dog.cell.r - tapped.r,
+    );
+    final cell = grid.at(mirrored);
+    if (cell == null || !cell.isClearable) {
+      announce('Nothing mirrored to strike', seconds: 2.5);
+      return;
+    }
+    // Costs no tap of its own: the pair of carves is the one decision.
+    if (cell.type == HexType.mirror) {
+      _carveMirror(mirrored);
+    } else {
+      var opened = cell.hit(elapsed);
+      if (!opened && powerups.pairworkActive && cell.isSolid) {
+        opened = cell.hit(elapsed);
+      }
+      if (opened) {
+        _tripSwitchFor(cell);
+        if (cell.type == HexType.overgrowth) {
+          _refreshHearts();
+        }
+      }
+      effects.shatter(
+        layout.toPixel(mirrored),
+        layout.size,
+        boost: opened ? 1.2 : 0.5,
+      );
+      sfx.play(Sound.crack, gain: 0.8);
+    }
+    fieldVersion++;
+    tapRingFlash = 1;
+  }
+
+  /// One charge of a mirror pair, shared by the tap path and the echo's bank.
+  /// Returns whether the pair gave way. Opening reads: both halves charged (or
+  /// one already open, courtesy of a blast, maul or mole) → both stand open.
+  bool _carveMirror(HexCoord coord) {
+    final cell = grid.at(coord);
+    if (cell == null || cell.isPassable) {
+      return false;
+    }
+    cell.charge();
+    final partner = cell.partner == null ? null : grid.at(cell.partner!);
+    final partnerGives = partner != null &&
+        (partner.charged || partner.isPassable);
+    if (!partnerGives) {
+      effects.shatter(layout.toPixel(coord), layout.size, boost: 0.7);
+      sfx.play(Sound.crack, gain: 0.7);
+      Haptics.light();
+      return false;
+    }
+    if (partner.isSolid && !partner.isPassable) {
+      partner
+        ..revealed = true
+        ..clear(elapsed);
+      _tripSwitchFor(partner);
+      effects.shatter(layout.toPixel(partner.coord), layout.size, boost: 1.2);
+    }
+    cell
+      ..revealed = true
+      ..clear(elapsed);
+    _tripSwitchFor(cell);
+    effects.shatter(layout.toPixel(coord), layout.size, boost: 1.4);
+    sfx.play(Sound.powerup, gain: 0.8);
+    Haptics.medium();
+    announce('The pair gives', seconds: 2.5);
+    return true;
+  }
+
+  /// MOLE: reaches past the tap ring to open any one revealed clearable tile —
+  /// the tunnel-mouse picks up the route three streets away.
+  void _moleOpen(HexCoord coord) {
+    if (phase == GamePhase.idle) {
+      phase = GamePhase.playing;
+    }
+    taps++;
+    final cell = grid.at(coord)!;
+    cell
+      ..revealed = true
+      ..clear(elapsed);
+    _tripSwitchFor(cell);
+    if (cell.type == HexType.overgrowth) {
+      _refreshHearts();
+    }
+    fieldVersion++;
+    effects.shatter(layout.toPixel(coord), layout.size, boost: 1.3);
+    juice.shake(2.6);
+    sfx.play(Sound.snap, gain: 0.8);
+    Haptics.medium();
+    tapRingFlash = 1;
+    streak.register(
+      grid: grid,
+      tapped: coord,
+      dogCell: dog.cell,
+      carved: false,
+    );
+  }
+
+  /// REWIND: the field hands back the last few tiles it closed.
+  bool _rewind() {
+    if (recentlyClosed.isEmpty) {
+      announce('Nothing has closed yet', seconds: 2.5);
+      return false;
+    }
+    var reopened = 0;
+    final seen = <HexCoord>{};
+    for (var i = recentlyClosed.length - 1; i >= 0 && reopened < 6; i--) {
+      final coord = recentlyClosed[i];
+      if (!seen.add(coord)) {
+        continue;
+      }
+      final cell = grid.at(coord);
+      if (cell == null || !cell.isSolid) {
+        continue;
+      }
+      cell
+        ..revealed = true
+        ..clear(elapsed);
+      effects.ripple(layout.toPixel(coord), layout.size);
+      reopened++;
+    }
+    if (reopened == 0) {
+      announce('What closed is already gone', seconds: 2.5);
+      return false;
+    }
+    fieldVersion++;
+    sinceProgress = 0;
+    juice.shake(2.8);
+    sfx.play(Sound.powerup, gain: 0.8);
+    Haptics.medium();
+    announce('The field gives back $reopened ${reopened == 1 ? 'tile' : 'tiles'}');
+    return true;
+  }
+
+  /// WHISTLE: she walks three cells back along the trail she actually walked
+  /// — her memory, never a line of sight.
+  bool _whistle() {
+    final back = dog.trailCellBack(ActiveEffects.whistleSteps);
+    if (back == null) {
+      announce('No trail to walk back', seconds: 2.5);
+      return false;
+    }
+    dog
+      ..position = layout.toPixel(back)
+      ..cell = back
+      ..velocity = Offset.zero;
+    barkFlash = 0.8;
+    sfx.play(Sound.bark, gain: 0.7);
+    Haptics.light();
+    effects.shatter(dog.position, layout.size, boost: 0.9);
+    fieldVersion++;
+    announce('Back she goes');
+    return true;
+  }
+
+  /// HARVEST: the nearest unclaimed thing worth walking to walks to *us*.
+  /// The magnet that never moves the tile, so the board around it stays true.
+  void _harvest() {
+    Pickup? nearest;
+    var bestDistance = 1 << 20;
+    for (final p in pickups) {
+      if (p.collected) {
+        continue;
+      }
+      final d = p.coord.distanceTo(dog.cell);
+      if (d <= ActiveEffects.harvestRadius && d < bestDistance) {
+        bestDistance = d;
+        nearest = p;
+      }
+    }
+    if (nearest == null) {
+      announce('Nothing in reach to fetch', seconds: 2.5);
+      return;
+    }
+    nearest
+      ..collected = true
+      ..collectFlash = 1;
+    _takePickup(nearest);
+  }
+
+  /// BEACON: plant a lamp on the cell she stands in; the ground there stays
+  /// known for the rest of the run.
+  void _plantBeacon() {
+    if (beaconsLit.contains(dog.cell)) {
+      return; // already lit; charge already spent, as the tap said "here"
+    }
+    beaconsLit = [...beaconsLit, dog.cell];
+    effects.ripple(layout.toPixel(dog.cell), layout.size);
+    juice.shake(1.8);
+    sfx.play(Sound.powerup, gain: 0.7);
+    Haptics.light();
+    announce('Lamp planted');
+  }
+
+  /// A switch has been opened: whatever lockbar shares its link lifts now.
+  /// Lifting counts as the field changing — walls of light still have to play
+  /// by the one rule every closing does (announced, and reachable when lit).
+  void _tripSwitchFor(HexCell cell) {
+    if (cell.type != HexType.switchTile || cell.link < 0) {
+      return;
+    }
+    var lifted = 0;
+    for (final c in grid.all) {
+      if (c.type == HexType.gate && c.link == cell.link && !c.gateOpen) {
+        c
+          ..gateOpen = true
+          ..revealed = true; // the lock tells you what answering bought
+        effects.ripple(layout.toPixel(c.coord), layout.size);
+        lifted++;
+      }
+    }
+    if (lifted > 0) {
+      fieldVersion++;
+      sfx.play(Sound.thunk, gain: 0.8);
+      Haptics.medium();
+      announce('A lockbar lifts, somewhere');
+    }
   }
 
   void _crush() {
@@ -1736,13 +2510,41 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       return;
     }
 
+    // MOLE reaches past the tap ring, so it is resolved straight against the
+    // board before the ring's rules apply. What it may take is still honest —
+    // revealed, clearable, no walls, no mines — told in words when it is not.
+    if (powerups.selectedCharge == PickupKind.mole &&
+        tapsLeft > 0 &&
+        !tutorialReading) {
+      final coord = layout.toHex(point);
+      final cell = grid.at(coord);
+      if (cell == null || !grid.contains(coord)) {
+        tapRingFlash = 1;
+        return;
+      }
+      if (!cell.isClearable || !cell.revealed) {
+        announce(
+          cell.revealed ? 'The mouse cannot get through that' : 'Send the mouse only where you know',
+          seconds: 2.5,
+        );
+        final c2 = grid.at(coord);
+        if (c2 != null) c2.rejectShake = 1;
+        return;
+      }
+      if (powerups.spendSelected(PickupKind.mole)) {
+        _moleOpen(coord);
+      }
+      return;
+    }
+
     final result = InputSystem.resolve(
       point: point,
       grid: grid,
       layout: layout,
       dogPosition: dog.position,
       tapRadius: effectiveTapRadius,
-      warded: wardedCells,
+      // WARDOWN parts the pale light the way CLOAK parts the red.
+      warded: powerups.wardownActive ? const {} : wardedCells,
     );
 
     // A gated tutorial step refuses everything but the tile it is pointing at,
@@ -1767,6 +2569,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       return;
     }
 
+    // A charge that needs no target encodes *when*, so any tap discharges it.
+    if (tapsLeft > 0 && powerups.selectedCharge != null && _spendTargetFree()) {
+      return;
+    }
+
     // HEEL is spent *outside* _spendCharge, which exists to finish a tap. This
     // one rides along with it: the whole point is to open the corridor ahead
     // and not have her walk into it while you do, so the carve still has to
@@ -1779,6 +2586,13 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       Haptics.medium();
       announce('Held');
     }
+
+    // ECHO rides the same carve: the tap lands, and its mirror answers on the
+    // opposite bank of her. One decision, two carves.
+    final echoArmed =
+        result.outcome == TapOutcome.hit &&
+        tapsLeft > 0 &&
+        powerups.selectedCharge == PickupKind.echo;
 
     switch (result.outcome) {
       case TapOutcome.hit:
@@ -1799,7 +2613,25 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         taps++;
         final cell = grid.at(result.coord!)!;
         final centre = layout.toPixel(result.coord!);
-        final opened = cell.hit(elapsed);
+        var opened = false;
+        if (cell.type == HexType.mirror && !cell.isPassable) {
+          opened = _carveMirror(result.coord!);
+          fieldVersion++;
+          sinceProgress = 0;
+        } else {
+          opened = cell.hit(elapsed);
+          // PAIRWORK is the one place a tap is worth two strikes: the second
+          // arrives free, and only where the first left work to do.
+          if (!opened && powerups.pairworkActive && cell.isSolid) {
+            opened = cell.hit(elapsed);
+          }
+          if (opened) {
+            _tripSwitchFor(cell);
+            if (cell.type == HexType.overgrowth) {
+              _refreshHearts();
+            }
+          }
+        }
 
         // One decision drives the note, the burst and the haptic together, so
         // the whole response escalates as one thing rather than three tuned
@@ -1846,6 +2678,26 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           pickups,
           targetBeforeTap: targetBeforeTap,
         );
+
+        if (echoArmed && powerups.spendSelected(PickupKind.echo)) {
+          _echoStrike(result.coord!);
+        }
+
+      case TapOutcome.locked:
+        // A lockbar is not a wall — it tells you *how* it opens. The inspector
+        // answers where its switch is soon enough; the shake says not by hand.
+        grid.at(result.coord!)!
+          ..rejectShake = 1
+          ..revealed = true;
+        sfx.play(Sound.thunk);
+        Haptics.heavy();
+        announce('Locked — the crest that matches is somewhere near', seconds: 3);
+
+      case TapOutcome.tooClose:
+        grid.at(result.coord!)!.rejectShake = 1;
+        sfx.play(Sound.thunk);
+        Haptics.light();
+        announce('A mine in reach of her dares not be tapped', seconds: 3);
 
       case TapOutcome.anchor:
         // Reported honestly rather than redirected to a nearby plain hex, and

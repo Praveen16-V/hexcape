@@ -40,6 +40,10 @@ class PickupSystem {
       PickupKind.dig,
     ],
     int rotation = 0,
+
+    /// How many of the drops are the taps-only ration — drawn from the same
+    /// detour economy as a treat, saving the time it skips paying.
+    int rations = 0,
   }) {
     final route = Pathfinder.cheapestPath(
       grid.start,
@@ -71,6 +75,7 @@ class PickupSystem {
     // open with a freeze.
     final wanted = <PickupKind>[
       for (var i = 0; i < treats; i++) PickupKind.treat,
+      for (var i = 0; i < rations; i++) PickupKind.ration,
       if (offered.isNotEmpty)
         for (var i = 0; i < powerups; i++)
           offered[(rotation + i) % offered.length],
@@ -159,18 +164,43 @@ class PickupSystem {
     if (cost == null) return false;
     // Budget a second per extra walking step, a deliberate tap cadence, and
     // half a second of net benefit. A refund should pay for the diversion.
+    //
+    // The stronger the thing, the longer the road allowed to fetch it: a
+    // keepsake is worth an expedition, a sprint is worth a jog. Every number
+    // here is a statement about how far a player should be tempted to walk.
     return switch (kind) {
       PickupKind.treat =>
         cost.taps <= math.max(0, treatTaps) &&
             cost.steps + cost.taps * 0.22 + 0.5 <= treatSeconds,
+      PickupKind.ration => cost.taps <= 2 && cost.steps <= 4,
       PickupKind.freeze => cost.taps <= 4 && cost.steps <= 5,
       PickupKind.radiusPlus => cost.taps <= 5 && cost.steps <= 6,
       PickupKind.sprint => cost.taps <= 4 && cost.steps <= 6,
       PickupKind.scent => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.lantern => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.cloak => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.slowbeat => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.wardown => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.surepaws => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.pairwork => cost.taps <= 5 && cost.steps <= 6,
       PickupKind.blast => cost.taps <= 6 && cost.steps <= 6,
       PickupKind.dig => cost.taps <= 4 && cost.steps <= 6,
       PickupKind.stake => cost.taps <= 5 && cost.steps <= 6,
       PickupKind.heel => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.trowel => cost.taps <= 6 && cost.steps <= 6,
+      PickupKind.maul => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.echo => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.rewind => cost.taps <= 5 && cost.steps <= 6,
+      PickupKind.mole => cost.taps <= 5 && cost.steps <= 7,
+      PickupKind.harvest => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.whistle => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.seed => cost.taps <= 5 && cost.steps <= 6,
+      PickupKind.beacon => cost.taps <= 4 && cost.steps <= 6,
+      PickupKind.pouch => cost.taps <= 3 && cost.steps <= 5,
+      PickupKind.ironpaw => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.nightEyes => cost.taps <= 4 && cost.steps <= 5,
+      PickupKind.keepsake => cost.taps <= 6 && cost.steps <= 8,
+      PickupKind.waystone => cost.taps <= 3 && cost.steps <= 5,
     };
   }
 

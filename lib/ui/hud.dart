@@ -192,6 +192,13 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                         onInspect: game.inspectPickup,
                       ),
                     ],
+                    if (game.powerups.heldPassives.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _Passives(
+                        held: game.powerups.heldPassives,
+                        onInspect: game.inspectPickup,
+                      ),
+                    ],
                   ],
                 ),
                 const Spacer(),
@@ -506,6 +513,67 @@ class _Charges extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+/// The run's ambient protection, as small chips rather than buttons.
+///
+/// Passives cannot be toggled — they are owned once found — so these are
+/// announcements, not controls. They exist because everything else in the HUD
+/// is either a clock or a decision; a waystone, a heart, should be *findable*
+/// on the screen, or a player after a week's gap will forget they carry it.
+class _Passives extends StatelessWidget {
+  const _Passives({required this.held, required this.onInspect});
+
+  final List<PickupKind> held;
+  final ValueChanged<PickupKind> onInspect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final kind in held)
+          Builder(
+            builder: (context) {
+              final colour = Palette.forPickup(kind);
+              return Semantics(
+                label: '${kind.label}, in effect',
+                child: Tooltip(
+                  message: kind.label,
+                  child: GestureDetector(
+                    onLongPress: () => onInspect(kind),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colour.withValues(alpha: 0.10),
+                        border: Border.all(
+                          color: colour.withValues(alpha: 0.45),
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        kind.label,
+                        style: TextStyle(
+                          color: colour,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
                     ),
                   ),
                 ),

@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../entities/guard.dart';
+import '../entities/pickup.dart';
 import '../game/hexcape_game.dart';
 import '../hex/hex_cell.dart';
 import '../hex/hex_coord.dart';
@@ -71,6 +73,7 @@ class FieldComponent extends Component {
 
     _renderTutorialTarget(canvas, layout);
     _renderPickups(canvas, layout);
+    _renderLamps(canvas, layout);
     _renderTapRing(canvas, layout);
     _renderGoal(canvas, layout);
     if (game.tuning.showTruePath) {
@@ -117,6 +120,29 @@ class FieldComponent extends Component {
     final sunkenCore = HexLayout.pathFromCorners(
       HexLayout.cornersAt(Offset.zero, layout.size * 0.34),
     );
+
+    // Marks for the new ground, one batched path each. The rule they all obey
+    // is the one the rivet set: nothing is told apart by colour alone.
+    final mireMarks = Path();
+    final thicketMarks = Path();
+    final sleeperMarks = Path();
+    final foxfireMarks = Path();
+    final foxfireGlow = Path();
+    final iceMarks = Path();
+    final eddyMarks = Path();
+    final magnetMarks = Path();
+    final hardpanMarks = Path();
+    final overgrowthMarks = Path();
+    final tremorMarks = Path();
+    final gateMarks = Path();
+    final switchMarks = Path();
+    final mirrorMarks = Path();
+    final mirrorChargedMarks = Path();
+    final thornFills = Path();
+    final alarmMarks = Path();
+    final thatchMarks = Path();
+    final thatchCrossed = Path();
+    final scaffoldMarks = Path();
 
     for (final cell in _drawOrder) {
       final centre = _centreOf(cell, layout);
@@ -204,6 +230,243 @@ class FieldComponent extends Component {
             ..lineTo(centre.dx + s * 0.34, y);
         }
       }
+      // The nine hundred million marks of the new ground, each a separate
+      // batched path so none is ever told apart by colour alone. Every one is
+      // drawn on the solid face: all of these cells mean something only until
+      // they open.
+      if (cell.isSolid && cell.revealed) {
+        final s = layout.size;
+        switch (shown) {
+          case HexType.mire:
+            // Two soft pools — ground you sink into as you watch.
+            mireMarks.addOval(Rect.fromEllipse(
+              center: centre.translate(-s * 0.16, s * 0.10),
+              radiusX: s * 0.26,
+              radiusY: s * 0.15,
+            ));
+            mireMarks.addOval(Rect.fromEllipse(
+              center: centre.translate(s * 0.20, -s * 0.14),
+              radiusX: s * 0.18,
+              radiusY: s * 0.10,
+            ));
+          case HexType.thicket:
+            // Three blades of grass: this cell wants the one next to it read.
+            thicketMarks
+              ..moveTo(centre.dx - s * 0.3, centre.dy + s * 0.3)
+              ..lineTo(centre.dx - s * 0.3, centre.dy - s * 0.16)
+              ..moveTo(centre.dx, centre.dy + s * 0.3)
+              ..lineTo(centre.dx, centre.dy - s * 0.34)
+              ..moveTo(centre.dx + s * 0.3, centre.dy + s * 0.3)
+              ..lineTo(centre.dx + s * 0.3, centre.dy - s * 0.16);
+          case HexType.sleeper:
+            // A closed eye. What sleeps here is awake everywhere around it.
+            sleeperMarks
+              ..moveTo(centre.dx - s * 0.34, centre.dy - s * 0.05)
+              ..quadraticBezierTo(
+                centre.dx,
+                centre.dy + s * 0.30,
+                centre.dx + s * 0.34,
+                centre.dy - s * 0.05,
+              )
+              ..moveTo(centre.dx, centre.dy + s * 0.10)
+              ..lineTo(centre.dx, centre.dy + s * 0.22);
+          case HexType.foxfire:
+            foxfireMarks.addOval(Rect.fromCircle(
+              center: centre.translate(s * 0.16, -s * 0.14),
+              radius: s * 0.10,
+            ));
+            foxfireMarks.addOval(Rect.fromCircle(
+              center: centre.translate(-s * 0.18, s * 0.02),
+              radius: s * 0.08,
+            ));
+            foxfireMarks.addOval(Rect.fromCircle(
+              center: centre.translate(s * 0.02, s * 0.20),
+              radius: s * 0.06,
+            ));
+            foxfireGlow.addOval(Rect.fromCircle(center: centre, radius: s * 0.5));
+          case HexType.ice:
+            // Three parallel streaks skimmed across the face.
+            iceMarks
+              ..moveTo(centre.dx - s * 0.36, centre.dy - s * 0.10)
+              ..lineTo(centre.dx + s * 0.22, centre.dy - s * 0.34)
+              ..moveTo(centre.dx - s * 0.26, centre.dy + s * 0.10)
+              ..lineTo(centre.dx + s * 0.36, centre.dy - s * 0.14)
+              ..moveTo(centre.dx - s * 0.10, centre.dy + s * 0.34)
+              ..lineTo(centre.dx + s * 0.40, centre.dy + s * 0.10);
+          case HexType.eddy:
+            // One hooked sweep curving off-centre — the current made visible.
+            eddyMarks
+              ..moveTo(centre.dx + s * 0.30, centre.dy + s * 0.05)
+              ..arcToPoint(
+                Offset(centre.dx - s * 0.30, centre.dy + s * 0.10),
+                radius: Radius.circular(s * 0.32),
+              )
+              ..moveTo(centre.dx - s * 0.30, centre.dy + s * 0.10)
+              ..lineTo(centre.dx - s * 0.16, centre.dy + s * 0.02)
+              ..moveTo(centre.dx - s * 0.30, centre.dy + s * 0.10)
+              ..lineTo(centre.dx - s * 0.22, centre.dy + s * 0.26);
+          case HexType.magnet:
+            // An arrow pulled to the middle of its own tile.
+            magnetMarks
+              ..moveTo(centre.dx - s * 0.34, centre.dy + s * 0.22)
+              ..lineTo(centre.dx, centre.dy)
+              ..lineTo(centre.dx + s * 0.34, centre.dy + s * 0.22)
+              ..moveTo(centre.dx - s * 0.06, centre.dy + s * 0.22)
+              ..lineTo(centre.dx + s * 0.06, centre.dy + s * 0.22);
+          case HexType.hardpan:
+            // A shield stamped on the face. Its damage is told by the ring
+            // count above, which asks hex_field how much it carries.
+            if (cell.hits == 0) {
+              hardpanMarks
+                ..moveTo(centre.dx - s * 0.24, centre.dy - s * 0.12)
+                ..lineTo(centre.dx + s * 0.24, centre.dy - s * 0.12)
+                ..quadraticBezierTo(
+                  centre.dx + s * 0.24,
+                  centre.dy + s * 0.22,
+                  centre.dx,
+                  centre.dy + s * 0.34,
+                )
+                ..quadraticBezierTo(
+                  centre.dx - s * 0.24,
+                  centre.dy + s * 0.22,
+                  centre.dx - s * 0.24,
+                  centre.dy - s * 0.12,
+                );
+            }
+          case HexType.overgrowth:
+            // A heart with two tendrils still in the ground.
+            overgrowthMarks
+              ..moveTo(centre.dx, centre.dy + s * 0.24)
+              ..cubicTo(
+                centre.dx - s * 0.44, centre.dy,
+                centre.dx - s * 0.20, centre.dy - s * 0.34,
+                centre.dx, centre.dy - s * 0.10,
+              )
+              ..cubicTo(
+                centre.dx + s * 0.20, centre.dy - s * 0.34,
+                centre.dx + s * 0.44, centre.dy,
+                centre.dx, centre.dy + s * 0.24,
+              )
+              ..moveTo(centre.dx - s * 0.10, centre.dy + s * 0.24)
+              ..lineTo(centre.dx - s * 0.16, centre.dy + s * 0.44)
+              ..moveTo(centre.dx + s * 0.10, centre.dy + s * 0.24)
+              ..lineTo(centre.dx + s * 0.16, centre.dy + s * 0.44);
+          case HexType.tremor:
+            tremorMarks
+              ..moveTo(centre.dx - s * 0.28, centre.dy + s * 0.12)
+              ..lineTo(centre.dx - s * 0.10, centre.dy + s * 0.12)
+              ..lineTo(centre.dx - s * 0.02, centre.dy - s * 0.30)
+              ..lineTo(centre.dx + s * 0.10, centre.dy + s * 0.12)
+              ..lineTo(centre.dx + s * 0.28, centre.dy + s * 0.12);
+          case HexType.gate:
+            // A barred door with a keyhole — it will not answer a tap. A
+            // lifted lockbar draws as bare ground: the bars are the door, and
+            // once the door is up the hex is ordinary clay.
+            if (!cell.gateOpen) {
+              gateMarks
+                ..moveTo(centre.dx - s * 0.30, centre.dy - s * 0.30)
+                ..lineTo(centre.dx + s * 0.30, centre.dy - s * 0.30)
+                ..lineTo(centre.dx + s * 0.30, centre.dy + s * 0.24)
+                ..moveTo(centre.dx - s * 0.30, centre.dy - s * 0.30)
+                ..lineTo(centre.dx - s * 0.30, centre.dy + s * 0.24)
+                ..moveTo(centre.dx, centre.dy - s * 0.05)
+                ..lineTo(centre.dx, centre.dy + s * 0.18)
+                ..moveTo(centre.dx - s * 0.30, centre.dy + s * 0.24)
+                ..lineTo(centre.dx + s * 0.30, centre.dy + s * 0.24);
+              gateMarks.addOval(Rect.fromCircle(
+                center: centre.translate(0, -s * 0.12),
+                radius: s * 0.09,
+              ));
+            }
+          case HexType.switchTile:
+            // A paw you can press.
+            switchMarks.addOval(Rect.fromEllipse(
+              center: centre.translate(0, s * 0.10),
+              radiusX: s * 0.16,
+              radiusY: s * 0.12,
+            ));
+            for (final toe in [
+              centre.translate(-s * 0.18, -s * 0.12),
+              centre.translate(0, -s * 0.18),
+              centre.translate(s * 0.18, -s * 0.12),
+            ]) {
+              switchMarks.addOval(Rect.fromCircle(center: toe, radius: s * 0.06));
+            }
+          case HexType.mirror:
+            // A crescent, filled in as its half of the pair is answered.
+            final path = Path()
+              ..moveTo(centre.dx + s * 0.16, centre.dy - s * 0.34)
+              ..arcToPoint(
+                Offset(centre.dx + s * 0.16, centre.dy + s * 0.34),
+                radius: Radius.circular(s * 0.52),
+                largeArc: true,
+              )
+              ..arcToPoint(
+                Offset(centre.dx + s * 0.16, centre.dy - s * 0.34),
+                radius: Radius.circular(s * 0.34),
+                clockwise: false,
+              );
+            if (cell.charged) {
+              mirrorChargedMarks.addPath(path, Offset.zero);
+            } else {
+              mirrorMarks.addPath(path, Offset.zero);
+            }
+          case HexType.thorn:
+            thornFills.addPath(thornMarkPath(centre, s), Offset.zero);
+          case HexType.alarm:
+            alarmMarks
+              ..moveTo(centre.dx, centre.dy - s * 0.34)
+              ..lineTo(centre.dx, centre.dy - s * 0.22)
+              ..moveTo(centre.dx - s * 0.24, centre.dy - s * 0.06)
+              ..arcToPoint(
+                Offset(centre.dx + s * 0.24, centre.dy - s * 0.06),
+                radius: Radius.circular(s * 0.25),
+              )
+              ..moveTo(centre.dx - s * 0.30, centre.dy - s * 0.06)
+              ..lineTo(centre.dx + s * 0.30, centre.dy - s * 0.06)
+              ..moveTo(centre.dx, centre.dy + s * 0.06)
+              ..lineTo(centre.dx, centre.dy + s * 0.16);
+            alarmMarks.addOval(Rect.fromCircle(
+              center: centre.translate(0, s * 0.22),
+              radius: s * 0.06,
+            ));
+          case HexType.thatch:
+            // Two crossing strands; a tick once she has been — it remembers.
+            thatchMarks
+              ..moveTo(centre.dx - s * 0.3, centre.dy - s * 0.1)
+              ..lineTo(centre.dx + s * 0.3, centre.dy + s * 0.1)
+              ..moveTo(centre.dx + s * 0.3, centre.dy - s * 0.1)
+              ..lineTo(centre.dx - s * 0.3, centre.dy + s * 0.1);
+            if (cell.crossed) {
+              thatchCrossed.addOval(Rect.fromCircle(
+                center: centre.translate(0, -s * 0.24),
+                radius: s * 0.07,
+              ));
+            }
+          case HexType.scaffold:
+            // A fuse running through a row of powder dots.
+            for (var i = -1; i <= 1; i++) {
+              scaffoldMarks.addOval(Rect.fromCircle(
+                center: centre.translate(s * 0.26 * i, 0),
+                radius: s * 0.055,
+              ));
+            }
+            scaffoldMarks
+              ..moveTo(centre.dx - s * 0.26, centre.dy + s * 0.14)
+              ..lineTo(centre.dx + s * 0.26, centre.dy + s * 0.14);
+          default:
+            break; // plain, heavy, anchor, spring, fault, slope, sunken carry theirs above
+        }
+      }
+    }
+
+    // Foxfire is the one tile allowed to glow while solid: it promises light.
+    if (foxfireGlow.computeMetrics().isNotEmpty) {
+      _fill
+        ..color = Palette.foxfireGlow.withValues(alpha: 0.16)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, layout.size * 0.5);
+      canvas.drawPath(foxfireGlow, _fill);
+      _fill.maskFilter = null;
     }
 
     _fill.color = const Color(0xFF070A14);
@@ -267,6 +530,91 @@ class FieldComponent extends Component {
       ..color = Palette.sunkenEdge.withValues(alpha: 0.55)
       ..strokeWidth = 1.2;
     canvas.drawPath(sunkenMarks, _stroke);
+
+    // The new fields' marks. Every one is drawn with the same discipline as
+    // the rivet: a shape, in the type's edge hue, never the colour alone.
+    _fill.color = Palette.mireEdge.withValues(alpha: 0.45);
+    canvas.drawPath(mireMarks, _fill);
+
+    _stroke
+      ..color = Palette.thicketEdge.withValues(alpha: 0.8)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(thicketMarks, _stroke);
+
+    _stroke
+      ..color = Palette.sleeperEdge.withValues(alpha: 0.8)
+      ..strokeWidth = 1.5;
+    canvas.drawPath(sleeperMarks, _stroke);
+
+    _fill.color = Palette.foxfireEdge.withValues(alpha: 0.95);
+    canvas.drawPath(foxfireMarks, _fill);
+
+    _stroke
+      ..color = Palette.iceEdge.withValues(alpha: 0.55)
+      ..strokeWidth = 1.3;
+    canvas.drawPath(iceMarks, _stroke);
+
+    _stroke
+      ..color = Palette.eddyEdge.withValues(alpha: 0.85)
+      ..strokeWidth = 1.7;
+    canvas.drawPath(eddyMarks, _stroke);
+
+    _stroke
+      ..color = Palette.magnetEdge.withValues(alpha: 0.85)
+      ..strokeWidth = 1.6;
+    canvas.drawPath(magnetMarks, _stroke);
+
+    _stroke
+      ..color = Palette.hardpanEdge.withValues(alpha: 0.9)
+      ..strokeWidth = 2.1;
+    canvas.drawPath(hardpanMarks, _stroke);
+
+    _stroke
+      ..color = Palette.overgrowthEdge.withValues(alpha: 0.9)
+      ..strokeWidth = 1.8;
+    canvas.drawPath(overgrowthMarks, _stroke);
+
+    _stroke
+      ..color = Palette.tremorEdge.withValues(alpha: 0.8)
+      ..strokeWidth = 1.5;
+    canvas.drawPath(tremorMarks, _stroke);
+
+    _stroke
+      ..color = Palette.gateEdge.withValues(alpha: 0.9)
+      ..strokeWidth = 1.7;
+    canvas.drawPath(gateMarks, _stroke);
+
+    _fill.color = Palette.switchEdge.withValues(alpha: 0.85);
+    canvas.drawPath(switchMarks, _fill);
+
+    _fill.color = Palette.mirrorEdge.withValues(alpha: 0.30);
+    canvas.drawPath(mirrorMarks, _fill);
+    // Charged halves burn brighter — the pair agreeing reads at a glance.
+    _fill.color = Palette.mirrorEdge.withValues(alpha: 0.9);
+    canvas.drawPath(mirrorChargedMarks, _fill);
+
+    _fill.color = Palette.thornEdge.withValues(alpha: 0.85);
+    canvas.drawPath(thornFills, _fill);
+
+    _stroke
+      ..color = Palette.alarmEdge.withValues(alpha: 0.9)
+      ..strokeWidth = 1.6;
+    canvas.drawPath(alarmMarks, _stroke);
+
+    _stroke
+      ..color = Palette.thatchEdge.withValues(alpha: 0.7)
+      ..strokeWidth = 1.5;
+    canvas.drawPath(thatchMarks, _stroke);
+    _fill.color = Palette.thatchEdge.withValues(alpha: 0.9);
+    canvas.drawPath(thatchCrossed, _fill);
+
+    _stroke
+      ..color = Palette.scaffoldEdge.withValues(alpha: 0.8)
+      ..strokeWidth = 1.4;
+    canvas.drawPath(scaffoldMarks, _stroke);
+
+    _stroke.strokeCap = StrokeCap.butt;
   }
 
   /// The nudge for a player who has stopped getting anywhere (§8).
@@ -347,21 +695,19 @@ class FieldComponent extends Component {
     _fill.maskFilter = null;
   }
 
-  /// Patrols (§6.1): the lit ground, then the lamp itself.
+  /// The lights (§6.1): the lit ground, then the lamp itself.
   ///
-  /// Drawn after the field and before the light scrim, so the fog dims a
-  /// distant patrol exactly as it dims everything else — a guard the player can
-  /// see across an unexplored board would give away the shape of it.
+  /// The *colour of the ground* keeps only two meanings — red is where she
+  /// will not go, pale is where your taps will not land — whatever the kind of
+  /// lamp standing on it. The colour of the lamp is the flavour of the light,
+  /// per kind, so a player can name what is coming without mistaking what it
+  /// forbids.
   void _renderGuards(Canvas canvas, HexLayout layout) {
     if (game.guards.isEmpty) {
       return;
     }
     final hex = _hexFor(layout);
 
-    // The two lights are drawn as two passes rather than one, because they mean
-    // opposite things: red ground is where she will not go, pale ground is
-    // where your taps will not land. A player has to be able to tell at a
-    // glance which of the two is sweeping toward them.
     _paintLitGround(
       canvas,
       hex,
@@ -381,43 +727,170 @@ class FieldComponent extends Component {
 
     for (final guard in game.guards) {
       final centre = guard.positionIn(layout);
+      final p = Palette.forLight(guard.kind);
       final flare = 1 + guard.alertFlash * 0.7;
+      final lit = guard.lampOn ? 1.0 : 0.25;
       final pulse = 0.8 + 0.2 * math.sin(game.elapsed * 4);
-      final colour = guard.isSentry ? Palette.sentry : Palette.guard;
+      final s = layout.size;
 
       _fill
-        ..color = colour.withValues(alpha: 0.30 * pulse)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, layout.size * 0.5);
-      canvas.drawCircle(centre, layout.size * 0.75 * flare, _fill);
+        ..color = p.withValues(alpha: 0.30 * pulse * lit)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.5);
+      canvas.drawCircle(centre, s * 0.75 * flare, _fill);
       _fill.maskFilter = null;
 
-      // An eye rather than a person: it is a light, and a body would suggest it
-      // could be walked around.
-      _fill.color = colour.withValues(alpha: 0.9);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: centre,
-          width: layout.size * 0.66 * flare,
-          height: layout.size * 0.40 * flare,
-        ),
-        _fill,
-      );
-      _fill.color = Palette.background;
-      canvas.drawCircle(centre, layout.size * 0.13 * flare, _fill);
-
-      // A sentry carries a bar through its pupil — the "no" that the colour
-      // alone would be carrying otherwise, for the same reason every hex type
-      // has a mark as well as a shade.
-      if (guard.isSentry) {
-        _stroke
-          ..color = colour
-          ..strokeWidth = 1.6;
-        canvas.drawLine(
-          centre.translate(-layout.size * 0.30, 0),
-          centre.translate(layout.size * 0.30, 0),
-          _stroke,
-        );
+      switch (guard.kind) {
+        case GuardKind.beacon:
+          // A standing lantern: post, glow, cap. The first light whose red
+          // ground is *announced* safe — the lesson the patrol phase taught
+          // is "red is where she will not go", not "red is danger".
+          _fill.color = p.withValues(alpha: 0.9 * lit);
+          canvas.drawRect(
+            Rect.fromCenter(center: centre, width: s * 0.22, height: s * 0.72),
+            _fill,
+          );
+          _fill.color = Palette.beaconGlow.withValues(alpha: 0.7 * lit);
+          canvas.drawRect(
+            Rect.fromCenter(
+              center: centre.translate(0, -s * 0.16),
+              width: s * 0.12,
+              height: s * 0.24,
+            ),
+            _fill,
+          );
+          _stroke
+            ..color = p
+            ..strokeWidth = 1.6;
+          canvas.drawLine(
+            centre.translate(-s * 0.2, s * 0.38),
+            centre.translate(s * 0.2, s * 0.38),
+            _stroke,
+          );
+        case GuardKind.spinner:
+          // A vane with four blades, turning at its own lean — the beat shown
+          // on the handle, so the endpoint orbit needs no watching.
+          canvas.save();
+          canvas.translate(centre.dx, centre.dy);
+          canvas.rotate(guard.leadAngle);
+          for (var i = 0; i < 4; i++) {
+            canvas.rotate(math.pi / 2);
+            _stroke
+              ..color = p.withValues(alpha: 0.9 * lit)
+              ..strokeWidth = 2.2
+              ..strokeCap = StrokeCap.round;
+            canvas.drawLine(Offset.zero, Offset(s * 0.30, 0), _stroke);
+          }
+          _stroke.strokeCap = StrokeCap.butt;
+          _fill.color = Palette.background;
+          canvas.drawCircle(Offset.zero, s * 0.10, _fill);
+          canvas.restore();
+        case GuardKind.runner:
+          // A dash: the comma of a lamp, thrown. The helium it promises shows
+          // in the trail of after-images behind it.
+          for (var i = 1; i <= 2; i++) {
+            _fill.color = p.withValues(alpha: 0.16 / i * lit);
+            canvas.drawOval(
+              Rect.fromCenter(
+                center: centre - guard.velocityIn(layout) * (0.055 * i),
+                width: s * 0.5,
+                height: s * 0.26,
+              ),
+              _fill,
+            );
+          }
+          _fill.color = p.withValues(alpha: 0.95 * lit);
+          canvas.drawOval(
+            Rect.fromCenter(center: centre, width: s * 0.56, height: s * 0.30),
+            _fill,
+          );
+        case GuardKind.blinker:
+          // The only lamp whose *absence* is announced: a lamp with a shutter,
+          // ringed by the tick marks it will keep time to.
+          _fill.color = p.withValues(alpha: 0.9 * lit);
+          canvas.drawOval(
+            Rect.fromCenter(center: centre, width: s * 0.6, height: s * 0.36),
+            _fill,
+          );
+          for (var i = -1; i <= 1; i++) {
+            final a = i * 0.9 - math.pi / 2;
+            _stroke
+              ..color = p.withValues(alpha: 0.6 * lit)
+              ..strokeWidth = 1.3;
+            canvas.drawLine(
+              centre + Offset(math.cos(a), math.sin(a)) * s * 0.34,
+              centre + Offset(math.cos(a), math.sin(a)) * s * 0.46,
+              _stroke,
+            );
+          }
+        case GuardKind.warden:
+          // The big eye, unhurried and shortly followed by the floor changing.
+          // A doubled rim so it reads as the basilisk of the set.
+          _fill.color = p.withValues(alpha: 0.9 * lit);
+          canvas.drawOval(
+            Rect.fromCenter(center: centre, width: s * 0.78, height: s * 0.46),
+            _fill,
+          );
+          _stroke
+            ..color = p.withValues(alpha: 0.85 * lit)
+            ..strokeWidth = 1.8;
+          canvas.drawOval(
+            Rect.fromCenter(center: centre, width: s * 0.94, height: s * 0.56),
+            _stroke,
+          );
+          _fill.color = Palette.background;
+          canvas.drawCircle(centre, s * 0.15, _fill);
+        case GuardKind.patrol:
+        case GuardKind.sentry:
+          // An eye rather than a person: it is a light, and a body would
+          // suggest it could be walked around.
+          _fill.color = p.withValues(alpha: 0.9);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: centre,
+              width: s * 0.66 * flare,
+              height: s * 0.40 * flare,
+            ),
+            _fill,
+          );
+          _fill.color = Palette.background;
+          canvas.drawCircle(centre, s * 0.13 * flare, _fill);
+          // A sentry carries a bar through its pupil — the "no" the colour
+          // would otherwise carry alone.
+          if (guard.kind == GuardKind.sentry) {
+            _stroke
+              ..color = p
+              ..strokeWidth = 1.6;
+            canvas.drawLine(
+              centre.translate(-s * 0.30, 0),
+              centre.translate(s * 0.30, 0),
+              _stroke,
+            );
+          }
       }
+    }
+  }
+
+  /// Lamps planted by the BEACON charge: a small glow holding ground known.
+  ///
+  /// Drawn after the fog, with the pickups — a lamp exists precisely because
+  /// the dark is the opponent, and dimming the answer with the question would
+  /// be absurd.
+  void _renderLamps(Canvas canvas, HexLayout layout) {
+    for (final coord in game.beaconsLit) {
+      final centre = layout.toPixel(coord);
+      final s = layout.size;
+      final breathe = 0.85 + 0.15 * math.sin(game.elapsed * 2.2 + coord.q);
+      _fill
+        ..color = Palette.lampGlow.withValues(alpha: 0.16 * breathe)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.5);
+      canvas.drawCircle(centre, s * ActiveEffects.beaconRadius * 1.1, _fill);
+      _fill.maskFilter = null;
+      _fill.color = Palette.lampGlow.withValues(alpha: 0.9);
+      canvas.drawCircle(centre, s * 0.10, _fill);
+      _stroke
+        ..color = Palette.lampGlow.withValues(alpha: 0.7)
+        ..strokeWidth = 1.4;
+      canvas.drawCircle(centre, s * 0.22, _stroke);
     }
   }
 
@@ -444,49 +917,38 @@ class FieldComponent extends Component {
     canvas.drawPath(lit, _stroke);
   }
 
-  static Color _topOf(HexType type) => switch (type) {
-    HexType.plain => Palette.plainTop,
-    HexType.heavy => Palette.heavyTop,
-    HexType.anchor => Palette.anchorTop,
-    HexType.spring => Palette.springTop,
-    HexType.fault => Palette.faultTop,
-    HexType.slope => Palette.slopeTop,
-    HexType.sunken => Palette.sunkenTop,
-  };
+  // The palette answers the top and edge of every tile itself; the skirt is
+  // the top drawn through shadow, derived the same way everywhere so the fake
+  // depth keeps coming from one direction of light.
+  static Color _topOf(HexType type) => Palette.forHex(type);
 
-  static Color _sideOf(HexType type) => switch (type) {
-    HexType.plain => Palette.plainSide,
-    HexType.heavy => Palette.heavySide,
-    HexType.anchor => Palette.anchorSide,
-    HexType.spring => Palette.springSide,
-    HexType.fault => Palette.faultSide,
-    HexType.slope => Palette.slopeSide,
-    HexType.sunken => Palette.sunkenSide,
-  };
+  static Color _sideOf(HexType type) =>
+      Color.lerp(Palette.forHex(type), const Color(0xFF05070F), 0.42)!;
 
-  static Color _edgeOf(HexType type) => switch (type) {
-    HexType.plain => Palette.plainEdge,
-    HexType.heavy => Palette.heavyEdge,
-    HexType.anchor => Palette.anchorEdge,
-    HexType.spring => Palette.springEdge,
-    HexType.fault => Palette.faultEdge,
-    HexType.slope => Palette.slopeEdge,
-    HexType.sunken => Palette.sunkenEdge,
-  };
+  static Color _edgeOf(HexType type) => Palette.edgeOf(type);
 
   /// Darkness away from the dog: one gradient drawn over the finished board.
+  ///
+  /// Gloom levels double the penalty of being away from her, so the pool of
+  /// light shrinks to the ring nearest the eye. Night eyes undo the doubling —
+  /// the fog stays her own size, the board stops pretending otherwise.
   void _renderLight(Canvas canvas, HexLayout layout) {
     if (!game.tuning.fogEnabled) {
       return;
     }
+    final gloom = game.tuning.gloomEnabled &&
+        !game.powerups.hasPassive(PickupKind.nightEyes);
     final reach = game.revealRadius;
     final centre = game.dog.position + game.juice.offset;
     final size = game.size;
     _fill.shader = Gradient.radial(
       centre,
-      reach * 2.4,
-      [const Color(0x00000000), Palette.background.withValues(alpha: 0.55)],
-      const [0.35, 1.0],
+      reach * (gloom ? 1.7 : 2.4),
+      [
+        const Color(0x00000000),
+        Palette.background.withValues(alpha: gloom ? 0.72 : 0.55),
+      ],
+      gloom ? const [0.30, 1.0] : const [0.35, 1.0],
     );
     canvas.drawRect(Rect.fromLTWH(0, 0, size.x, size.y), _fill);
     _fill.shader = null;

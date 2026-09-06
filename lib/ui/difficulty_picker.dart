@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/difficulty.dart';
 import '../theme/palette.dart';
 
-/// A three-way Easy/Normal/Hard picker.
+/// The two-mode picker: the adventure or the gauntlet.
 ///
 /// Shared by the settings sheet and the level detail sheet rather than written
 /// twice: the two are the same control making the same promise, and the moment

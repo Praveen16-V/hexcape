@@ -34,6 +34,23 @@ class RegrowthSystem {
     required HexGrid grid,
     required TuningConfig tuning,
     required HexCoord dogCell,
+
+    /// Open ground inside the aura of a living overgrowth heart. Regrowth
+    /// there runs at double pace while the heart stands — the heart is the
+    /// thing closing the pocket, and digging it out is the answer.
+    Set<HexCoord> overgrowthAura = const {},
+
+    /// Seconds a crossed thatch braid holds before snapping. Separate from
+    /// [TuningConfig.faultDelay] because the two ask different questions: a
+    /// fault is a clock on the field, a braid is a clock on her crossing.
+    double thatchDelay = 0.5,
+
+    /// Added to every field-closing clock (regrow and fault alike). A braid
+    /// waits for its crossing, so its snap stays hers and stands outside
+    /// this. Zero by default; a pet's regrowth boon rides here rather than on
+    /// [tuning], because tuning is the player's settings and must restart
+    /// clean each level.
+    double extraDelay = 0,
   }) {
     final events = RegrowthEvents();
 
@@ -50,17 +67,34 @@ class RegrowthSystem {
             cell.eligibleSince = null;
             continue;
           }
-          // A fault is eligible the moment it is cleared, wherever it is. That
-          // one exemption is the whole mechanic: it closes in the middle of an
-          // open pocket, so the ground *ahead* of her is on a clock too.
-          final always = cell.type.closesOnItsOwn;
-          final onBoundary = always || cell.coord.neighbours.any(grid.blocks);
-          if (!onBoundary) {
+          double delay = tuning.regrowDelay + extraDelay;
+          bool eligible;
+          if (cell.type == HexType.fault) {
+            // A fault is eligible the moment it is cleared, wherever it is.
+            // That one exemption is the whole mechanic: it closes in the
+            // middle of an open pocket, so the ground *ahead* of her is on a
+            // clock too.
+            eligible = true;
+            delay = tuning.faultDelay + extraDelay;
+          } else if (cell.type == HexType.thatch) {
+            // A braid waits for its crossing and then closes fast. It never
+            // counts down under her feet: the timer is for the tile behind
+            // her, which is the one that matters.
+            eligible = cell.crossed && cell.coord != dogCell;
+            delay = thatchDelay;
+          } else {
+            eligible = cell.coord.neighbours.any(grid.blocks);
+            if (eligible && overgrowthAura.contains(cell.coord)) {
+              // The heart's creepers double the pace of everything closing
+              // near it.
+              delay *= 0.5;
+            }
+          }
+          if (!eligible) {
             cell.eligibleSince = null;
             continue;
           }
           cell.eligibleSince ??= now;
-          final delay = always ? tuning.faultDelay : tuning.regrowDelay;
           if (now - cell.eligibleSince! >= delay) {
             cell.state = CellState.regrowing;
             cell.regrowT = 0;
@@ -93,6 +127,23 @@ class RegrowthSystem {
     }
 
     return events;
+  }
+
+  /// A tremor vent's surge: every open cell already counting down sees its
+  /// countdown pulled [seconds] closer to the snap. Cells that have not yet
+  /// qualified are untouched — the vent accelerates a closing that was coming,
+  /// it never invents one, which is what keeps the surge a hurry rather than
+  /// an ambush.
+  static void surge(HexGrid grid, double seconds) {
+    for (final cell in grid.all) {
+      if (cell.state != CellState.open || cell.pinned) {
+        continue;
+      }
+      final since = cell.eligibleSince;
+      if (since != null) {
+        cell.eligibleSince = since - seconds;
+      }
+    }
   }
 
   /// Zen mode still needs cells to finish animations already in flight, but

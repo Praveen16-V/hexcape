@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import '../hex/hex_cell.dart';
 import '../hex/hex_coord.dart';
 import '../hex/hex_grid.dart';
 import '../hex/hex_layout.dart';
@@ -27,8 +28,20 @@ class RevealSystem {
   static double radiusFor(double tapRadius, double factor) =>
       tapRadius * math.max(1.2, factor);
 
+  /// Sleeper ground keeps its disguise until she is right on top of it: one
+  /// ring out, no more, whatever her sight radius is doing.
+  static const sleeperRadiusRings = 1;
+
   /// Reveals everything close enough to see. Returns how many cells were newly
   /// learned this call.
+  ///
+  /// Three tiles argue with the plain rule, and all three are the fog taking
+  /// texture rather than a circle:
+  ///
+  /// * A **sleeper** holds its disguise until she is adjacent.
+  /// * A cell beside a solid **thicket** stays hidden until the thicket is
+  ///   cleared — the thicket itself shows; what it conceals does not.
+  /// * A **gloomed** cell is only known from half the usual distance.
   static int reveal({
     required HexGrid grid,
     required HexLayout layout,
@@ -37,17 +50,47 @@ class RevealSystem {
     required double radius,
   }) {
     final rings = math.max(1, (radius / layout.width).ceil() + 1);
+    final sleeperReach = layout.width * (sleeperRadiusRings + 0.75);
     var learned = 0;
     for (final coord in dogCell.disc(rings)) {
       final cell = grid.at(coord);
       if (cell == null || cell.revealed) {
         continue;
       }
-      if ((layout.toPixel(coord) - dogPosition).distance <= radius) {
-        cell.revealed = true;
-        learned++;
+      final distance = (layout.toPixel(coord) - dogPosition).distance;
+      if (distance > radius) {
+        continue;
       }
+      if (cell.gloomed && distance > radius * 0.5) {
+        continue;
+      }
+      if (cell.type.revealsLate && distance > sleeperReach) {
+        continue;
+      }
+      if (_screenedBehindThicket(grid, cell)) {
+        continue;
+      }
+      cell.revealed = true;
+      learned++;
     }
     return learned;
+  }
+
+  /// Whether solid thicket stands between her sight and this cell: any
+  /// adjacent uncleared thicket keeps it disguised. The thicket itself always
+  /// shows — the concealment is of what stands *behind*.
+  static bool _screenedBehindThicket(HexGrid grid, HexCell cell) {
+    if (cell.type == HexType.thicket) {
+      return false;
+    }
+    for (final n in cell.coord.neighbours) {
+      final neighbour = grid.at(n);
+      if (neighbour != null &&
+          neighbour.type == HexType.thicket &&
+          neighbour.isSolid) {
+        return true;
+      }
+    }
+    return false;
   }
 }
