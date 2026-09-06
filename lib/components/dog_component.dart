@@ -70,6 +70,7 @@ class DogComponent extends Component {
         ? (1 - game.hunger.fraction / 0.3).clamp(0.0, 1.0)
         : 0.0;
     final startle = game.startleFlash;
+    final idle = _idlePerformance(dog);
 
     // Squash and stretch from acceleration (§10), plus a flinch when the field
     // snaps shut beside her.
@@ -78,16 +79,25 @@ class DogComponent extends Component {
 
     // Trot bob, tied to distance covered rather than to the clock.
     final moving = (dog.velocity.distance / (r * 5)).clamp(0.0, 1.0);
+    final artMoving = math.max(moving, idle.moving);
     final motion = game.tuning.reducedMotion ? 0.0 : 1.0;
     final bob =
         -math.sin(dog.gaitPhase * math.pi * 2).abs() *
-        r *
-        0.12 *
-        moving *
-        motion;
-    final breath = math.sin(game.elapsed * 2.8) * 0.025 * (1 - moving) * motion;
-    final lift = alert * r * 0.22 - weary * r * 0.1 - startle * r * 0.06;
-    final lean = (-dog.turnRate * 0.02).clamp(-0.35, 0.35) * _flip;
+            r *
+            0.12 *
+            moving *
+            motion -
+        math.sin(game.elapsed * math.pi * (2.5 + idle.moving * 2)).abs() *
+            r *
+            0.06 *
+            idle.moving *
+            motion;
+    final breath =
+        math.sin(game.elapsed * 2.8) * 0.025 * (1 - artMoving) * motion;
+    final lift =
+        alert * r * 0.22 - weary * r * 0.1 - startle * r * 0.06 + idle.lift * r;
+    final presentationFlip = game.phase == GamePhase.idle ? idle.facing : _flip;
+    final lean = (-dog.turnRate * 0.02).clamp(-0.35, 0.35) * presentationFlip;
 
     canvas.save();
     canvas.translate(dog.position.dx, dog.position.dy + bob - lift);
@@ -95,12 +105,27 @@ class DogComponent extends Component {
     _renderShadow(canvas, r, -bob + lift);
 
     canvas.rotate(lean + game.despair * 0.12 + startle * 0.10);
-    canvas.scale(_flip * stretch, squash + breath);
+    canvas.scale(presentationFlip * stretch, squash + breath);
 
     _renderGlow(canvas, r, alert);
 
+    final moveSprite = game.petMoveSprites[_pet.id];
     final sprite = game.petSprites[_pet.id];
-    if (sprite != null) {
+    if (moveSprite != null) {
+      _renderMovingSprite(
+        canvas,
+        moveSprite,
+        dog,
+        r,
+        weary,
+        artMoving,
+        forcedFrame: game.phase == GamePhase.idle
+            ? idle.frame
+            : moving <= 0.08
+            ? 0
+            : null,
+      );
+    } else if (sprite != null) {
       _renderSpriteBody(canvas, sprite, r, weary);
     } else {
       // The fallback: the full procedural dog, unchanged. She appears in
@@ -113,6 +138,99 @@ class DogComponent extends Component {
     }
 
     canvas.restore();
+  }
+
+  /// A presentation-only routine for the untouched board. Frame zero is the
+  /// neutral four-paws-planted stance; movement frames only appear during a
+  /// deliberate walk, jump or run beat. Physics and timers remain untouched.
+  ({double lift, double moving, double facing, int frame}) _idlePerformance(
+    Dog dog,
+  ) {
+    if (game.phase != GamePhase.idle || dog.speed > 1) {
+      return (lift: 0, moving: 0, facing: _flip, frame: 0);
+    }
+    if (game.tuning.reducedMotion) {
+      return (lift: 0, moving: 0, facing: 1, frame: 0);
+    }
+    final beat = game.elapsed % 10.0;
+    if (beat < 1.0) {
+      return (lift: 0, moving: 0, facing: 1, frame: 0);
+    }
+    if (beat < 3.0) {
+      return (
+        lift: 0,
+        moving: 0.34,
+        facing: 1,
+        frame: ((beat - 1.0) * 5).floor() % 4,
+      );
+    }
+    if (beat < 4.4) {
+      final t = (beat - 3.0) / 1.4;
+      final lift = math.sin(t * math.pi) * 0.78;
+      return (
+        lift: lift,
+        moving: 0.7,
+        facing: 1,
+        frame: t < 0.24 ? 5 : (t < 0.76 ? 6 : 7),
+      );
+    }
+    if (beat < 6.4) {
+      return (
+        lift: 0,
+        moving: 0.86,
+        facing: 1,
+        frame: 4 + ((beat - 4.4) * 7).floor() % 4,
+      );
+    }
+    if (beat < 7.2) {
+      final t = (beat - 6.4) / 0.8;
+      return (lift: 0, moving: 0, facing: math.cos(t * math.pi), frame: 0);
+    }
+    if (beat < 9.2) {
+      return (
+        lift: 0,
+        moving: 0.34,
+        facing: -1,
+        frame: ((beat - 7.2) * 5).floor() % 4,
+      );
+    }
+    final t = (beat - 9.2) / 0.8;
+    return (lift: 0, moving: 0, facing: -math.cos(t * math.pi), frame: 0);
+  }
+
+  /// Selects a real drawn pose from the distance-driven gait cycle.
+  ///
+  /// Frames 0–3 are a grounded walk; 4–7 are a stretched gallop. The switch
+  /// uses normalized velocity, so acceleration visibly becomes running rather
+  /// than merely playing the same walk faster.
+  void _renderMovingSprite(
+    Canvas canvas,
+    Image sprite,
+    Dog dog,
+    double r,
+    double weary,
+    double moving, {
+    int? forcedFrame,
+  }) {
+    const frameSize = 320.0;
+    final running = moving >= 0.58 || dog.isLaunched;
+    final phase = game.tuning.reducedMotion
+        ? 0
+        : ((dog.gaitPhase % 1.0) * 4).floor().clamp(0, 3);
+    final frame = forcedFrame ?? (running ? 4 : 0) + phase;
+    final side = r * (running ? 3.28 : 3.06);
+    final dst = Rect.fromCenter(
+      center: Offset(0, r * 0.78 - side * 0.45),
+      width: side,
+      height: side,
+    );
+    final paint = _spritePaint(weary);
+    canvas.drawImageRect(
+      sprite,
+      Rect.fromLTWH(frame * frameSize, 0, frameSize, frameSize),
+      dst,
+      paint,
+    );
   }
 
   /// The art, with the transforms that carry its life applied outside it.
@@ -133,6 +251,16 @@ class DogComponent extends Component {
       height: h,
     );
     _fill.maskFilter = null;
+    final paint = _spritePaint(weary);
+    canvas.drawImageRect(
+      sprite,
+      const Rect.fromLTWH(0, 0, fullW, fullH),
+      dst,
+      paint,
+    );
+  }
+
+  Paint _spritePaint(double weary) {
     final paint = Paint();
     if (weary > 0 || (game.isOver && game.phase == GamePhase.starved)) {
       // Tired, she drops a little of her colour. Cheaper than a pose, and the
@@ -144,12 +272,7 @@ class DogComponent extends Component {
         BlendMode.modulate,
       );
     }
-    canvas.drawImageRect(
-      sprite,
-      const Rect.fromLTWH(0, 0, fullW, fullH),
-      dst,
-      paint,
-    );
+    return paint;
   }
 
   void _renderShadow(Canvas canvas, double r, double lift) {

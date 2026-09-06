@@ -125,6 +125,12 @@ class Dog {
 
   double get speed => velocity.distance;
 
+  /// Reaching the food is a cell event, not a hidden centre-radius test.
+  /// Steering has no next waypoint once this cell is entered, so requiring a
+  /// smaller inner circle can leave her correctly standing on the bone while
+  /// the run waits forever for another field edit.
+  bool hasReachedExit(HexGrid grid) => cell == grid.exit;
+
   /// How far the steering flood-fill looks. Six rings is enough to read the
   /// shape of any pocket the player can realistically open in one go, and
   /// keeps the per-frame cost flat regardless of field size.

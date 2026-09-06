@@ -326,9 +326,7 @@ SimResult play({
     if (hungerKills && hunger.isStarved) {
       return finish(false, 'starved');
     }
-    if (dog.cell == grid.exit &&
-        (dog.position - layout.toPixel(grid.exit)).distance <
-            layout.inradius * 0.75) {
+    if (dog.hasReachedExit(grid)) {
       return finish(true, 'won');
     }
     // The budget-aware soft-lock, checked every frame exactly as the game does.

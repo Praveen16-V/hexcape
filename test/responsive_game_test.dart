@@ -179,6 +179,16 @@ void main() {
         expect(tester.getRect(blast).size.height, greaterThanOrEqualTo(44));
         expect(tester.getRect(dig).size.width, greaterThanOrEqualTo(44));
         expect(tester.getRect(dig).size.height, greaterThanOrEqualTo(44));
+        game
+          ..inspecting = null
+          ..inspectFor = 0
+          ..banner = null
+          ..bannerFor = 0
+          ..pickupNotice = const HudNotice.pickup(PickupKind.freeze)
+          ..pickupNoticeFor = HexcapeGame.pickupNoticeSeconds;
+        await tester.pump();
+        expect(find.text('FREEZE'), findsOneWidget);
+        expect(tester.takeException(), isNull);
         if (size == sizes.first && scale == 1) {
           await tester.tap(blast);
           await tester.pump();

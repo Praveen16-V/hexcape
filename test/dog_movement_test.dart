@@ -66,6 +66,29 @@ List<HexCoord> _run(
 
 void main() {
   group('Dog drift', () {
+    test('entering the food hex wins even near its edge', () {
+      const exit = HexCoord(0, -1);
+      final grid = _field(
+        radius: 2,
+        exit: exit,
+        cleared: [HexCoord.zero, exit],
+      );
+      final centre = _layout.toPixel(exit);
+      final towardStart = _layout.toPixel(HexCoord.zero) - centre;
+      final position =
+          centre +
+          towardStart / towardStart.distance * (_layout.inradius * 0.90);
+      final dog = Dog(position: position, cell: _layout.toHex(position));
+
+      expect(dog.cell, exit);
+      expect(
+        (dog.position - centre).distance,
+        greaterThan(_layout.inradius * 0.75),
+        reason: 'this reproduces the old invisible inner-circle failure',
+      );
+      expect(dog.hasReachedExit(grid), isTrue);
+    });
+
     test('stays put when there is nowhere to go', () {
       // The opening position: one open cell, walls on all six sides. She
       // should settle, not jitter.

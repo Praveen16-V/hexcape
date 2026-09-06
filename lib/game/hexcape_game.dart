@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flame/flame.dart';
+import 'package:flame/cache.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/widgets.dart';
@@ -69,6 +69,33 @@ class Overlays {
   static const debug = 'debug';
   static const result = 'result';
   static const pause = 'pause';
+}
+
+enum HudNoticeKind { proximity, pickup }
+
+/// A typed, non-blocking message for the HUD's existing bottom safe area.
+class HudNotice {
+  const HudNotice.proximity({this.hex, this.pickup})
+    : assert((hex == null) != (pickup == null)),
+      kind = HudNoticeKind.proximity;
+
+  const HudNotice.pickup(this.pickup)
+    : assert(pickup != null),
+      kind = HudNoticeKind.pickup,
+      hex = null;
+
+  final HudNoticeKind kind;
+  final HexType? hex;
+  final PickupKind? pickup;
+}
+
+class _NearbyNotice {
+  const _NearbyNotice(this.notice, this.coord, this.key, this.priority);
+
+  final HudNotice notice;
+  final HexCoord coord;
+  final Object key;
+  final int priority;
 }
 
 /// The star rating, as a pure function of the three numbers it depends on.
@@ -255,6 +282,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// pet id rather than by [Pet] so a coat change mid-menu needs no ceremony.
   final Map<String, ui.Image> petSprites = {};
 
+  /// Four walk poses followed by four run poses, in fixed 320 px cells.
+  /// Static coat art remains available for menus and as the loading fallback.
+  final Map<String, ui.Image> petMoveSprites = {};
+
+  /// Pet art lives beside the other app assets, not under Flame's default
+  /// `assets/images/` directory. Keep a dedicated cache so loading the dog art
+  /// cannot change the prefix used by any other Flame image.
+  final Images _petImages = Images(prefix: 'assets/pets/');
+
   /// What the player is holding a finger on, for the inspector card.
   ///
   /// The game reports *what* was held, not what to say about it: the copy lives
@@ -275,6 +311,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
   /// How long the card stays up.
   static const inspectSeconds = 3.2;
+
+  HudNotice? proximityNotice;
+  double proximityNoticeFor = 0;
+  HudNotice? pickupNotice;
+  double pickupNoticeFor = 0;
+  final Set<Object> _encounteredNearby = {};
+  _NearbyNotice? _pendingNearby;
+
+  static const proximityNoticeSeconds = 2.5;
+  static const pickupNoticeSeconds = 1.0;
 
   /// A transient line at the top of the board, for things that need words.
   String? banner;
@@ -453,7 +499,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // an asset bundle.
     for (final pet in Pets.all) {
       try {
-        petSprites[pet.id] = await Flame.images.load('pets/${pet.id}.png');
+        petSprites[pet.id] = await _petImages.load('${pet.id}.png');
+        petMoveSprites[pet.id] = await _petImages.load('${pet.id}_move.png');
       } catch (_) {
         // Leave the coat undelivered; she draws her fallback.
       }
@@ -640,6 +687,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     foodTapsRefunded = 0;
     foodReceipt = null;
     foodReceiptFor = 0;
+    proximityNotice = null;
+    proximityNoticeFor = 0;
+    pickupNotice = null;
+    pickupNoticeFor = 0;
+    _encounteredNearby.clear();
+    _pendingNearby = null;
     despair = 0;
     firstRegrowthAt = null;
     lockedByBudget = false;
@@ -984,6 +1037,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         inspecting = null;
       }
     }
+    _updateHudNotices(dt);
     _decayCellVisuals(dt);
 
     if (step <= 0) {
@@ -1301,10 +1355,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     if (tuning.fogEnabled) {
       _revealAround();
     }
+    _discoverNearbyNotice();
 
-    if (dog.cell == grid.exit &&
-        (dog.position - layout.toPixel(grid.exit)).distance <
-            layout.inradius * 0.75) {
+    if (dog.hasReachedExit(grid)) {
       _win();
       return;
     }
@@ -1421,6 +1474,127 @@ class HexcapeGame extends FlameGame with TapCallbacks {
               tuning.fogEnabled &&
               sinceProgress >= hintAfter));
 
+  bool get _proximityHintsBlocked =>
+      !tuning.hintsEnabled ||
+      phase != GamePhase.playing ||
+      isOver ||
+      !(tutorial?.isDone ?? true) ||
+      inspecting != null ||
+      banner != null ||
+      pickupNotice != null;
+
+  void _updateHudNotices(double dt) {
+    if (pickupNoticeFor > 0) {
+      pickupNoticeFor = math.max(0, pickupNoticeFor - dt);
+      if (pickupNoticeFor == 0) pickupNotice = null;
+    }
+    if (!_proximityHintsBlocked && proximityNoticeFor > 0) {
+      proximityNoticeFor = math.max(0, proximityNoticeFor - dt);
+      if (proximityNoticeFor == 0) proximityNotice = null;
+    }
+  }
+
+  void _discoverNearbyNotice() {
+    if (_proximityHintsBlocked) return;
+    if (proximityNotice != null) {
+      _pendingNearby ??= _bestNearbyNotice();
+      return;
+    }
+    final candidate =
+        _pendingNearby != null && _nearbyStillValid(_pendingNearby!)
+        ? _pendingNearby
+        : _bestNearbyNotice();
+    _pendingNearby = null;
+    if (candidate == null) return;
+    proximityNotice = candidate.notice;
+    proximityNoticeFor = proximityNoticeSeconds;
+    _encounteredNearby.add(candidate.key);
+  }
+
+  @visibleForTesting
+  void debugRefreshNearbyNotice() => _discoverNearbyNotice();
+
+  @visibleForTesting
+  void debugTakePickup(Pickup pickup) => _takePickup(pickup);
+
+  _NearbyNotice? _bestNearbyNotice() {
+    final candidates = <_NearbyNotice>[];
+    for (final coord in dog.cell.disc(2)) {
+      final cell = grid.at(coord);
+      if (cell == null ||
+          !cell.revealed ||
+          cell.type == HexType.plain ||
+          _encounteredNearby.contains(cell.type)) {
+        continue;
+      }
+      candidates.add(
+        _NearbyNotice(
+          HudNotice.proximity(hex: cell.type),
+          coord,
+          cell.type,
+          _nearbyPriority(cell.type),
+        ),
+      );
+    }
+    for (final pickup in pickups) {
+      if (pickup.collected ||
+          !pickup.kind.isPowerup ||
+          pickup.coord.distanceTo(dog.cell) > 2 ||
+          _encounteredNearby.contains(pickup.kind)) {
+        continue;
+      }
+      candidates.add(
+        _NearbyNotice(
+          HudNotice.proximity(pickup: pickup.kind),
+          pickup.coord,
+          pickup.kind,
+          2,
+        ),
+      );
+    }
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final priority = a.priority.compareTo(b.priority);
+      return priority != 0
+          ? priority
+          : a.coord
+                .distanceTo(dog.cell)
+                .compareTo(b.coord.distanceTo(dog.cell));
+    });
+    return candidates.first;
+  }
+
+  bool _nearbyStillValid(_NearbyNotice candidate) {
+    if (candidate.coord.distanceTo(dog.cell) > 2 ||
+        _encounteredNearby.contains(candidate.key)) {
+      return false;
+    }
+    if (candidate.notice.pickup != null) {
+      return pickups.any(
+        (p) =>
+            !p.collected &&
+            p.kind == candidate.notice.pickup &&
+            p.coord == candidate.coord,
+      );
+    }
+    final cell = grid.at(candidate.coord);
+    return cell != null && cell.revealed && cell.type == candidate.notice.hex;
+  }
+
+  static int _nearbyPriority(HexType type) => switch (type) {
+    HexType.thorn ||
+    HexType.alarm ||
+    HexType.spring ||
+    HexType.slope ||
+    HexType.ice ||
+    HexType.mire ||
+    HexType.eddy ||
+    HexType.magnet ||
+    HexType.fault ||
+    HexType.thatch => 0,
+    _ => 1,
+  };
+
   double get hintStrength =>
       ((sinceProgress - effectiveHintAfter) / 1.2).clamp(0.0, 1.0);
 
@@ -1519,6 +1693,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       layout.size,
       colour: Palette.goalGlow,
       boost: 1.4,
+    );
+    effects.boneShower(
+      layout.toPixel(grid.exit),
+      layout.size,
+      reducedMotion: tuning.reducedMotion,
     );
   }
 
@@ -1625,6 +1804,8 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       default:
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
+        pickupNotice = HudNotice.pickup(taken.kind);
+        pickupNoticeFor = pickupNoticeSeconds;
         // Charges wait for a tap, so they need to say so. Timed effects show
         // themselves as the ring closing round her; passives say once what
         // they are, then quietly stay.

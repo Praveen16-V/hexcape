@@ -3,13 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../game/pets.dart';
-import '../components/glyphs.dart';
 import '../theme/palette.dart';
 
 /// The dog, at rest, on the home screen.
 ///
-/// The same art the run draws (`assets/pets/<id>.png`), idling here: a small
-/// breath-scale loop so the still screen still has a heartbeat, nothing more.
+/// The same art the run draws (`assets/pets/<id>.png`), idling here with a
+/// quiet breath, weight shift and lift so the still screen has a heartbeat.
 /// Deliberately not `DogComponent` (`lib/components/dog_component.dart`) —
 /// that one is wired to a live `Dog`'s physics, gait and hunger, none of
 /// which exists before a level has started.
@@ -30,10 +29,28 @@ class HomeDog extends StatefulWidget {
 }
 
 class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
+  final math.Random _random = math.Random();
+  _HomeAction _action = _HomeAction.jump;
+  bool _motionEnabled = false;
+
   late final AnimationController _idle = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 3400),
-  );
+    duration: _action.duration,
+  )..addStatusListener(_onStatus);
+
+  void _onStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !_motionEnabled || !mounted) {
+      return;
+    }
+    if (_action != _HomeAction.idle) {
+      setState(() => _action = _HomeAction.idle);
+    } else {
+      const choices = [_HomeAction.walk, _HomeAction.run, _HomeAction.jump];
+      setState(() => _action = choices[_random.nextInt(choices.length)]);
+    }
+    _idle.duration = _action.duration;
+    _idle.forward(from: 0);
+  }
 
   @override
   void didChangeDependencies() {
@@ -48,11 +65,13 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
   }
 
   void _syncAnimation() {
-    if (widget.reducedMotion || MediaQuery.disableAnimationsOf(context)) {
+    _motionEnabled =
+        !widget.reducedMotion && !MediaQuery.disableAnimationsOf(context);
+    if (!_motionEnabled) {
       _idle.stop();
       _idle.value = 0;
     } else if (!_idle.isAnimating) {
-      _idle.repeat();
+      _idle.forward(from: _idle.value == 1 ? 0 : _idle.value);
     }
   }
 
@@ -70,23 +89,128 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
       child: AnimatedBuilder(
         animation: _idle,
         builder: (context, _) {
-          // A breath and nothing else: one scale pulse per cycle, slow enough
-          // that reduced-motion users only lose a 3% drift rather than a state
-          // change.
-          final breath = math.sin(_idle.value * math.pi * 2) * 0.014;
-          return Transform.scale(
-            scale: 0.986 + breath,
-            child: Image.asset(
-              'assets/pets/${widget.pet.id}.png',
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => CustomPaint(
-                painter: _HomeDogPainter(pet: widget.pet, phase: _idle.value),
+          final t = _idle.value;
+          final wave = math.sin(t * math.pi * 2);
+          final active = _motionEnabled ? _action : _HomeAction.idle;
+          final airborne = active.jumpArc(t);
+          final travelAmount = active == _HomeAction.walk
+              ? widget.size * 0.11
+              : active == _HomeAction.run
+              ? widget.size * 0.17
+              : 0.0;
+          final travelling = travelAmount > 0;
+          final outward = t < 0.5;
+          final leg = outward ? t * 2 : (t - 0.5) * 2;
+          final travel = travelling
+              ? (outward
+                    ? Curves.easeInOut.transform(leg) * travelAmount
+                    : (1 - Curves.easeInOut.transform(leg)) * travelAmount)
+              : 0.0;
+          final facing = travelling && !outward ? -1.0 : 1.0;
+          final lift = airborne * widget.size * 0.14;
+          final frame = active.spriteFrame(t);
+
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(
+                left: widget.size * 0.18 + travel,
+                right: widget.size * 0.18 - travel,
+                bottom: widget.size * 0.11,
+                height: widget.size * 0.13,
+                child: Transform.scale(
+                  scaleX: (1 - lift.abs() / widget.size * 2.2).clamp(0.56, 1.0),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(widget.size),
+                      color: Colors.black.withValues(alpha: 0.22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: widget.size * 0.06,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Transform.translate(
+                offset: Offset(travel, -lift),
+                child: Transform.rotate(
+                  angle: wave * (active == _HomeAction.run ? 0.025 : 0.012),
+                  alignment: Alignment.bottomCenter,
+                  child: Transform.scale(
+                    alignment: Alignment.bottomCenter,
+                    scaleX: facing * (1 - wave * 0.008),
+                    scaleY: 1 + wave * 0.014,
+                    child: ClipRect(
+                      child: SizedBox(
+                        width: widget.size,
+                        height: widget.size,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: -frame * widget.size,
+                              width: widget.size * 8,
+                              height: widget.size,
+                              child: Image.asset(
+                                'assets/pets/${widget.pet.id}_move.png',
+                                fit: BoxFit.fill,
+                                errorBuilder: (_, _, _) => CustomPaint(
+                                  painter: _HomeDogPainter(
+                                    pet: widget.pet,
+                                    phase: t,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
+  }
+}
+
+enum _HomeAction { idle, walk, run, jump }
+
+extension on _HomeAction {
+  Duration get duration => switch (this) {
+    _HomeAction.idle => const Duration(milliseconds: 1900),
+    _HomeAction.walk => const Duration(milliseconds: 2600),
+    _HomeAction.run => const Duration(milliseconds: 1700),
+    _HomeAction.jump => const Duration(milliseconds: 1350),
+  };
+
+  int spriteFrame(double t) => switch (this) {
+    _HomeAction.idle => 0,
+    _HomeAction.walk => (t * 8).floor().clamp(0, 7) % 4,
+    _HomeAction.run => 4 + (t * 12).floor().clamp(0, 11) % 4,
+    _HomeAction.jump => t < 0.28 ? 5 : (t < 0.72 ? 6 : 7),
+  };
+
+  /// Crouch, accelerate upward, hang briefly, then land under gravity. The
+  /// final compression gives the next grounded pose somewhere to settle.
+  double jumpArc(double t) {
+    if (this != _HomeAction.jump) return 0;
+    if (t < 0.16) {
+      return -0.10 * Curves.easeOut.transform(t / 0.16);
+    }
+    if (t < 0.48) {
+      return -0.10 + 1.10 * Curves.easeOutCubic.transform((t - 0.16) / 0.32);
+    }
+    if (t < 0.80) {
+      return 1 - Curves.easeInCubic.transform((t - 0.48) / 0.32);
+    }
+    return -0.06 * math.sin((t - 0.80) / 0.20 * math.pi);
   }
 }
 
@@ -125,32 +249,6 @@ class _HomeDogPainter extends CustomPainter {
     final breathe = 1 + 0.035 * math.sin(phase * math.pi * 2);
     final wag = math.sin(phase * math.pi * 2 * 3);
     final sway = math.sin(phase * math.pi * 2) * 0.12;
-
-    // The bone floats above the nose, clear of the dog's silhouette, with a
-    // thought-bubble trail leading up from her head — a daydream rather than
-    // a prop that happens to share the scene with her.
-    final bonePos = Offset(
-      size.width * 0.73,
-      size.height * 0.18 + math.sin(phase * math.pi * 2) * r * 0.12,
-    );
-    final headPos = Offset(
-      size.width / 2 + r * 0.86,
-      size.height * 0.61 - r * 0.92,
-    );
-    for (final t in const [0.32, 0.6]) {
-      final dot = Offset.lerp(headPos, bonePos, t)!;
-      _fill.color = Palette.treat.withValues(
-        alpha: 0.35 + 0.25 * math.sin(phase * math.pi * 2),
-      );
-      canvas.drawCircle(dot, r * (0.05 + t * 0.09), _fill);
-    }
-
-    canvas.save();
-    canvas.translate(bonePos.dx, bonePos.dy);
-    canvas.rotate(-0.3 + math.sin(phase * math.pi * 2) * 0.18);
-    _fill.color = Palette.treat;
-    canvas.drawPath(bonePath(r * 0.75), _fill);
-    canvas.restore();
 
     _renderShadow(canvas, centre, r);
     _renderGlow(canvas, centre, r);

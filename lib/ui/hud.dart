@@ -218,8 +218,26 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                         )
                       : !game.isOver && !(game.tutorial?.isDone ?? true)
                       ? TutorialCard(game: game)
+                      : game.pickupNotice != null
+                      ? _HudNoticeCard(
+                          notice: game.pickupNotice!,
+                          fade: (game.pickupNoticeFor / 0.18).clamp(0.0, 1.0),
+                        )
+                      : game.foodReceipt != null
+                      ? GameHint(
+                          text: game.foodReceipt,
+                          reducedMotion: game.tuning.reducedMotion,
+                        )
+                      : game.banner == null && game.proximityNotice != null
+                      ? _HudNoticeCard(
+                          notice: game.proximityNotice!,
+                          fade: (game.proximityNoticeFor / 0.35).clamp(
+                            0.0,
+                            1.0,
+                          ),
+                        )
                       : GameHint(
-                          text: game.foodReceipt ?? _hintFor(game),
+                          text: _hintFor(game),
                           reducedMotion: game.tuning.reducedMotion,
                         ),
                 ),
@@ -281,6 +299,82 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
     final minutes = total ~/ 60;
     final rest = total % 60;
     return '$minutes:${rest.toString().padLeft(2, '0')}';
+  }
+}
+
+class _HudNoticeCard extends StatelessWidget {
+  const _HudNoticeCard({required this.notice, required this.fade});
+
+  final HudNotice notice;
+  final double fade;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = notice.pickup != null
+        ? referenceForPickup(notice.pickup!)
+        : notice.hex != null
+        ? referenceForHex(notice.hex!)
+        : null;
+    if (entry == null) return const SizedBox.shrink();
+    final chargeHint =
+        notice.kind == HudNoticeKind.pickup && notice.pickup?.isCharge == true
+        ? notice.pickup!.readyHint
+        : null;
+    final sentenceEnd = entry.blurb.indexOf('.');
+    final effect =
+        chargeHint ??
+        (sentenceEnd < 0
+            ? entry.blurb
+            : entry.blurb.substring(0, sentenceEnd + 1));
+    return Opacity(
+      opacity: fade,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Palette.background.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: notice.pickup != null
+                ? Palette.forPickup(notice.pickup!)
+                : Palette.lockedEdge,
+          ),
+        ),
+        child: Row(
+          children: [
+            ReferenceMark(entry: entry, size: 30),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.name.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    effect,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Palette.hudDim,
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
