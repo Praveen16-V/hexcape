@@ -211,35 +211,60 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                 // would be two voices answering different questions.
                 SizedBox(
                   key: _hintKey,
-                  child: game.inspecting != null
-                      ? _InspectorCard(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Holds the slot open at exactly the height a card needs,
+                      // at whatever text size the player is using. The insets
+                      // below are measured from this box, and measuring the
+                      // live message instead meant the board re-framed every
+                      // time a message arrived, left, or cross-faded -- which
+                      // is the flicker. Reserving the worst case is what the
+                      // comment above has always claimed to do.
+                      const _NoticeSlotFloor(),
+                      if (game.inspecting != null)
+                        _InspectorCard(
                           inspecting: game.inspecting!,
                           fade: (game.inspectFor / 0.6).clamp(0.0, 1.0),
                         )
-                      : !game.isOver && !(game.tutorial?.isDone ?? true)
-                      ? TutorialCard(game: game)
-                      : game.pickupNotice != null
-                      ? _HudNoticeCard(
+                      else if (!game.isOver && !(game.tutorial?.isDone ?? true))
+                        TutorialCard(game: game)
+                      // The guaranteed read window: nothing outranks a receipt
+                      // until it has been up long enough to read.
+                      else if (game.pickupNoticeReadFor > 0)
+                        _HudNoticeCard(
                           notice: game.pickupNotice!,
-                          fade: (game.pickupNoticeFor / 0.18).clamp(0.0, 1.0),
+                          fade: _pickupFade(game),
                         )
-                      : game.foodReceipt != null
-                      ? GameHint(
+                      else if (game.foodReceipt != null)
+                        GameHint(
                           text: game.foodReceipt,
                           reducedMotion: game.tuning.reducedMotion,
                         )
-                      : game.banner == null && game.proximityNotice != null
-                      ? _HudNoticeCard(
+                      else if (game.banner == null &&
+                          game.proximityNotice != null)
+                        _HudNoticeCard(
                           notice: game.proximityNotice!,
                           fade: (game.proximityNoticeFor / 0.35).clamp(
                             0.0,
                             1.0,
                           ),
                         )
-                      : GameHint(
+                      // Past the read window the card stays for as long as the
+                      // power-up does -- a charge until it is spent, an effect
+                      // until it runs out -- but yields to anything above.
+                      else if (game.pickupNotice != null)
+                        _HudNoticeCard(
+                          notice: game.pickupNotice!,
+                          fade: _pickupFade(game),
+                        )
+                      else
+                        GameHint(
                           text: _hintFor(game),
                           reducedMotion: game.tuning.reducedMotion,
                         ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -248,6 +273,15 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
       },
     );
   }
+
+  /// Full while the power-up is live, fading only over its last moments. The
+  /// game holds [HexcapeGame.pickupNoticeFor] clear of zero for exactly as long
+  /// as there is something to describe.
+  static double _pickupFade(HexcapeGame game) =>
+      (game.pickupNoticeFor / HexcapeGame.pickupNoticeFadeSeconds).clamp(
+        0.0,
+        1.0,
+      );
 
   /// §12.5: teach tap, then drift, then regrowth — never all three at once.
   static String? _hintFor(HexcapeGame game) {
@@ -328,50 +362,114 @@ class _HudNoticeCard extends StatelessWidget {
             : entry.blurb.substring(0, sentenceEnd + 1));
     return Opacity(
       opacity: fade,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Palette.background.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: notice.pickup != null
-                ? Palette.forPickup(notice.pickup!)
-                : Palette.lockedEdge,
-          ),
-        ),
-        child: Row(
-          children: [
-            ReferenceMark(entry: entry, size: 30),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.name.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
+      child: _NoticeChrome(
+        edge: notice.pickup != null
+            ? Palette.forPickup(notice.pickup!)
+            : Palette.lockedEdge,
+        mark: ReferenceMark(entry: entry, size: _NoticeChrome.markSize),
+        name: entry.name.toUpperCase(),
+        effect: effect,
+      ),
+    );
+  }
+}
+
+/// The box every notice is drawn in, and the only place its metrics live.
+///
+/// Shared with [_NoticeSlotFloor] so the reserved height and the real card
+/// cannot drift apart: a floor that guessed at padding and line heights would
+/// be wrong at the first text-size change, which is the one case it exists for.
+class _NoticeChrome extends StatelessWidget {
+  const _NoticeChrome({
+    required this.edge,
+    required this.mark,
+    required this.name,
+    required this.effect,
+  });
+
+  static const markSize = 30.0;
+
+  /// Two lines of effect copy is what the card reserves and what the floor
+  /// measures. Anything longer is elided rather than allowed to resize the slot.
+  static const effectLines = 2;
+
+  final Color edge;
+  final Widget mark;
+  final String name;
+  final String effect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Palette.background.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: edge),
+      ),
+      child: Row(
+        children: [
+          mark,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    effect,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Palette.hudDim,
-                      fontSize: 11,
-                      height: 1.2,
-                    ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  effect,
+                  maxLines: effectLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Palette.hudDim,
+                    fontSize: 11,
+                    height: 1.2,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An invisible card, laid out but never seen, that keeps the message slot a
+/// fixed height.
+///
+/// The HUD reports this slot's height to the game as a board inset. Measuring
+/// whatever message happened to be showing meant the board re-framed itself
+/// every time one arrived or left -- a plain hint line and a notice card are
+/// not the same height -- and again on every frame of the 260 ms cross-fade
+/// between them. Reserving the tallest transient message costs a fixed strip of
+/// screen and buys a board that never moves.
+class _NoticeSlotFloor extends StatelessWidget {
+  const _NoticeSlotFloor();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: Opacity(
+        opacity: 0,
+        child: _NoticeChrome(
+          edge: Palette.lockedEdge,
+          mark: SizedBox.square(dimension: _NoticeChrome.markSize),
+          name: '',
+          // As many lines as a real card reserves; the text is never read.
+          effect: '\n',
         ),
       ),
     );

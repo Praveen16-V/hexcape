@@ -90,12 +90,24 @@ class HudNotice {
 }
 
 class _NearbyNotice {
-  const _NearbyNotice(this.notice, this.coord, this.key, this.priority);
+  const _NearbyNotice(
+    this.notice,
+    this.coord,
+    this.key,
+    this.priority,
+    this.step,
+  );
 
   final HudNotice notice;
   final HexCoord coord;
   final Object key;
   final int priority;
+
+  /// How many cells along her route this sits. Kept rather than recomputed
+  /// because a hint is about *when* she arrives, and the route is the only
+  /// thing that knows that -- straight-line distance calls a thorn behind a
+  /// wall close.
+  final int step;
 }
 
 /// The star rating, as a pure function of the three numbers it depends on.
@@ -315,12 +327,61 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   HudNotice? proximityNotice;
   double proximityNoticeFor = 0;
   HudNotice? pickupNotice;
+
+  /// Seconds the pickup card has left before it fades out. Refreshed every
+  /// frame the power-up behind it is still live, so the card lasts as long as
+  /// the thing it describes rather than for a fixed flash.
   double pickupNoticeFor = 0;
+
+  /// The part of that which outranks a proximity warning. A receipt is owed
+  /// long enough to be read; past that, ground she is about to walk into
+  /// matters more than a power-up she already has.
+  double pickupNoticeReadFor = 0;
   final Set<Object> _encounteredNearby = {};
   _NearbyNotice? _pendingNearby;
 
   static const proximityNoticeSeconds = 2.5;
-  static const pickupNoticeSeconds = 1.0;
+
+  /// How long a pickup card is guaranteed, whatever else wants the slot. One
+  /// second was not long enough to find the card, let alone read it.
+  static const pickupNoticeSeconds = 2.0;
+
+  /// The tail a card fades over once the power-up behind it ends, so it goes
+  /// out rather than vanishing on the frame the effect expires.
+  static const pickupNoticeFadeSeconds = 0.25;
+
+  /// A charge is an instruction, not a receipt -- it has to survive being read.
+  /// It earns the longer slot because nothing else says what the tap is for.
+  static const chargeNoticeSeconds = 2.5;
+
+  /// The stretch of route a warning may look down, her own cell being step 0.
+  ///
+  /// Step 1 is excluded on purpose: by the time she is one hex out she is
+  /// already committed, and naming the thorn she is about to stand in is a
+  /// caption, not a hint.
+  static const hintLookaheadFrom = 2;
+  static const hintLookaheadTo = 5;
+
+  /// The reaction window, in seconds of travel. Sooner than [hintLeadMin] and
+  /// there is no time left to tap; later than [hintLeadMax] and it is noise
+  /// about ground she may never cross, since one tap can redraw the route.
+  ///
+  /// The upper bound has to clear a full crawl across [hintLookaheadFrom]
+  /// cells -- at [TuningConfig.driftMin] that is over two and a half seconds --
+  /// or a tight corridor, where she is slowest and the warning is easiest to
+  /// act on, would be the one place nothing is ever said.
+  static const hintLeadMin = 0.5;
+  static const hintLeadMax = 3.0;
+
+  /// Below this, in hexes per second, she counts as standing still.
+  static const _hintStillSpeed = 0.05;
+
+  /// The floor between any two contextual hints. Two warnings back to back read
+  /// as chatter, and the second one is not heard.
+  static const hintGapSeconds = 4.0;
+
+  /// Starts satisfied, so the first mechanic of a level teaches immediately.
+  double _sinceHintShown = hintGapSeconds;
 
   /// A transient line at the top of the board, for things that need words.
   String? banner;
@@ -691,8 +752,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     proximityNoticeFor = 0;
     pickupNotice = null;
     pickupNoticeFor = 0;
+    pickupNoticeReadFor = 0;
     _encounteredNearby.clear();
     _pendingNearby = null;
+    _sinceHintShown = hintGapSeconds;
     despair = 0;
     firstRegrowthAt = null;
     lockedByBudget = false;
@@ -1472,7 +1535,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       (powerups.hasPassive(PickupKind.waystone) ||
           (!difficultyForRun.suppressesHints &&
               tuning.fogEnabled &&
-              sinceProgress >= hintAfter));
+              sinceProgress >= effectiveHintAfter));
 
   bool get _proximityHintsBlocked =>
       !tuning.hintsEnabled ||
@@ -1481,17 +1544,45 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       !(tutorial?.isDone ?? true) ||
       inspecting != null ||
       banner != null ||
-      pickupNotice != null;
+      pickupNoticeReadFor > 0;
 
   void _updateHudNotices(double dt) {
+    if (pickupNoticeReadFor > 0) {
+      pickupNoticeReadFor = math.max(0, pickupNoticeReadFor - dt);
+    }
     if (pickupNoticeFor > 0) {
       pickupNoticeFor = math.max(0, pickupNoticeFor - dt);
-      if (pickupNoticeFor == 0) pickupNotice = null;
     }
-    if (!_proximityHintsBlocked && proximityNoticeFor > 0) {
+    if (pickupNotice != null) {
+      if (_pickupNoticeLive) {
+        // Held just clear of zero rather than pinned high, so the moment the
+        // power-up ends the card is already a fade away from gone.
+        pickupNoticeFor = math.max(pickupNoticeFor, pickupNoticeFadeSeconds);
+      } else if (pickupNoticeFor == 0) {
+        pickupNotice = null;
+      }
+    }
+    // Ages even while something else owns the slot. A notice held at full
+    // duration through a banner comes back later to describe ground she left
+    // long ago, which is worse than never having said it.
+    if (proximityNoticeFor > 0) {
       proximityNoticeFor = math.max(0, proximityNoticeFor - dt);
       if (proximityNoticeFor == 0) proximityNotice = null;
     }
+    _sinceHintShown += dt;
+  }
+
+  /// Whether the power-up the card describes is still doing something.
+  ///
+  /// A charge is live until it is spent, which is the whole point of its card:
+  /// it names the tap the player still owes. A timed effect is live until it
+  /// runs out. A passive is never live in this sense -- it is held for the rest
+  /// of the run, and the charms row is where that belongs; a card that never
+  /// left would own the slot for the whole level.
+  bool get _pickupNoticeLive {
+    final kind = pickupNotice?.pickup;
+    if (kind == null || kind.isPassive) return false;
+    return kind.isCharge ? powerups.has(kind) : powerups.isActive(kind);
   }
 
   void _discoverNearbyNotice() {
@@ -1500,6 +1591,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       _pendingNearby ??= _bestNearbyNotice();
       return;
     }
+    if (_sinceHintShown < hintGapSeconds) return;
     final candidate =
         _pendingNearby != null && _nearbyStillValid(_pendingNearby!)
         ? _pendingNearby
@@ -1509,22 +1601,65 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     proximityNotice = candidate.notice;
     proximityNoticeFor = proximityNoticeSeconds;
     _encounteredNearby.add(candidate.key);
+    _sinceHintShown = 0;
   }
 
   @visibleForTesting
   void debugRefreshNearbyNotice() => _discoverNearbyNotice();
 
+  /// Pretend the gap between hints has passed, so a test can ask for the next
+  /// one without running four seconds of frames to get it.
+  @visibleForTesting
+  void debugElapseHintGap() => _sinceHintShown = hintGapSeconds;
+
+  /// Runs [seconds] of message and power-up clocks, in frames, without the rest
+  /// of the game loop. A card's life is measured against the effect behind it,
+  /// so the two have to be aged together.
+  @visibleForTesting
+  void debugElapseNotices(double seconds) {
+    const dt = 1 / 60;
+    for (var left = seconds; left > 0; left -= dt) {
+      final step = math.min(dt, left);
+      powerups.update(step);
+      _updateHudNotices(step);
+    }
+  }
+
   @visibleForTesting
   void debugTakePickup(Pickup pickup) => _takePickup(pickup);
 
+  /// The next mechanic she is walking into, or null.
+  ///
+  /// Read down her own route rather than out of a disc around her: a warning is
+  /// only a warning if it is about ground she has not reached. A ring scan
+  /// cannot tell the thorn ahead from the thorn she is standing in, which is
+  /// how this came to caption arrivals instead of preceding them.
+  ///
+  /// Power-ups are deliberately absent. There is nothing to react to in walking
+  /// into something good, and the card she gets on collecting it already says
+  /// what it does -- an approach hint only spent the slot twice.
   _NearbyNotice? _bestNearbyNotice() {
+    // Standing still, or barely moving: she is approaching nothing, so there is
+    // nothing to warn about. This is also what keeps the lead time below out of
+    // a divide by zero before the player's first tap.
+    final hexesPerSecond = dog.speed / layout.width;
+    if (hexesPerSecond < _hintStillSpeed) return null;
+
+    final route = dog.route;
     final candidates = <_NearbyNotice>[];
-    for (final coord in dog.cell.disc(2)) {
+    final last = math.min(hintLookaheadTo, route.length - 1);
+    for (var step = hintLookaheadFrom; step <= last; step++) {
+      final lead = step / hexesPerSecond;
+      if (lead < hintLeadMin) continue;
+      if (lead > hintLeadMax) break;
+      final coord = route[step];
       final cell = grid.at(coord);
       if (cell == null ||
           !cell.revealed ||
           cell.type == HexType.plain ||
-          _encounteredNearby.contains(cell.type)) {
+          _encounteredNearby.contains(cell.type) ||
+          // Ground she has already crossed taught whatever it was going to.
+          dog.trail.contains(coord)) {
         continue;
       }
       candidates.add(
@@ -1533,49 +1668,31 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           coord,
           cell.type,
           _nearbyPriority(cell.type),
-        ),
-      );
-    }
-    for (final pickup in pickups) {
-      if (pickup.collected ||
-          !pickup.kind.isPowerup ||
-          pickup.coord.distanceTo(dog.cell) > 2 ||
-          _encounteredNearby.contains(pickup.kind)) {
-        continue;
-      }
-      candidates.add(
-        _NearbyNotice(
-          HudNotice.proximity(pickup: pickup.kind),
-          pickup.coord,
-          pickup.kind,
-          2,
+          step,
         ),
       );
     }
     if (candidates.isEmpty) return null;
+    // Soonest wins, and dangerous ground only breaks the tie. The old ordering
+    // was the other way round, which was right for a ring scan -- everything in
+    // one is equally imminent -- and wrong here, where the whole list is ahead
+    // of her and the one she reaches first is the one she can still avoid.
     candidates.sort((a, b) {
-      final priority = a.priority.compareTo(b.priority);
-      return priority != 0
-          ? priority
-          : a.coord
-                .distanceTo(dog.cell)
-                .compareTo(b.coord.distanceTo(dog.cell));
+      final step = a.step.compareTo(b.step);
+      return step != 0 ? step : a.priority.compareTo(b.priority);
     });
     return candidates.first;
   }
 
   bool _nearbyStillValid(_NearbyNotice candidate) {
-    if (candidate.coord.distanceTo(dog.cell) > 2 ||
-        _encounteredNearby.contains(candidate.key)) {
+    if (_encounteredNearby.contains(candidate.key)) return false;
+    final hexesPerSecond = dog.speed / layout.width;
+    if (hexesPerSecond < _hintStillSpeed) return false;
+    final step = dog.route.indexOf(candidate.coord);
+    if (step < hintLookaheadFrom ||
+        step > hintLookaheadTo ||
+        step / hexesPerSecond > hintLeadMax) {
       return false;
-    }
-    if (candidate.notice.pickup != null) {
-      return pickups.any(
-        (p) =>
-            !p.collected &&
-            p.kind == candidate.notice.pickup &&
-            p.coord == candidate.coord,
-      );
     }
     final cell = grid.at(candidate.coord);
     return cell != null && cell.revealed && cell.type == candidate.notice.hex;
@@ -1805,13 +1922,18 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         sfx.play(Sound.powerup);
         powerups.grant(taken.kind);
         pickupNotice = HudNotice.pickup(taken.kind);
-        pickupNoticeFor = pickupNoticeSeconds;
-        // Charges wait for a tap, so they need to say so. Timed effects show
-        // themselves as the ring closing round her; passives say once what
-        // they are, then quietly stay.
-        if (taken.kind.isCharge) {
-          announce(taken.kind.readyHint);
-        } else if (taken.kind.isPassive) {
+        // Charges wait for a tap, so they need to say so -- and the card
+        // already renders `readyHint` for them, so a banner saying it again was
+        // the same sentence twice. Worse, a banner suppresses contextual hints
+        // for its whole life, so collecting a charge went quiet for four
+        // seconds. One channel, held long enough to read.
+        pickupNoticeReadFor = taken.kind.isCharge
+            ? chargeNoticeSeconds
+            : pickupNoticeSeconds;
+        pickupNoticeFor = pickupNoticeReadFor;
+        // Timed effects show themselves as the ring closing round her; passives
+        // say once what they are, then quietly stay.
+        if (taken.kind.isPassive) {
           announce(
             taken.kind == PickupKind.keepsake
                 ? 'KEEPSAKE — one mercy, carried now'

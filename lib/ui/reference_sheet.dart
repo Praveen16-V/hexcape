@@ -143,19 +143,21 @@ List<ReferenceEntry> referenceFor(int unlocked) => [
 /// The same entries the sheet is built from rather than a second set of copy.
 /// One description of a spring means the card and the sheet cannot drift, and
 /// `screens_test` already refuses to let a type exist without one.
-ReferenceEntry? referenceForHex(HexType type) {
-  for (final e in allReferenceEntries) {
-    if (e.hex == type) return e;
-  }
-  return null;
-}
+ReferenceEntry? referenceForHex(HexType type) => _byHex[type];
 
-ReferenceEntry? referenceForPickup(PickupKind kind) {
-  for (final e in allReferenceEntries) {
-    if (e.pickup == kind) return e;
-  }
-  return null;
-}
+ReferenceEntry? referenceForPickup(PickupKind kind) => _byPickup[kind];
+
+/// Built once rather than scanned per call. The notice and inspector cards ask
+/// on every frame they are on screen, and the sheet is seventy entries long.
+final Map<HexType, ReferenceEntry> _byHex = {
+  for (final e in allReferenceEntries)
+    if (e.hex != null) e.hex!: e,
+};
+
+final Map<PickupKind, ReferenceEntry> _byPickup = {
+  for (final e in allReferenceEntries)
+    if (e.pickup != null) e.pickup!: e,
+};
 
 /// An entry drawn as the game itself draws it.
 ///

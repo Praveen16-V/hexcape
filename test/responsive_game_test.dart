@@ -11,6 +11,7 @@ import 'package:hexcape/components/field_component.dart';
 import 'package:hexcape/entities/pickup.dart';
 import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/tuning.dart';
+import 'package:hexcape/hex/hex_cell.dart';
 import 'package:hexcape/hex/hex_coord.dart';
 import 'package:hexcape/systems/input_system.dart';
 import 'package:hexcape/systems/reveal_system.dart';
@@ -122,6 +123,62 @@ void main() {
       expect(game.revealRadius, greaterThan(game.effectiveTapRadius));
     },
   );
+
+  testWidgets('a message arriving does not re-frame the board', (tester) async {
+    // The HUD reports its message slot to the game as a board inset. When that
+    // measured the live message, every hint that arrived, left, or cross-faded
+    // resized the slot, moved the inset and re-laid the board out under the
+    // player -- which is what the flicker was.
+    const size = Size(390, 844);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = makeGame(size);
+    game
+      ..phase = GamePhase.playing
+      ..tutorial = null
+      ..banner = null
+      ..bannerFor = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Material(color: Palette.background, child: Hud(game: game)),
+        ),
+      ),
+    );
+
+    Future<double> settle() async {
+      await tester.pump();
+      await tester.pump();
+      return game.hudInsets.bottom;
+    }
+
+    final quiet = await settle();
+
+    game
+      ..pickupNotice = const HudNotice.pickup(PickupKind.freeze)
+      ..pickupNoticeFor = HexcapeGame.pickupNoticeSeconds
+      ..pickupNoticeReadFor = HexcapeGame.pickupNoticeSeconds;
+    expect(await settle(), quiet, reason: 'a pickup card moved the board');
+
+    game
+      ..pickupNotice = null
+      ..pickupNoticeFor = 0
+      ..pickupNoticeReadFor = 0
+      ..proximityNotice = const HudNotice.proximity(hex: HexType.thorn)
+      ..proximityNoticeFor = HexcapeGame.proximityNoticeSeconds;
+    expect(await settle(), quiet, reason: 'a warning moved the board');
+
+    game
+      ..proximityNotice = null
+      ..proximityNoticeFor = 0;
+    expect(await settle(), quiet, reason: 'the slot did not settle back');
+
+    await tester.pumpWidget(const SizedBox());
+  });
 
   for (final size in sizes) {
     for (final scale in [1.0, 2.0]) {

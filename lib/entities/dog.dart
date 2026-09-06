@@ -67,6 +67,13 @@ class Dog {
   Offset? get movementAim => isLaunched ? null : _movementAim;
   Offset? _movementAim;
 
+  /// Her committed path, her own cell first, empty when she has nowhere to go.
+  ///
+  /// Exposed so a hint can name what is *coming* rather than what she is
+  /// standing on. Empty while a spring has hold of her: steering is suspended,
+  /// so the route describes a walk she is not currently taking.
+  List<HexCoord> get route => isLaunched ? const [] : _route;
+
   /// Distinguishes a patrol stopping her from a corridor that needs opening.
   bool waitingForPatrol = false;
 
