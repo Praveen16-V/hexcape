@@ -56,10 +56,12 @@ class _SettingsSheetState extends State<SettingsSheet> {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          padding: EdgeInsets.zero,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Center(
               child: Container(
                 width: 40,
@@ -172,7 +174,8 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 value: _p.unlockAllLevels,
                 onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
