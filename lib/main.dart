@@ -195,6 +195,7 @@ class _GameShellState extends State<GameShell>
           unlocked: widget.progress.unlocked,
           owned: widget.progress.ownsFullGame,
           trialUsed: widget.progress.trialUsed,
+          unlockAll: widget.progress.unlockAllLevels,
         ),
       ),
     );
@@ -308,6 +309,7 @@ class _GameShellState extends State<GameShell>
         unlocked: widget.progress.unlocked,
         owned: widget.progress.ownsFullGame,
         trialUsed: widget.progress.trialUsed,
+        unlockAll: widget.progress.unlockAllLevels,
       );
       switch (access) {
         case LevelAccess.needsPurchase:

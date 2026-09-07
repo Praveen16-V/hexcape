@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/game/haptics.dart';
 import 'package:hexcape/game/progress.dart';
+import 'package:hexcape/ui/settings_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -86,10 +88,7 @@ void main() {
         var index = source.indexOf('overlays.add(Overlays.debug)');
         while (index != -1) {
           // The guard has to be close by — inside the same short method.
-          final before = source.substring(
-            index < 240 ? 0 : index - 240,
-            index,
-          );
+          final before = source.substring(index < 240 ? 0 : index - 240, index);
           if (!before.contains('developerTools')) {
             offenders.add('${entity.path} @ $index');
           }
@@ -99,7 +98,8 @@ void main() {
       expect(
         offenders,
         isEmpty,
-        reason: 'the debug overlay is added unguarded at: '
+        reason:
+            'the debug overlay is added unguarded at: '
             '${offenders.join(", ")}',
       );
     });
@@ -123,9 +123,62 @@ void main() {
       expect(
         offenders,
         isEmpty,
-        reason: 'these call HapticFeedback directly instead of Haptics: '
+        reason:
+            'these call HapticFeedback directly instead of Haptics: '
             '${offenders.join(", ")}',
       );
+    });
+  });
+
+  group('The unlock-all switch in the sheet', () {
+    Future<void> open(WidgetTester tester, Progress progress) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: SettingsSheet(
+                  progress: progress,
+                  onChanged: () {},
+                  onRestore: null,
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('is not there for a player who has not asked for it', (
+      tester,
+    ) async {
+      // It opens the paid campaign. A player must not be able to find it by
+      // scrolling through their own settings.
+      final progress = await Progress.load();
+      expect(progress.developerTools, isFalse);
+      await open(tester, progress);
+      expect(find.text('Unlock all stages'), findsNothing);
+    });
+
+    testWidgets('appears once developer tools are on, and toggles', (
+      tester,
+    ) async {
+      final progress = await Progress.load();
+      await progress.setDeveloperTools(true);
+      await open(tester, progress);
+
+      final row = find.text('Unlock all stages');
+      expect(row, findsOneWidget);
+      final sw = find.descendant(
+        of: find.ancestor(of: row, matching: find.byType(Row)).first,
+        matching: find.byType(Switch),
+      );
+      // Scrolled to first: the sheet is taller than a test viewport, and a
+      // switch nobody can reach is not a switch.
+      await tester.ensureVisible(sw);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(sw).value, isFalse);
+
+      await tester.tap(sw);
+      await tester.pumpAndSettle();
+      expect(progress.unlockAllLevels, isTrue);
     });
   });
 }

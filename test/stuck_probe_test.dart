@@ -107,6 +107,60 @@ void main() {
     );
   });
 
+  test('two equidistant open tiles do not make her vibrate', () {
+    // The reported level-11 failure, reduced. (1,-1) is the same number of
+    // steps from the bone as (0,0) is, so the depth tie-break used to rank it
+    // above standing still — and rank (0,0) above standing still again the
+    // moment she arrived. She flipped between the two about twenty-five times
+    // a second, which reads on screen as a dog stuck in the throat between two
+    // open tiles, flickering.
+    final coords = HexCoord.zero.disc(10);
+    final exit = const HexCoord(0, -8);
+    final beside = const HexCoord(1, -1);
+    final grid = HexGrid(
+      cells: {for (final c in coords) c: HexCell(c, HexType.plain)},
+      start: HexCoord.zero,
+      exit: exit,
+      truePath: const [HexCoord.zero, HexCoord(0, -8)],
+    );
+    expect(
+      grid.distanceToExit(beside),
+      grid.distanceToExit(HexCoord.zero),
+      reason: 'the two tiles have to be equidistant or this tests nothing',
+    );
+    grid.at(HexCoord.zero)!.clear(0);
+    grid.at(beside)!.clear(0);
+
+    final dog = Dog(
+      position: _layout.toPixel(HexCoord.zero),
+      cell: HexCoord.zero,
+    );
+    final tuning = TuningConfig();
+    var crossings = 0;
+    var last = dog.cell;
+    for (var i = 0; i < 60 * 20; i++) {
+      dog.update(
+        dt: 1 / 60,
+        grid: grid,
+        layout: _layout,
+        tuning: tuning,
+        fieldVersion: 1,
+        regrowthActive: false,
+      );
+      if (dog.cell != last) {
+        crossings++;
+        last = dog.cell;
+      }
+    }
+    // She is allowed the one investigating trip the fallback exists to make,
+    // and the round trip back off it. What she is not allowed is a cycle.
+    expect(
+      crossings,
+      lessThanOrEqualTo(2),
+      reason: 'she crossed the shared edge $crossings times in twenty seconds',
+    );
+  });
+
   test('progressive zigzag with regrowth', () {
     final exit = const HexCoord(3, -6);
     final route = <HexCoord>[

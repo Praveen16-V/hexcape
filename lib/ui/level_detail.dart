@@ -77,6 +77,7 @@ class _LevelDetailState extends State<LevelDetail> {
       unlocked: widget.progress.unlocked,
       owned: widget.progress.ownsFullGame,
       trialUsed: widget.progress.trialUsed,
+      unlockAll: widget.progress.unlockAllLevels,
     );
     final trial = access == LevelAccess.trial;
     // The one free look past the paywall is pinned to Normal. It exists to show

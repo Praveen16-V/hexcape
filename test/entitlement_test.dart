@@ -9,6 +9,105 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  group('The unlock-all testing override', () {
+    test('opens every stage, paid band included', () {
+      // The whole point of it: a switch that stopped at the paywall could not
+      // reach the two thirds of the campaign most worth testing.
+      for (final level in [1, Entitlements.freeThrough, 21, Campaign.length]) {
+        expect(
+          Entitlements.accessTo(
+            level,
+            unlocked: 1,
+            owned: false,
+            trialUsed: false,
+            unlockAll: true,
+          ),
+          LevelAccess.open,
+          reason: 'level $level stayed shut with the override on',
+        );
+      }
+    });
+
+    test('never spends the trial on the way past', () {
+      // `trial` is a state that gets consumed. A tester walking through level
+      // 21 must not burn the player's one free look doing it.
+      expect(
+        Entitlements.accessTo(
+          Entitlements.trialLevel,
+          unlocked: Entitlements.trialLevel,
+          owned: false,
+          trialUsed: false,
+          unlockAll: true,
+        ),
+        LevelAccess.open,
+      );
+    });
+
+    test('off by default, so nothing else in the game moves', () {
+      expect(
+        Entitlements.accessTo(Campaign.length, unlocked: 1, owned: false),
+        LevelAccess.needsPurchase,
+      );
+    });
+
+    test('leaves the earned frontier alone', () async {
+      // It is a lens on the rules, not a write to the save. Turning it on,
+      // jumping to the end and turning it off has to give the player their own
+      // progress back exactly as it was.
+      final p = await Progress.load();
+      await p.recordWin(level: 1, stars: 3, taps: 5, time: 9);
+      expect(p.unlocked, 2);
+
+      await p.setUnlockAllLevels(true);
+      expect(p.unlocked, 2, reason: 'the override rewrote the save');
+      expect(
+        Entitlements.canPlay(
+          40,
+          unlocked: p.unlocked,
+          owned: p.ownsFullGame,
+          unlockAll: p.unlockAllLevels,
+        ),
+        isTrue,
+      );
+
+      // And a clear reached through the override still advances the frontier
+      // by one, rather than finding it already at the end and writing nothing.
+      await p.recordWin(level: 2, stars: 2, taps: 7, time: 12);
+      await p.setUnlockAllLevels(false);
+      expect(p.unlocked, 3);
+      expect(
+        Entitlements.canPlay(
+          40,
+          unlocked: p.unlocked,
+          owned: p.ownsFullGame,
+          unlockAll: p.unlockAllLevels,
+        ),
+        isFalse,
+      );
+    });
+
+    test('opens the whole reference sheet, not the earned frontier', () async {
+      // Returning the frontier would hide every entry for the bands the
+      // override just made playable, on exactly the save most likely to be
+      // using it.
+      expect(
+        Entitlements.revealCeiling(unlocked: 1, owned: false, unlockAll: true),
+        Campaign.length,
+      );
+      expect(
+        Entitlements.revealCeiling(unlocked: 1, owned: false),
+        1,
+        reason: 'the override leaked into a normal read',
+      );
+    });
+
+    test('survives a reload, and is off on a fresh install', () async {
+      expect((await Progress.load()).unlockAllLevels, isFalse);
+      await (await Progress.load()).setUnlockAllLevels(true);
+      expect((await Progress.load()).unlockAllLevels, isTrue);
+    });
+  });
+
   group('What the player may play', () {
     test('the free game is free, bought or not', () {
       // The one rule that must never break. A regression here charges people

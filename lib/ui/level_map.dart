@@ -433,6 +433,7 @@ class _MapPainter extends CustomPainter {
       unlocked: progress.unlocked,
       owned: progress.ownsFullGame,
       trialUsed: progress.trialUsed,
+      unlockAll: progress.unlockAllLevels,
     );
     final trial = access == LevelAccess.trial;
     // A trial tile is drawn as playable, because it is. Drawing a padlock on

@@ -314,7 +314,25 @@ class Dog {
       // and heads home. Regrowth hides it by sealing that corridor behind her,
       // which is exactly why it has to be right here rather than left to a
       // system that happens to clean up after it.
-      target = _bestOf(depths, grid, (_) => true) ?? cell;
+      // Only a cell that is *strictly* closer to the food counts as progress.
+      //
+      // Without that word the depth tie-break decides equidistant cells, and
+      // depth is measured from wherever she is standing rather than being a
+      // property of the cell — so a neighbour the same distance from the bone
+      // always outscores standing still, from both ends. Two open tiles side
+      // by side then each name the other, twenty-five times a second, and she
+      // vibrates in the throat between them instead of moving. Requiring the
+      // gap to actually close makes the primary choice monotone, which is what
+      // rules the cycle out rather than damping it.
+      //
+      // It costs nothing that was working: depth can shift the score by at
+      // most `_depthTieBreak * _lookaheadRings`, which is under one, so a
+      // strictly closer cell already beat every equidistant one. Sideways
+      // moves were never the goal-seeker's job — they belong to the fallback
+      // below, which has the guard against walking the same ground twice.
+      final here = grid.distanceToExit(cell);
+      target =
+          _bestOf(depths, grid, (c) => grid.distanceToExit(c) < here) ?? cell;
 
       // If nothing on offer beats standing still, take the best opening she has
       // not already walked.

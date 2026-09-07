@@ -59,6 +59,7 @@ class Progress {
   static const _difficultyKey = 'opt_difficulty';
   static const _difficultyChosenKey = 'opt_difficulty_chosen';
   static const _developerKey = 'opt_developer';
+  static const _unlockAllKey = 'opt_unlock_all';
   static const _zoomKey = 'opt_zoom';
   static const _ownedKey = 'owns_full';
   static const _trialKey = 'trial_used';
@@ -303,6 +304,25 @@ class Progress {
   /// person using it. Nobody turns this on by accident.
   bool get developerTools => _prefs.getBool(_developerKey) ?? false;
   Future<void> setDeveloperTools(bool on) => _prefs.setBool(_developerKey, on);
+
+  /// Opens every stage, for testing.
+  ///
+  /// A **lens on the rules, never a write to the save.** [unlocked] keeps
+  /// reporting the level the player has actually earned, so turning this on,
+  /// jumping to level fifty and turning it off again leaves the frontier
+  /// exactly where it was — and [recordWin] still advances it by one on a real
+  /// clear rather than finding it already at the end of the campaign and
+  /// writing nothing. Everything it changes goes through [Entitlements], which
+  /// is the one place that decides what may be played.
+  ///
+  /// It lifts the purchase gate as well as the progress gate, because a switch
+  /// that opens the campaign as far as the paywall and no further cannot test
+  /// the two thirds of the game that live past it. That is only defensible
+  /// because it sits behind [developerTools], which is off by default and which
+  /// already exposes a level jump that ignores entitlements entirely — this
+  /// grants nothing that panel did not.
+  bool get unlockAllLevels => _prefs.getBool(_unlockAllKey) ?? false;
+  Future<void> setUnlockAllLevels(bool on) => _prefs.setBool(_unlockAllKey, on);
 
   /// Whether the full campaign has been bought.
   ///

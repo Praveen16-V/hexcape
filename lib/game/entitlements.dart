@@ -66,7 +66,22 @@ class Entitlements {
     // Defaults to spent, so every caller that does not know about the trial
     // behaves exactly as it did before the trial existed.
     bool trialUsed = true,
+
+    /// The testing override, from `Progress.unlockAllLevels`.
+    ///
+    /// Answered first and unconditionally: the point of it is to take both
+    /// gates out of the way at once, and a version that still consulted the
+    /// purchase would be useless for exactly the levels worth testing. Never
+    /// [LevelAccess.trial] — the trial is a thing that gets *spent*, and a
+    /// tester walking into level 21 must not burn the player's one free look
+    /// on the way past.
+    ///
+    /// Defaults to off, so every existing caller is unaffected.
+    bool unlockAll = false,
   }) {
+    if (unlockAll) {
+      return LevelAccess.open;
+    }
     // Checked before progress: a level that is both unreached *and* unpaid
     // reports the purchase, because that is the one the player can act on.
     if (level > freeThrough && !owned) {
@@ -89,12 +104,14 @@ class Entitlements {
     required int unlocked,
     required bool owned,
     bool trialUsed = true,
+    bool unlockAll = false,
   }) {
     final access = accessTo(
       level,
       unlocked: unlocked,
       owned: owned,
       trialUsed: trialUsed,
+      unlockAll: unlockAll,
     );
     return access == LevelAccess.open || access == LevelAccess.trial;
   }
@@ -113,7 +130,21 @@ class Entitlements {
     required int unlocked,
     required bool owned,
     bool trialUsed = false,
+
+    /// The testing override. A tester dropped into a band by [accessTo] needs
+    /// the entries explaining the mechanics of that band; a reference sheet
+    /// still clamped to the free campaign would document a different game
+    /// from the one on screen.
+    ///
+    /// Opens the whole sheet rather than returning [unlocked], because
+    /// [unlocked] is still the frontier the player actually earned — on a save
+    /// that has never left level one it would hide every entry for the levels
+    /// the override just made playable.
+    bool unlockAll = false,
   }) {
+    if (unlockAll) {
+      return Campaign.length;
+    }
     if (owned) {
       return unlocked;
     }

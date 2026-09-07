@@ -157,6 +157,21 @@ class _SettingsSheetState extends State<SettingsSheet> {
               value: _p.developerTools,
               onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
             ),
+            // Nested inside the developer switch rather than sitting beside it.
+            // This one opens the paid campaign, so it must not be a thing a
+            // player can find; behind a toggle they have already had to turn on
+            // deliberately, it grants nothing the level jump in that same panel
+            // does not already give away.
+            if (_p.developerTools)
+              _Toggle(
+                label: 'Unlock all stages',
+                blurb:
+                    'Every level playable, in any order, for testing. Your '
+                    'real progress is untouched and comes back when this '
+                    'goes off.',
+                value: _p.unlockAllLevels,
+                onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
+              ),
           ],
         ),
       ),
