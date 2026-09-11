@@ -207,7 +207,7 @@ class Dog {
 
     openness = grid.opennessAround(cell);
 
-    _trackEnclosure(grid, dt, regrowthActive);
+    _trackEnclosure(grid, layout, dt, regrowthActive);
     final previousVelocity = velocity;
     // Outranks a launch: a spring firing her across the board while the player
     // has just paid to hold her still would spend the tool on nothing.
@@ -608,8 +608,21 @@ class Dog {
   /// clock on a player who has not yet done anything wrong. The failure state
   /// is meant to be *the field closing back in* (§10) — not the opening
   /// position.
-  void _trackEnclosure(HexGrid grid, double dt, bool regrowthActive) {
-    if (!grid.isEnclosed(cell)) {
+  ///
+  /// Measured against her whole collision footprint rather than the cell under
+  /// her centre, because regrowth holds every cell she occupies short of the
+  /// snap. While she straddles a shared edge that mercy holds two cells open
+  /// at once and neither can ever close, so a two-cell hole exactly her own
+  /// size reads as an open pocket forever: she has nowhere to walk, the ground
+  /// cannot finish closing on her, and the run never ends. See
+  /// [HexGrid.isBoxedIn].
+  void _trackEnclosure(
+    HexGrid grid,
+    HexLayout layout,
+    double dt,
+    bool regrowthActive,
+  ) {
+    if (!grid.isBoxedIn(occupiedCells(layout))) {
       hasBeenFree = true;
       enclosedFor = 0;
       return;
