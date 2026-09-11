@@ -159,6 +159,13 @@ void main() {
       lessThanOrEqualTo(2),
       reason: 'she crossed the shared edge $crossings times in twenty seconds',
     );
+    expect(
+      (dog.position - _layout.toPixel(dog.cell)).distance,
+      lessThan(_layout.size * 0.1),
+      reason:
+          'she stopped while still straddling the shared edge, which makes '
+          'the open tile ahead look ignored',
+    );
   });
 
   test('progressive zigzag with regrowth', () {

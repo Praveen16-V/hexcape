@@ -302,6 +302,19 @@ class Palette {
     CampaignBand.endless => bandEndless,
   };
 
+  /// The shadowed face of a tile, given its lit top.
+  ///
+  /// One definition, because the campaign map and the board have to agree about
+  /// it: the map is supposed to look like ground of the same kind the game is
+  /// played on, and two different lerps toward two different darks is exactly
+  /// how that stops being true.
+  static Color sunkFace(Color top) =>
+      Color.lerp(top, backgroundVignette, 0.42)!;
+
+  /// The hole left where a tile has been cleared away. The map reuses it for a
+  /// level already beaten, so progress reads as ground you have carved.
+  static const pit = Color(0xFF070A14);
+
   /// A level the player has not reached yet. Still legible — a map that hides
   /// what is coming gives the player nothing to climb toward.
   static const lockedTile = Color(0xFF1A2136);

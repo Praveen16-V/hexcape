@@ -103,8 +103,10 @@ void main() {
         ..clear(0);
     }
 
-    // Parked on the shared edge, which is where the collision depenetration
-    // leaves her when a cell snaps shut against her.
+    // Parked on the shared edge, which is where collision depenetration can
+    // leave her for a frame when a cell snaps shut against her. Steering is
+    // allowed to finish entering either open tile; both outcomes still have
+    // to start the boxed-in grace period rather than wait for hunger.
     final dog = Dog(
       position: (_layout.toPixel(here) + _layout.toPixel(beside)) / 2,
       cell: here,
@@ -135,9 +137,9 @@ void main() {
     }
 
     expect(
-      dog.occupiedCells(_layout),
-      hasLength(2),
-      reason: 'the test is only meaningful while she is holding both cells',
+      (dog.position - _layout.toPixel(dog.cell)).distance,
+      lessThan(_layout.size * 0.1),
+      reason: 'she stayed wedged across the shared edge instead of settling',
     );
     expect(
       dog.enclosedFor,

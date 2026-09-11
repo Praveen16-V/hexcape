@@ -6,63 +6,38 @@ import '../game/difficulty.dart';
 import '../game/entitlements.dart';
 import '../game/haptics.dart';
 import '../game/level_rules.dart';
+import '../game/pets.dart';
 import '../game/progress.dart';
-import '../hex/hex_coord.dart';
-import '../hex/hex_layout.dart';
+import '../l10n/strings.dart';
 import '../theme/palette.dart';
+import 'campaign/chapter_header.dart';
+import 'campaign/map_geometry.dart';
+import 'campaign/map_layout.dart';
+import 'campaign/map_painter.dart';
+import 'home_dog.dart';
 
-/// Where each level sits on the map.
-///
-/// The campaign is a *place*, not a list. The levels are hexes on a hex board,
-/// laid out as a trail that doubles back on itself, so the map is made of the
-/// same material as the game — which is the whole point of it being diegetic
-/// rather than a scrolling menu of buttons.
-///
-/// The trail runs left to right, then right to left on the next row. A snake
-/// rather than a meander: a wandering path looks prettier in a mock-up and is
-/// worse to use, because a player looking for level 43 has to search for it
-/// instead of counting rows.
-class MapLayout {
-  const MapLayout._();
-
-  /// Levels per row. Five is what fits a portrait phone at a size where the
-  /// number, the stars and the lock are all still readable.
-  static const perRow = 5;
-
-  static int get rows => (Campaign.length / perRow).ceil();
-
-  /// Total tiles, campaign plus the single endless gateway at the end.
-  static int get tiles => Campaign.length + 1;
-
-  static HexCoord coordFor(int level) {
-    final index = level - 1;
-    final row = index ~/ perRow;
-    final within = index % perRow;
-    // Odd rows run backwards, so the trail never jumps across the board.
-    final column = row.isEven ? within : perRow - 1 - within;
-    // Odd-r offset to axial, which keeps the rows visually rectangular
-    // instead of shearing off to one side as the board grows.
-    return HexCoord(column - ((row - (row & 1)) ~/ 2), row);
-  }
-
-  /// The level under a point, or null if the tap missed every tile.
-  static int? levelAt(Offset point, HexLayout layout) {
-    final coord = layout.toHex(point);
-    for (var level = 1; level <= tiles; level++) {
-      if (coordFor(level) == coord) {
-        return level;
-      }
-    }
-    return null;
-  }
-}
+export 'campaign/map_layout.dart' show MapLayout;
 
 /// The campaign map (§12.1).
 ///
-/// Reached from the home screen rather than being the app's front door itself
-/// — a hundred levels to choose from is a chooser, not a title screen. Play,
-/// the daily board and the unlock offer all live there now; this screen is
-/// only for picking a level.
+/// A hundred levels as one continuous trail carved through a hex field, in
+/// chapters. The page it replaces drew them as a hundred and one identical
+/// **circles** on a five-per-row snake, which made level 12 and level 47 the
+/// same picture with a different number on it, and which showed progress as
+/// three grey dots under three millimetres across.
+///
+/// Three ideas carry the redesign:
+///
+/// * **The map is made of the board.** A level you have beaten is an open pit,
+///   a level ahead of you is solid rock in its chapter's colour, and a level
+///   behind the paywall is riveted. The player learned that vocabulary in the
+///   first three levels; the map had been ignoring it.
+/// * **Every level looks like itself.** Each tile carries the silhouette its
+///   board is actually cut to, so the map has a bone in it, and a key, and a
+///   fish — see [SilhouetteGlyphs].
+/// * **Chapters, not a scroll.** Six bands with real headings and a rail to
+///   jump between them, instead of one twenty-one-row grid with a tint change
+///   in the middle of it.
 class LevelMap extends StatefulWidget {
   const LevelMap({
     required this.progress,
@@ -73,194 +48,615 @@ class LevelMap extends StatefulWidget {
   });
 
   final Progress progress;
-
-  /// A tile was chosen. Locked levels are passed through too — the sheet is
-  /// where a locked level explains itself, and silence taught nobody anything.
-  final void Function(int level) onSelect;
-
-  /// Returns to the home screen.
+  final ValueChanged<int> onSelect;
   final VoidCallback onBack;
 
-  /// Bumped by the parent every time this screen is navigated to. The map
-  /// stays mounted for the app's life (§ below), so without this a scroll
-  /// position set on first launch would never move again — clearing a run and
-  /// coming back here would leave the view wherever it happened to be, not on
-  /// the new frontier.
+  /// Bumped by the shell every time the map is opened, which is the cue to
+  /// bring the frontier back into view.
   final int showToken;
 
   @override
   State<LevelMap> createState() => _LevelMapState();
 }
 
-class _LevelMapState extends State<LevelMap>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1800),
-  )..repeat();
+class _LevelMapState extends State<LevelMap> {
+  ScrollController? _scroll;
+  int _scrolledToken = -1;
+  double _builtWidth = 0;
+  double _builtScale = 0;
+  MapGeometry? _geometry;
 
-  final ScrollController _scroll = ScrollController();
-
-  /// The [LevelMap.showToken] this screen last centred its scroll for. Distinct
-  /// from the token's own initial value so the very first build still scrolls.
-  int? _scrolledToken;
+  /// The chapter currently under the eye, which is not the same question as
+  /// which chapter holds the frontier. Held as a notifier so that scrolling
+  /// rebuilds the rail and nothing else.
+  final ValueNotifier<CampaignBand> _visible = ValueNotifier(
+    CampaignBand.tutorial,
+  );
 
   @override
   void dispose() {
-    _pulse.dispose();
-    _scroll.dispose();
+    _scroll?.dispose();
+    _visible.dispose();
     super.dispose();
+  }
+
+  void _trackVisibleBand() {
+    final controller = _scroll;
+    final geometry = _geometry;
+    if (controller == null || geometry == null || !controller.hasClients) {
+      return;
+    }
+    // A chapter counts as the one you are reading once its header has passed
+    // the top of the viewport, which is where its tiles begin.
+    final offset = controller.offset + geometry.headerExtent;
+    var found = CampaignBand.values.first;
+    for (final band in CampaignBand.values) {
+      if (geometry.offsetOf(Campaign.firstOf(band)) <= offset) {
+        found = band;
+      }
+    }
+    _visible.value = found;
+  }
+
+  int get _frontier => math.min(widget.progress.unlocked, MapLayout.tiles);
+
+  /// Creates the controller already pointing at the frontier.
+  ///
+  /// Deliberately an `initialScrollOffset` rather than a jump afterwards: the
+  /// page this replaced painted the top of the map on its first frame and then
+  /// snapped, because the only way it knew where to go was a post-frame
+  /// callback. Here the offset is closed-form, so the first frame is already
+  /// right.
+  ScrollController _controllerFor(MapGeometry geometry, double viewport) {
+    final target = geometry.offsetOf(_frontier) - viewport * 0.42;
+    final max = math.max(0.0, geometry.totalExtent - viewport);
+    return ScrollController(initialScrollOffset: target.clamp(0.0, max));
+  }
+
+  void _revealFrontier(MapGeometry geometry, double viewport) {
+    final controller = _scroll;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    final max = math.max(0.0, geometry.totalExtent - viewport);
+    controller.animateTo(
+      (geometry.offsetOf(_frontier) - viewport * 0.42).clamp(0.0, max),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _jumpToBand(CampaignBand band, MapGeometry geometry, double viewport) {
+    final controller = _scroll;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    final max = math.max(0.0, geometry.totalExtent - viewport);
+    Haptics.selection();
+    controller.animateTo(
+      geometry.offsetOf(Campaign.firstOf(band)).clamp(0.0, max),
+      duration: const Duration(milliseconds: 460),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _select(int level) {
+    Haptics.selection();
+    widget.onSelect(level);
+  }
+
+  int _starsIn(CampaignBand band) {
+    if (band == CampaignBand.endless) {
+      return 0;
+    }
+    final range = MapLayout.levelsOf(band);
+    var total = 0;
+    for (var level = range.first; level <= range.last; level++) {
+      total += widget.progress.recordFor(level).stars;
+    }
+    return total;
+  }
+
+  int _clearedIn(CampaignBand band) {
+    if (band == CampaignBand.endless) {
+      return 0;
+    }
+    final range = MapLayout.levelsOf(band);
+    var total = 0;
+    for (var level = range.first; level <= range.last; level++) {
+      if (widget.progress.recordFor(level).stars > 0) {
+        total++;
+      }
+    }
+    return total;
+  }
+
+  int get _hardClears {
+    var total = 0;
+    for (var level = 1; level <= Campaign.length; level++) {
+      final record = widget.progress.recordFor(level);
+      if (record.stars > 0 && record.difficulty == Difficulty.hard) {
+        total++;
+      }
+    }
+    return total;
+  }
+
+  /// The band holding the one free look, if it is still unspent.
+  CampaignBand? get _trialBand {
+    if (widget.progress.ownsFullGame || widget.progress.trialUsed) {
+      return null;
+    }
+    for (final band in CampaignBand.values) {
+      final range = MapLayout.levelsOf(band);
+      for (var level = range.first; level <= range.last; level++) {
+        final access = Entitlements.accessTo(
+          level,
+          unlocked: widget.progress.unlocked,
+          owned: widget.progress.ownsFullGame,
+          trialUsed: widget.progress.trialUsed,
+          unlockAll: widget.progress.unlockAllLevels,
+        );
+        if (access == LevelAccess.trial) {
+          return band;
+        }
+      }
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final progress = widget.progress;
-    final reducedMotion =
-        progress.reducedMotion || MediaQuery.disableAnimationsOf(context);
-    if (reducedMotion) {
-      _pulse.stop();
-    } else if (!_pulse.isAnimating) {
-      _pulse.repeat();
-    }
-    final frontier = math.min(progress.unlocked, MapLayout.tiles);
+    final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
+    final pet = Pets.byId(
+      widget.progress.pet,
+      stars: widget.progress.totalStars,
+    );
+    final trialBand = _trialBand;
 
     return Scaffold(
       backgroundColor: Palette.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            _CampaignBar(
-              stars: progress.totalStars,
-              maxStars: Campaign.length * 3,
-              frontier: frontier,
-              onBack: widget.onBack,
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // The hex size comes from the width, so the trail always
-                  // spans the screen and the board never needs to scroll
-                  // sideways — a map you can lose sideways is a map you get
-                  // lost on.
-                  const labelGutter = 30.0;
-                  final hex =
-                      (constraints.maxWidth - labelGutter) /
-                      (MapLayout.perRow + 1.2);
-                  final layout = HexLayout(
-                    size: hex / math.sqrt(3),
-                    origin: Offset(labelGutter + hex * 0.85, hex * 0.85),
-                  );
-                  final height =
-                      layout.toPixel(MapLayout.coordFor(MapLayout.tiles)).dy +
-                      hex * 1.6;
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final geometry = MapGeometry.fit(
+              width: constraints.maxWidth,
+              textScale: scale,
+            );
+            _geometry = geometry;
+            // The viewport is what is left once the fixed chrome has taken its
+            // share. Approximated rather than measured because it only ever
+            // feeds a scroll offset, and being a few pixels out there is
+            // invisible.
+            final viewport = math.max(120.0, constraints.maxHeight - 208);
 
-                  _maybeScrollToFrontier(
-                    layout,
-                    frontier,
-                    constraints.maxHeight,
-                  );
+            final changed =
+                _builtWidth != constraints.maxWidth || _builtScale != scale;
+            if (_scroll == null || changed) {
+              // A resize or rotation moves every offset on the page, so the
+              // controller is rebuilt around the new geometry rather than left
+              // pointing at a position that no longer means anything. The old
+              // page never re-centred at all.
+              final previous = _scroll;
+              _scroll = _controllerFor(geometry, viewport)
+                ..addListener(_trackVisibleBand);
+              _builtWidth = constraints.maxWidth;
+              _builtScale = scale;
+              _scrolledToken = widget.showToken;
+              if (previous != null) {
+                previous.removeListener(_trackVisibleBand);
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => previous.dispose(),
+                );
+              }
+              _visible.value = Campaign.bandOf(_frontier);
+            } else if (_scrolledToken != widget.showToken) {
+              _scrolledToken = widget.showToken;
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _revealFrontier(geometry, viewport),
+              );
+            }
 
-                  return SingleChildScrollView(
-                    controller: _scroll,
-                    child: SizedBox(
-                      height: height,
-                      width: constraints.maxWidth,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: (details) {
-                          final level = MapLayout.levelAt(
-                            details.localPosition,
-                            layout,
-                          );
-                          if (level != null) {
-                            Haptics.selection();
-                            widget.onSelect(level);
-                          }
-                        },
-                        child: AnimatedBuilder(
-                          animation: _pulse,
-                          builder: (context, _) => CustomPaint(
-                            painter: _MapPainter(
-                              layout: layout,
-                              progress: progress,
-                              frontier: frontier,
-                              phase: reducedMotion ? 0.5 : _pulse.value,
-                              owned: progress.ownsFullGame,
-                              trialUsed: progress.trialUsed,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
-              child: Semantics(
-                button: true,
-                label: frontier > Campaign.length
-                    ? 'Continue to Endless'
-                    : 'Continue level $frontier',
-                child: Material(
-                  color: Palette.backgroundVignette,
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    onTap: () => widget.onSelect(frontier),
-                    borderRadius: BorderRadius.circular(18),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 11,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.pets_rounded,
-                            size: 18,
-                            color: Palette.forBand(Campaign.bandOf(frontier)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  frontier > Campaign.length
-                                      ? 'ENDLESS TRAIL'
-                                      : 'CONTINUE · LEVEL $frontier',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                                Text(
-                                  Campaign.identityFor(frontier).title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: Colors.white70,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
+            return Column(
+              children: [
+                _CampaignBar(
+                  progress: widget.progress,
+                  frontier: _frontier,
+                  hardClears: _hardClears,
+                  onBack: widget.onBack,
+                ),
+                ValueListenableBuilder<CampaignBand>(
+                  valueListenable: _visible,
+                  builder: (context, current, _) => _BandRail(
+                    current: current,
+                    starsIn: _starsIn,
+                    onTap: (band) => _jumpToBand(band, geometry, viewport),
                   ),
                 ),
+                Expanded(
+                  child: CustomScrollView(
+                    controller: _scroll,
+                    slivers: [
+                      for (final band in CampaignBand.values) ...[
+                        // Deliberately not pinned. Seven pinned headers stack:
+                        // by the time you are in Mastery, four of them are
+                        // parked at the top eating three hundred pixels of a
+                        // phone screen, and the map is a letterbox. The band
+                        // rail above carries "which chapter am I in" instead,
+                        // and it tracks the scroll rather than the frontier.
+                        SliverPersistentHeader(
+                          delegate: ChapterHeader(
+                            band: band,
+                            extent: geometry.headerExtent,
+                            stars: _starsIn(band),
+                            maxStars: band == CampaignBand.endless
+                                ? 0
+                                : (MapLayout.levelsOf(band).last -
+                                          MapLayout.levelsOf(band).first +
+                                          1) *
+                                      3,
+                            cleared: _clearedIn(band),
+                            levels: MapLayout.levelsOf(band),
+                            showTrial: trialBand == band,
+                            onTrial: () {
+                              final range = MapLayout.levelsOf(band);
+                              _select(range.first);
+                            },
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: _Chapter(
+                            band: band,
+                            geometry: geometry,
+                            progress: widget.progress,
+                            frontier: _frontier,
+                            labelScale: clampLabelScale(scale),
+                            pet: pet,
+                            onSelect: _select,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _ContinueBar(
+                  frontier: _frontier,
+                  onTap: () => _select(_frontier),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// One chapter's canvas, plus the dog when this is the chapter she is standing
+/// in.
+///
+/// A sliver each rather than one canvas for the whole campaign, which is what
+/// makes viewport culling structural: a chapter outside the cache extent is
+/// never painted, and the worst case on screen is about forty tiles instead of
+/// a hundred and one.
+class _Chapter extends StatelessWidget {
+  const _Chapter({
+    required this.band,
+    required this.geometry,
+    required this.progress,
+    required this.frontier,
+    required this.labelScale,
+    required this.pet,
+    required this.onSelect,
+  });
+
+  final CampaignBand band;
+  final MapGeometry geometry;
+  final Progress progress;
+  final int frontier;
+  final double labelScale;
+  final Pet pet;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = geometry.layoutFor(band);
+    final model = ChapterModel.of(band, progress, frontier: frontier);
+    final holdsDog = Campaign.bandOf(frontier) == band;
+    final base = Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
+
+    return SizedBox(
+      height: geometry.extentOf(band),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTapUp: (details) {
+                  final level = MapLayout.levelAt(
+                    details.localPosition,
+                    layout,
+                  );
+                  // A tap within half a hex of a seam can name a level from the
+                  // chapter next door; that chapter's own canvas owns it.
+                  if (level != null && Campaign.bandOf(level) == band) {
+                    onSelect(level);
+                  }
+                },
+                child: CustomPaint(
+                  painter: ChapterPainter(
+                    model: model,
+                    layout: layout,
+                    labelStyle: base,
+                    labelScale: labelScale,
+                    onSelect: onSelect,
+                    showGlyphs: geometry.hex >= 26,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+          if (holdsDog)
+            _FrontierDog(
+              centre: layout.toPixel(MapLayout.coordFor(frontier)),
+              hex: geometry.hex,
+              pet: pet,
+              reducedMotion: progress.reducedMotion,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where you are, drawn as who you are.
+///
+/// A widget over the canvas rather than a figure inside it, and that is a
+/// performance decision as much as a visual one: it leaves the chapter canvas
+/// with nothing to animate, so it repaints when progress changes and not
+/// otherwise. The page this replaced ran an 1800 ms controller over the whole
+/// board forever to pulse one blurred halo, laying out every level number again
+/// on every frame of it.
+class _FrontierDog extends StatelessWidget {
+  const _FrontierDog({
+    required this.centre,
+    required this.hex,
+    required this.pet,
+    required this.reducedMotion,
+  });
+
+  final Offset centre;
+  final double hex;
+  final Pet pet;
+  final bool reducedMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = hex * 1.5;
+    return Positioned(
+      left: centre.dx - size / 2,
+      // Her feet land a little above the tile's middle, so she stands on the
+      // face of it rather than straddling its lower edge.
+      top: centre.dy - size * 0.74,
+      width: size,
+      height: size,
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: HomeDog(pet: pet, size: size, reducedMotion: reducedMotion),
+        ),
+      ),
+    );
+  }
+}
+
+/// The rail that makes a hundred levels navigable.
+///
+/// The page this replaced had no way to move about it at all: finding level
+/// three from level ninety was a thumb and a long scroll.
+class _BandRail extends StatelessWidget {
+  const _BandRail({
+    required this.current,
+    required this.starsIn,
+    required this.onTap,
+  });
+
+  final CampaignBand current;
+  final int Function(CampaignBand) starsIn;
+  final ValueChanged<CampaignBand> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          for (final band in CampaignBand.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _BandChip(
+                band: band,
+                selected: band == current,
+                stars: starsIn(band),
+                onTap: () => onTap(band),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BandChip extends StatelessWidget {
+  const _BandChip({
+    required this.band,
+    required this.selected,
+    required this.stars,
+    required this.onTap,
+  });
+
+  final CampaignBand band;
+  final bool selected;
+  final int stars;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = Palette.forBand(band);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Jump to ${band.label}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: colour.withValues(alpha: selected ? 0.22 : 0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: colour.withValues(alpha: selected ? 0.9 : 0.28),
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Text(
+            band.label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colour,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CampaignBar extends StatelessWidget {
+  const _CampaignBar({
+    required this.progress,
+    required this.frontier,
+    required this.hardClears,
+    required this.onBack,
+  });
+
+  final Progress progress;
+  final int frontier;
+  final int hardClears;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 6, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back, size: 21),
+                color: Palette.hudText,
+                tooltip: 'Home',
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Text(
+                  Strings.campaignTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          // Three labelled facts instead of one bar that plotted how far you had
+          // walked beside a number counting how well you had walked it.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Wrap(
+              spacing: 14,
+              runSpacing: 4,
+              children: [
+                _Stat(
+                  label: Strings.campaignCleared,
+                  value: '${progress.completedLevels}/${Campaign.length}',
+                  colour: Palette.hudText,
+                ),
+                _Stat(
+                  label: Strings.campaignMastered,
+                  value: '${progress.masteredLevels}',
+                  colour: Palette.bandVigil,
+                ),
+                _Stat(
+                  label: Strings.campaignStars,
+                  value: '${progress.totalStars}/${Campaign.length * 3}',
+                  colour: Palette.goalGlow,
+                ),
+                if (hardClears > 0)
+                  _Stat(
+                    label: Strings.campaignHard,
+                    value: '$hardClears',
+                    colour: Palette.dogBody,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, required this.colour});
+
+  final String label;
+  final String value;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$label $value',
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: Palette.hudDim,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              value,
+              style: TextStyle(
+                color: colour,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -268,486 +664,75 @@ class _LevelMapState extends State<LevelMap>
       ),
     );
   }
-
-  /// Opens on where the player actually is, not at level one, and re-centres
-  /// every time [LevelMap.showToken] changes — this screen stays mounted for
-  /// the app's life, so without that it would only ever do this once.
-  ///
-  /// Someone forty levels in should not have to scroll past forty tiles they
-  /// have already finished to reach the one they were about to play.
-  void _maybeScrollToFrontier(
-    HexLayout layout,
-    int frontier,
-    double viewportHeight,
-  ) {
-    if (_scrolledToken == widget.showToken) {
-      return;
-    }
-    _scrolledToken = widget.showToken;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) {
-        return;
-      }
-      final y = layout.toPixel(MapLayout.coordFor(frontier)).dy;
-      _scroll.jumpTo(
-        (y - viewportHeight / 2).clamp(0.0, _scroll.position.maxScrollExtent),
-      );
-    });
-  }
 }
 
-class _MapPainter extends CustomPainter {
-  _MapPainter({
-    required this.layout,
-    required this.progress,
-    required this.frontier,
-    required this.phase,
-    required this.owned,
-    required this.trialUsed,
-  });
+class _ContinueBar extends StatelessWidget {
+  const _ContinueBar({required this.frontier, required this.onTap});
 
-  final HexLayout layout;
-  final Progress progress;
   final int frontier;
-  final double phase;
-
-  /// Passed in rather than read off [progress] so [shouldRepaint] can see it
-  /// change — buying the game has to repaint forty tiles.
-  final bool owned;
-
-  /// Passed in for the same reason as [owned]: spending the trial changes how
-  /// one tile draws, and [shouldRepaint] cannot see it on [progress].
-  final bool trialUsed;
-
-  final Paint _fill = Paint()..style = PaintingStyle.fill;
-  final Paint _stroke = Paint()..style = PaintingStyle.stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    _paintRegionGround(canvas, size);
-    _paintTrail(canvas);
-    for (var level = 1; level <= MapLayout.tiles; level++) {
-      _paintTile(canvas, level);
-    }
-    _paintBandLabels(canvas);
-  }
-
-  void _paintRegionGround(Canvas canvas, Size size) {
-    for (var i = 0; i < CampaignBand.values.length; i++) {
-      final band = CampaignBand.values[i];
-      final first = Campaign.firstOf(band);
-      if (first > MapLayout.tiles) break;
-      final next = i + 1 < CampaignBand.values.length
-          ? Campaign.firstOf(CampaignBand.values[i + 1])
-          : MapLayout.tiles + 1;
-      final last = math.min(next - 1, MapLayout.tiles);
-      final top = layout.toPixel(MapLayout.coordFor(first)).dy - layout.size;
-      final bottom = layout.toPixel(MapLayout.coordFor(last)).dy + layout.size;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(10, top, size.width - 10, bottom),
-        const Radius.circular(28),
-      );
-      _fill.color = Palette.forBand(band).withValues(alpha: 0.055);
-      canvas.drawRRect(rect, _fill);
-      _stroke
-        ..color = Palette.forBand(band).withValues(alpha: 0.13)
-        ..strokeWidth = 1;
-      canvas.drawRRect(rect, _stroke);
-    }
-  }
-
-  /// Names the six bands along the trail's left margin, so the climb ahead
-  /// reads as stretches with characters of their own rather than one column
-  /// of identical grey padlocks. Endless is left unlabelled here — its single
-  /// tile already carries its own glyph.
-  void _paintBandLabels(Canvas canvas) {
-    const bands = CampaignBand.values;
-    for (var i = 0; i < bands.length - 1; i++) {
-      final band = bands[i];
-      final first = Campaign.firstOf(band);
-      if (first > MapLayout.tiles) {
-        break;
-      }
-      final yStart = layout.toPixel(MapLayout.coordFor(first)).dy;
-      _paintRegionLabel(
-        canvas,
-        band.label.toUpperCase(),
-        yStart - layout.size * 0.72,
-        Palette.forBand(band),
-      );
-    }
-  }
-
-  void _paintRegionLabel(Canvas canvas, String text, double y, Color colour) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: colour.withValues(alpha: 0.90),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 2,
-          fontFamily: 'Roboto',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final x = math.max(14.0, (layout.origin.dx - painter.width) / 2);
-    painter.paint(canvas, Offset(x, y - painter.height / 2));
-  }
-
-  /// The line joining one level to the next. Drawn under the tiles, so it
-  /// reads as ground they sit on rather than wire between them.
-  void _paintTrail(Canvas canvas) {
-    final path = Path();
-    var previous = layout.toPixel(MapLayout.coordFor(1));
-    path.moveTo(previous.dx, previous.dy);
-    for (var level = 2; level <= MapLayout.tiles; level++) {
-      final centre = layout.toPixel(MapLayout.coordFor(level));
-      final midY = (previous.dy + centre.dy) / 2;
-      path.cubicTo(previous.dx, midY, centre.dx, midY, centre.dx, centre.dy);
-      previous = centre;
-    }
-    _stroke
-      ..color = Palette.lockedEdge
-      ..strokeWidth = layout.size * 0.30
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(path, _stroke);
-
-    // The stretch already walked, lit in its own band colours.
-    for (var level = 2; level <= math.min(frontier, MapLayout.tiles); level++) {
-      final a = layout.toPixel(MapLayout.coordFor(level - 1));
-      final b = layout.toPixel(MapLayout.coordFor(level));
-      _stroke
-        ..color = Palette.forBand(Campaign.bandOf(level)).withValues(alpha: 0.5)
-        ..strokeWidth = layout.size * 0.30;
-      canvas.drawLine(a, b, _stroke);
-    }
-  }
-
-  void _paintTile(Canvas canvas, int level) {
-    final centre = layout.toPixel(MapLayout.coordFor(level));
-    final access = Entitlements.accessTo(
-      level,
-      unlocked: progress.unlocked,
-      owned: progress.ownsFullGame,
-      trialUsed: progress.trialUsed,
-      unlockAll: progress.unlockAllLevels,
-    );
-    final trial = access == LevelAccess.trial;
-    // A trial tile is drawn as playable, because it is. Drawing a padlock on
-    // the one level we are inviting them into would be the map contradicting
-    // the offer.
-    final unlocked = access == LevelAccess.open || trial;
-    final forSale = access == LevelAccess.needsPurchase;
-    final record = progress.recordFor(level);
-    final isEndless = level > Campaign.length;
-    final campaignPlayed = !isEndless && record.played;
-    final band = Campaign.bandOf(level);
-    final colour = Palette.forBand(band);
-    final isFrontier = level == frontier;
-    final isFinale = !isEndless && level % 10 == 0;
-
-    final nodeRadius = layout.size * (isFinale ? 0.78 : 0.64);
-    final hex = Path()
-      ..addOval(Rect.fromCircle(center: centre, radius: nodeRadius));
-
-    if (isFrontier) {
-      // Where the player is. A slow breath rather than a flash: the map is a
-      // place to sit and choose, not something shouting for a tap.
-      final swell = 0.5 + 0.5 * math.sin(phase * math.pi * 2);
-      _fill
-        ..color = colour.withValues(alpha: 0.16 + 0.12 * swell)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, layout.size * 0.55);
-      canvas.drawCircle(centre, layout.size * (1.15 + 0.12 * swell), _fill);
-      _fill.maskFilter = null;
-    }
-
-    // A tile you have not bought keeps its band colour. The grey plate says
-    // "not yet"; this has to say "more", and a padlock over forty levels of
-    // game reads as a wall rather than an offer.
-    //
-    // A tile you simply haven't reached yet gets the same grey plate, but
-    // tinted with a whisper of its own band's colour rather than flat locked
-    // grey — the unclimbed trail should hint at the character ahead, not read
-    // as one undifferentiated wall.
-    _fill.color = unlocked
-        ? colour.withValues(alpha: campaignPlayed ? 0.24 : 0.13)
-        : forSale
-        ? colour.withValues(alpha: 0.07)
-        : Color.lerp(Palette.lockedTile, colour, 0.14)!;
-    canvas.drawPath(hex, _fill);
-
-    _stroke
-      ..color = unlocked
-          ? colour.withValues(alpha: isFrontier ? 0.95 : 0.6)
-          : forSale
-          ? colour.withValues(alpha: 0.34)
-          : Color.lerp(Palette.lockedEdge, colour, 0.20)!
-      ..strokeWidth = isFrontier
-          ? 3.0
-          : isFinale
-          ? 2.4
-          : 1.5
-      ..strokeCap = StrokeCap.butt
-      ..strokeJoin = StrokeJoin.miter;
-    canvas.drawPath(hex, _stroke);
-
-    if (!unlocked) {
-      _paintLabel(
-        canvas,
-        centre.translate(0, -layout.size * 0.24),
-        isEndless ? '∞' : '$level',
-        colour: Palette.hudText,
-        size: layout.size * 0.48,
-        weight: FontWeight.w600,
-      );
-      _paintLock(
-        canvas,
-        centre.translate(0, layout.size * 0.38),
-        Color.lerp(colour, Palette.hudText, 0.55)!,
-        scale: 0.65,
-      );
-      return;
-    }
-    if (isFrontier) {
-      _fill.color = Palette.hudText;
-      final tip = centre.translate(0, -layout.size * 0.62);
-      canvas.drawPath(
-        Path()
-          ..moveTo(tip.dx, tip.dy)
-          ..lineTo(tip.dx - layout.size * 0.13, tip.dy - layout.size * 0.17)
-          ..lineTo(tip.dx + layout.size * 0.13, tip.dy - layout.size * 0.17)
-          ..close(),
-        _fill,
-      );
-    }
-
-    if (isFinale) {
-      _paintLabel(
-        canvas,
-        centre.translate(0, -layout.size * 0.9),
-        'FINALE',
-        colour: colour.withValues(alpha: 0.9),
-        size: layout.size * 0.19,
-        weight: FontWeight.w800,
-      );
-    }
-
-    _paintLabel(
-      canvas,
-      centre.translate(0, campaignPlayed ? -layout.size * 0.16 : 0),
-      isEndless ? '∞' : '$level',
-      colour: isEndless ? colour : Colors.white.withValues(alpha: 0.92),
-      size: isEndless ? layout.size * 0.85 : layout.size * 0.58,
-      weight: FontWeight.w700,
-    );
-
-    if (campaignPlayed) {
-      _paintStars(canvas, centre, record.stars, colour);
-      // One letter beside the stars where they were not earned on Normal. The
-      // detail sheet is where it says the word; here there is room for a mark
-      // and nothing more, and a tile that stayed silent about it would make the
-      // star row quietly mean two different things.
-      if (record.difficulty != Difficulty.normal) {
-        _paintLabel(
-          canvas,
-          // Clear of the third star: the row ends at 0.26 plus its own radius,
-          // and a letter touching the last ring reads as part of it. With two
-          // modes the mark is univocal: absence means Normal, ‘H’ means Hard.
-          Offset(centre.dx + layout.size * 0.5, centre.dy + layout.size * 0.44),
-          'H',
-          colour: colour.withValues(alpha: 0.75),
-          size: layout.size * 0.24,
-          weight: FontWeight.w800,
-        );
-      }
-    }
-  }
-
-  void _paintLock(
-    Canvas canvas,
-    Offset centre,
-    Color colour, {
-    double scale = 1,
-  }) {
-    final s = layout.size * 0.22 * scale;
-    _stroke
-      ..color = colour
-      ..strokeWidth = 2;
-    // A shackle over a body: small, and deliberately unemphatic.
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: centre.translate(0, -s * 0.75),
-        width: s * 1.1,
-        height: s * 1.1,
-      ),
-      math.pi,
-      math.pi,
-      false,
-      _stroke,
-    );
-    _fill.color = colour;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: centre.translate(0, s * 0.25),
-          width: s * 1.6,
-          height: s * 1.2,
-        ),
-        Radius.circular(s * 0.25),
-      ),
-      _fill,
-    );
-  }
-
-  void _paintStars(Canvas canvas, Offset centre, int stars, Color colour) {
-    final r = layout.size * 0.10;
-    final gap = r * 2.6;
-    final y = centre.dy + layout.size * 0.44;
-    for (var i = 0; i < 3; i++) {
-      final x = centre.dx + (i - 1) * gap;
-      if (i < stars) {
-        _fill.color = colour;
-        canvas.drawCircle(Offset(x, y), r, _fill);
-      } else {
-        _stroke
-          ..color = colour.withValues(alpha: 0.35)
-          ..strokeWidth = 1.2;
-        canvas.drawCircle(Offset(x, y), r, _stroke);
-      }
-    }
-  }
-
-  void _paintLabel(
-    Canvas canvas,
-    Offset centre,
-    String text, {
-    required Color colour,
-    required double size,
-    FontWeight weight = FontWeight.w600,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: colour,
-          fontSize: size,
-          fontFamily: 'Roboto',
-          fontWeight: weight,
-          height: 1,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    painter.paint(
-      canvas,
-      centre - Offset(painter.width / 2, painter.height / 2),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_MapPainter old) =>
-      old.phase != phase ||
-      old.frontier != frontier ||
-      old.owned != owned ||
-      old.trialUsed != trialUsed ||
-      old.layout.size != layout.size;
-}
-
-/// The slim bar above the trail: a way back to the home screen, and the same
-/// mastery count that used to share space with a wordmark this screen no
-/// longer needs — the home screen carries that now.
-class _CampaignBar extends StatelessWidget {
-  const _CampaignBar({
-    required this.stars,
-    required this.maxStars,
-    required this.frontier,
-    required this.onBack,
-  });
-
-  final int stars;
-  final int maxStars;
-  final int frontier;
-  final VoidCallback onBack;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final band = Campaign.bandOf(frontier);
+    final colour = Palette.forBand(band);
+    final title = frontier > Campaign.length
+        ? 'ENDLESS TRAIL'
+        : Campaign.identityFor(frontier).title;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 8, 16, 10),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, size: 21),
-                color: Colors.white70,
-                tooltip: 'Home',
-                visualDensity: VisualDensity.compact,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'THE LONG TRAIL',
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.8,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Material(
+        color: Palette.plainTop,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: colour, width: 3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.play_arrow_rounded, size: 20, color: colour),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'CONTINUE · LEVEL $frontier',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${band.label} · LEVEL $frontier',
-                      style: TextStyle(
-                        color: Palette.forBand(band),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Palette.hudText.withValues(alpha: 0.8),
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Semantics(
-                label: 'Campaign mastery: $stars of $maxStars stars',
-                child: Row(
-                  children: [
-                    Icon(Icons.circle, size: 9, color: Palette.treat),
-                    const SizedBox(width: 5),
-                    Text(
-                      '$stars/$maxStars',
-                      style: TextStyle(
-                        color: Palette.treat,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 18,
+                  color: Palette.hudDim,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: math.min(frontier, Campaign.length) / Campaign.length,
-              minHeight: 4,
-              backgroundColor: Colors.white10,
-              valueColor: AlwaysStoppedAnimation(Palette.forBand(band)),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

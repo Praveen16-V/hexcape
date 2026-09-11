@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/level_rules.dart';
@@ -89,14 +91,109 @@ void main() {
       }
     });
 
-    test('rows alternate direction', () {
-      // A serpentine, not a carriage return. Every row ending where the next
-      // begins is what keeps the trail continuous.
-      final first = MapLayout.coordFor(1);
-      final endOfRow = MapLayout.coordFor(MapLayout.perRow);
-      final startOfNext = MapLayout.coordFor(MapLayout.perRow + 1);
-      expect(endOfRow.r, first.r);
-      expect(startOfNext.r, first.r + 1);
+    test('the trail only ever goes downhill', () {
+      // Rows never climb back. This is what lets a chapter be a contiguous
+      // block of rows, which is what lets its header sit above its own tiles.
+      for (var level = 2; level <= MapLayout.tiles; level++) {
+        final step = MapLayout.rowOf(level) - MapLayout.rowOf(level - 1);
+        expect(
+          step,
+          anyOf(0, 1),
+          reason: 'level $level jumps ${step > 0 ? 'down' : 'back up'} a row',
+        );
+      }
+    });
+
+    test('a row is walked once, in one direction', () {
+      // The countability the old five-per-row snake was built for, kept. A row
+      // that doubled back would put level 43 behind level 45 and make finding
+      // either of them a search.
+      for (var level = 2; level <= MapLayout.tiles; level++) {
+        final here = MapLayout.coordFor(level);
+        final before = MapLayout.coordFor(level - 1);
+        if (here.r != before.r) {
+          continue;
+        }
+        final direction = here.q - before.q;
+        expect(
+          direction.abs(),
+          1,
+          reason: 'level $level did not step sideways',
+        );
+        // Walk the rest of this row and check it keeps going the same way.
+        for (var next = level + 1; next <= MapLayout.tiles; next++) {
+          final step = MapLayout.coordFor(next);
+          if (step.r != here.r) {
+            break;
+          }
+          expect(
+            (step.q - MapLayout.coordFor(next - 1).q).sign,
+            direction.sign,
+            reason: 'row ${here.r} turns round at level $next',
+          );
+        }
+      }
+    });
+
+    test('every chapter starts on a row of its own', () {
+      // The defect this layout was built to make impossible: Learning and
+      // Foundation both began on row zero, so the map painted both their names
+      // at one identical point and stroked row zero's ground plate twice.
+      final rows = <int, CampaignBand>{};
+      for (final band in CampaignBand.values) {
+        final span = MapLayout.rowsOf(band);
+        for (var row = span.firstRow; row <= span.lastRow; row++) {
+          final other = rows[row];
+          expect(
+            other,
+            isNull,
+            reason: '${band.label} shares row $row with ${other?.label}',
+          );
+          rows[row] = band;
+        }
+      }
+    });
+
+    test('the trail meanders rather than ruling lines', () {
+      // What makes six chapters look like six places. Without this the layout
+      // could quietly regress to a fixed-width grid and nothing would notice.
+      final lengths = <int, int>{};
+      for (var level = 1; level <= MapLayout.tiles; level++) {
+        lengths.update(MapLayout.rowOf(level), (n) => n + 1, ifAbsent: () => 1);
+      }
+      expect(
+        lengths.values.toSet().length,
+        greaterThanOrEqualTo(3),
+        reason: 'every row the same length is a spreadsheet, not a trail',
+      );
+      final leftEdges = <CampaignBand, int>{};
+      for (final band in CampaignBand.values) {
+        final levels = MapLayout.levelsOf(band);
+        var least = 1 << 30;
+        for (var level = levels.first; level <= levels.last; level++) {
+          final c = MapLayout.coordFor(level);
+          least = math.min(least, 2 * c.q + c.r);
+        }
+        leftEdges[band] = least;
+      }
+      expect(
+        leftEdges.values.toSet().length,
+        greaterThanOrEqualTo(2),
+        reason: 'chapters that all start at the same column read as one block',
+      );
+    });
+
+    test('the map never grows wider than a small phone', () {
+      // The hex size is derived from this, so a walk that wandered wider would
+      // silently shrink every tile on a 320px screen rather than failing here.
+      expect(MapLayout.columnSpan, lessThanOrEqualTo(5));
+    });
+
+    test('the row count is the row count', () {
+      // The constant this replaced was `length / perRow`, which was one short
+      // of the rows actually drawn — and nothing noticed, because nothing read
+      // it.
+      expect(MapLayout.rowCount, MapLayout.rowOf(MapLayout.tiles) + 1);
     });
 
     test('a tap finds the level under it', () {
@@ -193,21 +290,21 @@ void main() {
       expect(Pets.all.map((p) => p.id).toSet().length, Pets.all.length);
     });
 
-    test('a saved pet that no longer exists falls back rather than vanishing', () {
-      // A build that renames or drops a pet would otherwise leave a player
-      // with an invisible dog and no way to fix it from inside the game.
-      expect(Pets.byId('a-pet-from-an-older-build').id, Pets.scout.id);
-      expect(Pets.byId(null).id, Pets.scout.id);
-    });
+    test(
+      'a saved pet that no longer exists falls back rather than vanishing',
+      () {
+        // A build that renames or drops a pet would otherwise leave a player
+        // with an invisible dog and no way to fix it from inside the game.
+        expect(Pets.byId('a-pet-from-an-older-build').id, Pets.scout.id);
+        expect(Pets.byId(null).id, Pets.scout.id);
+      },
+    );
 
     test('a saved pet the player has not earned is not honoured', () {
       final locked = Pets.all.last;
       expect(locked.starsRequired, greaterThan(0));
       expect(Pets.byId(locked.id, stars: 0).id, Pets.scout.id);
-      expect(
-        Pets.byId(locked.id, stars: locked.starsRequired).id,
-        locked.id,
-      );
+      expect(Pets.byId(locked.id, stars: locked.starsRequired).id, locked.id);
     });
 
     test('unlocking is inclusive of the threshold', () {

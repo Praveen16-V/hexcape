@@ -107,7 +107,8 @@ class _PaywallSheetState extends State<PaywallSheet> {
 
             if (!store.available)
               _Unavailable(
-                message: 'The store is not reachable on this device right now. '
+                message:
+                    'The store is not reachable on this device right now. '
                     'Everything you have already unlocked still works.',
               )
             else if (store.product == null)

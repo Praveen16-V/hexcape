@@ -62,118 +62,120 @@ class _SettingsSheetState extends State<SettingsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Palette.lockedEdge,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'SETTINGS',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2.4,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Difficulty',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            DifficultyPicker(
-              value: _p.difficulty,
-              onChanged: (d) => _apply(() => _p.setDifficulty(d)),
-            ),
-            const SizedBox(height: 16),
-            _Slider(
-              label: 'Volume',
-              value: _p.volume,
-              display: _p.volume <= 0 ? 'Off' : '${(_p.volume * 100).round()}%',
-              onChanged: (v) => _apply(() => _p.setVolume(v)),
-            ),
-            _Toggle(
-              label: 'Regrowth sound',
-              blurb:
-                  'The warning before a tile snaps shut. Off by default — '
-                  'you still feel it.',
-              value: _p.regrowthSound,
-              onChanged: (v) => _apply(() => _p.setRegrowthSound(v)),
-            ),
-            _Toggle(
-              label: 'Vibration',
-              blurb: 'Taps, cracks, warnings and impacts.',
-              value: _p.haptics,
-              onChanged: (v) => _apply(() => _p.setHaptics(v)),
-            ),
-            _Toggle(
-              label: 'Reduced motion',
-              blurb: 'No screen shake, no freeze frames, no fade to grey.',
-              value: _p.reducedMotion,
-              onChanged: (v) => _apply(() => _p.setReducedMotion(v)),
-            ),
-            _Toggle(
-              label: 'Nudges',
-              blurb:
-                  'An arrow points the way when you have been stuck a while.',
-              value: _p.hints,
-              onChanged: (v) => _apply(() => _p.setHints(v)),
-            ),
-            if (widget.onRestore != null) ...[
-              const SizedBox(height: 4),
-              // Someone who reinstalls, or picks up a second device, needs a way
-              // to get back what they paid for that does not involve paying
-              // again. It is required policy on iOS and simply correct here.
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onRestore,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Restore purchase'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Palette.dogBody,
-                    padding: EdgeInsets.zero,
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Palette.lockedEdge,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 10),
-            Divider(color: Palette.lockedEdge, height: 1),
-            const SizedBox(height: 10),
-            _Toggle(
-              label: 'Developer tools',
-              blurb:
-                  'The tuning panel: sliders, a level jump, and a button '
-                  'that erases your progress. Off unless you mean it.',
-              value: _p.developerTools,
-              onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
-            ),
-            // Nested inside the developer switch rather than sitting beside it.
-            // This one opens the paid campaign, so it must not be a thing a
-            // player can find; behind a toggle they have already had to turn on
-            // deliberately, it grants nothing the level jump in that same panel
-            // does not already give away.
-            if (_p.developerTools)
-              _Toggle(
-                label: 'Unlock all stages',
-                blurb:
-                    'Every level playable, in any order, for testing. Your '
-                    'real progress is untouched and comes back when this '
-                    'goes off.',
-                value: _p.unlockAllLevels,
-                onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
+              const SizedBox(height: 16),
+              const Text(
+                'SETTINGS',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.4,
+                ),
               ),
+              const SizedBox(height: 18),
+              const Text(
+                'Difficulty',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DifficultyPicker(
+                value: _p.difficulty,
+                onChanged: (d) => _apply(() => _p.setDifficulty(d)),
+              ),
+              const SizedBox(height: 16),
+              _Slider(
+                label: 'Volume',
+                value: _p.volume,
+                display: _p.volume <= 0
+                    ? 'Off'
+                    : '${(_p.volume * 100).round()}%',
+                onChanged: (v) => _apply(() => _p.setVolume(v)),
+              ),
+              _Toggle(
+                label: 'Regrowth sound',
+                blurb:
+                    'The warning before a tile snaps shut. Off by default — '
+                    'you still feel it.',
+                value: _p.regrowthSound,
+                onChanged: (v) => _apply(() => _p.setRegrowthSound(v)),
+              ),
+              _Toggle(
+                label: 'Vibration',
+                blurb: 'Taps, cracks, warnings and impacts.',
+                value: _p.haptics,
+                onChanged: (v) => _apply(() => _p.setHaptics(v)),
+              ),
+              _Toggle(
+                label: 'Reduced motion',
+                blurb: 'No screen shake, no freeze frames, no fade to grey.',
+                value: _p.reducedMotion,
+                onChanged: (v) => _apply(() => _p.setReducedMotion(v)),
+              ),
+              _Toggle(
+                label: 'Nudges',
+                blurb:
+                    'An arrow points the way when you have been stuck a while.',
+                value: _p.hints,
+                onChanged: (v) => _apply(() => _p.setHints(v)),
+              ),
+              if (widget.onRestore != null) ...[
+                const SizedBox(height: 4),
+                // Someone who reinstalls, or picks up a second device, needs a way
+                // to get back what they paid for that does not involve paying
+                // again. It is required policy on iOS and simply correct here.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: widget.onRestore,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Restore purchase'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Palette.dogBody,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Divider(color: Palette.lockedEdge, height: 1),
+              const SizedBox(height: 10),
+              _Toggle(
+                label: 'Developer tools',
+                blurb:
+                    'The tuning panel: sliders, a level jump, and a button '
+                    'that erases your progress. Off unless you mean it.',
+                value: _p.developerTools,
+                onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
+              ),
+              // Nested inside the developer switch rather than sitting beside it.
+              // This one opens the paid campaign, so it must not be a thing a
+              // player can find; behind a toggle they have already had to turn on
+              // deliberately, it grants nothing the level jump in that same panel
+              // does not already give away.
+              if (_p.developerTools)
+                _Toggle(
+                  label: 'Unlock all stages',
+                  blurb:
+                      'Every level playable, in any order, for testing. Your '
+                      'real progress is untouched and comes back when this '
+                      'goes off.',
+                  value: _p.unlockAllLevels,
+                  onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
+                ),
             ],
           ),
         ),

@@ -673,6 +673,16 @@ class Campaign {
     81, 82, 85, 88, 91, 94, 97,
   };
 
+  /// Hand-selected replacements for generated boards that failed their level's
+  /// authored promise in live play.
+  ///
+  /// Level 11 used to produce a sprawling oval with a narrow throat. The dog
+  /// could reach a shared edge there and appear to ignore an open tile. Its
+  /// replacement is a compact diamond with a shorter protected route and room
+  /// beside every route cell on both Normal and Hard, while retaining the
+  /// heavy-ground identity promised by “Hard Shell”.
+  static const _authoredSeedOverrides = {11: 11441};
+
   /// The seed for a level, from its number, by an explicit mixer.
   ///
   /// Deliberately **not** `hashCode`, which Dart does not guarantee to be stable
@@ -684,6 +694,8 @@ class Campaign {
   /// The murmur3 finaliser, masked to 32 bits at every step so the arithmetic
   /// cannot differ between platforms.
   static int seedFor(int level) {
+    final authored = _authoredSeedOverrides[level];
+    if (authored != null) return authored;
     var x = (level * 0x9E3779B1) & 0xFFFFFFFF;
     x ^= x >> 16;
     x = (x * 0x85EBCA6B) & 0xFFFFFFFF;
@@ -1160,6 +1172,14 @@ class Campaign {
     /// the authored bands changes. Multiplied at the *end* of every obstacle
     /// density expression so the seeded draws' order is untouched by it.
     final os = difficulty.obstacleDensityScale;
+    // Heavy Ground normally trades some rivets for more two-hit tiles so its
+    // subject stays readable. Level 11 is also a full challenge peak, though,
+    // and applying that relief made it easier than level 8 while still leaving
+    // its old route cramped. Its redesigned seed has room for the full anchor
+    // curve, so both modes keep challenge pressure without creating a pinch.
+    final anchorSignatureDelta = level == 11
+        ? 0.0
+        : pace.allow(signature.anchorDelta);
     return LevelRules(
       level: level,
       seed: seed ?? seedFor(level),
@@ -1173,7 +1193,7 @@ class Campaign {
       // than the level before is the opposite of an introduction.
       anchorDensity: math.max(
         0,
-        (baseAnchor - pace.anchorRelief + pace.allow(signature.anchorDelta)) * os,
+        (baseAnchor - pace.anchorRelief + anchorSignatureDelta) * os,
       ),
       heavyDensity: math.max(
         0,

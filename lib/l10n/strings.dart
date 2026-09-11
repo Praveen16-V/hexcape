@@ -1,3 +1,5 @@
+import '../game/level_rules.dart';
+
 /// Every user-facing string in one place (§13.6). Keeping this separate from
 /// day one is trivial now and painful to retrofit later.
 class Strings {
@@ -93,6 +95,74 @@ class Strings {
   /// nothing left to walk to. Naming it is the whole point — without a line
   /// here a correct stop is indistinguishable from a hung game.
   static const hintNowhereToGo = 'She is waiting — open a way beside her';
+
+  // The campaign map (§12.1).
+  static const campaignTitle = 'THE LONG TRAIL';
+  static const campaignChapters = 'CHAPTERS';
+  static const campaignCleared = 'CLEARED';
+  static const campaignMastered = 'MASTERED';
+  static const campaignStars = 'STARS';
+  static const campaignHard = 'ON HARD';
+  static const campaignFreeLook = 'ONE FREE LOOK';
+
+  /// What a chapter is *about*, in one line.
+  ///
+  /// Lives here rather than on [CampaignBand] because the band enum is campaign
+  /// rules and this is copy — and because the rules file is the one place in
+  /// the game where an edit can silently change what every level is.
+  static String bandBlurb(CampaignBand band) => switch (band) {
+    CampaignBand.tutorial =>
+      'Three guided boards. Tap, drift, and learn what the ground does.',
+    CampaignBand.foundation =>
+      'The whole game at its own pace — springs, fog, and a tap budget.',
+    CampaignBand.pressure =>
+      'Patrol light arrives. Timing starts to matter as much as route.',
+    CampaignBand.mastery =>
+      'Everything taught so far, at full strength, with nothing wasted.',
+    CampaignBand.collapse => 'Ground that will not stay where you put it.',
+    CampaignBand.vigil => 'Sentries refuse your taps. Wait for the window.',
+    CampaignBand.endless =>
+      'No last level. The pressure climbs until you stop.',
+  };
+
+  /// What a screen reader says for one tile on the map.
+  ///
+  /// The hundred levels were bare pixels before this: a player using TalkBack
+  /// or VoiceOver could reach the continue button and nothing else on the page.
+  static String mapTile({
+    required int level,
+    required String title,
+    required String band,
+    required int stars,
+    required bool played,
+    required bool hard,
+    required bool frontier,
+    required bool lockedByProgress,
+    required bool lockedByPurchase,
+    required bool trial,
+  }) {
+    if (level > 100) {
+      return 'Endless trail. No last level.';
+    }
+    final name = 'Level $level, $title. $band.';
+    if (lockedByPurchase) {
+      return '$name Locked — part of the full game.';
+    }
+    if (lockedByProgress) {
+      return '$name Locked — clear level ${level - 1} first.';
+    }
+    if (trial) {
+      return '$name One free look, not yet taken.';
+    }
+    if (frontier) {
+      return '$name Where you are now.';
+    }
+    if (!played) {
+      return '$name Not played yet.';
+    }
+    final score = '$stars of 3 stars';
+    return hard ? '$name $score, cleared on Hard.' : '$name $score.';
+  }
 
   // Debug panel.
   static const debug = 'DEBUG';

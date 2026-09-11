@@ -559,6 +559,18 @@ class Dog {
   /// the dog zig-zag down straight corridors.
   Offset? _aimPoint(HexGrid grid, HexLayout layout) {
     if (_route.length < 2) {
+      // Crossing a shared edge changes [cell] before her body has finished
+      // entering the new hex. Route selection can quite correctly decide that
+      // this is the end of the useful pocket, but braking at that instant
+      // leaves her visibly wedged between two open tiles. Finish the crossing
+      // before settling so an open tile never looks as though she refused to
+      // enter it. This cannot create route progress or bypass a wall: the aim
+      // stays inside the passable logical cell she already occupies.
+      final centre = layout.toPixel(cell);
+      if (grid.isPassable(cell) &&
+          (centre - position).distance > layout.size * 0.05) {
+        return centre;
+      }
       return null;
     }
     final limit = math.min(_route.length - 1, _maxSmoothing);
