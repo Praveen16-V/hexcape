@@ -1098,9 +1098,18 @@ class TutorialCard extends StatelessWidget {
                 )
               else
                 Text(
-                  step.advance == TutorialAdvance.onTap
-                      ? 'Tap the marked tile on the board to continue.'
-                      : 'Open a route so your dog can reach the marked treat.',
+                  switch (step.advance) {
+                    TutorialAdvance.onTap =>
+                      'Tap the marked tile on the board to continue.',
+                    TutorialAdvance.onReach =>
+                      'Open a route so your dog can reach the marked treat.',
+                    // The watching beats are the ones that need the player to
+                    // do nothing at all, which is exactly the instruction a
+                    // player will not follow unless it is given.
+                    TutorialAdvance.onWatch ||
+                    TutorialAdvance.onRegrow => 'Keep an eye on the board.',
+                    TutorialAdvance.onContinue => '',
+                  },
                   style: const TextStyle(color: Palette.hudText, fontSize: 12),
                 ),
             ],

@@ -183,7 +183,8 @@ enum HexType {
   /// Whether a tap could ever clear this, ignoring state and position.
   /// [overgrowth] joins [anchor] out: both yield only to DIG. A closed [gate]
   /// stays in — it is clearable *in principle*, its switch is somewhere.
-  bool get isClearableType => this != HexType.anchor && this != HexType.overgrowth;
+  bool get isClearableType =>
+      this != HexType.anchor && this != HexType.overgrowth;
 
   /// Whether a tap on this tile is refused outright, and the refusal is worth
   /// reporting to the player (protocolled as the old anchor thunk).
@@ -220,8 +221,7 @@ enum HexType {
   bool get throwsHer => this == HexType.spring || this == HexType.slope;
 
   /// Whether this tile applies a continuous force while she stands on it.
-  bool get pushesContinuously =>
-      this == HexType.eddy || this == HexType.magnet;
+  bool get pushesContinuously => this == HexType.eddy || this == HexType.magnet;
 }
 
 /// Where a cell is in the clear/regrow cycle.

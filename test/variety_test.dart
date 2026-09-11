@@ -69,7 +69,8 @@ void main() {
       expect(
         introductions.length,
         greaterThanOrEqualTo(4),
-        reason: 'levels 21-60 are the bulk of the campaign; they cannot be one '
+        reason:
+            'levels 21-60 are the bulk of the campaign; they cannot be one '
             'idea repeated. Introductions found: $introductions',
       );
     });
@@ -156,7 +157,8 @@ void main() {
       expect(
         used[LevelSignature.gauntlet]!,
         lessThanOrEqualTo(Campaign.length ~/ 2),
-        reason: 'gauntlet is the absence of a signature; if half the campaign '
+        reason:
+            'gauntlet is the absence of a signature; if half the campaign '
             'is one, most levels have no character of their own',
       );
     });

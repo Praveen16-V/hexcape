@@ -47,6 +47,7 @@ class Progress {
   static const _unlockedKey = 'unlocked';
   static const _endlessKey = 'endless_best';
   static const _petKey = 'pet';
+  static const _lessonsKey = 'lessons_seen';
 
   // Player settings. Separate keys rather than one blob so a new setting never
   // has to migrate the old ones, and a corrupt value costs one toggle rather
@@ -137,6 +138,24 @@ class Progress {
   /// which crown the deeper run, this is simply [endlessBest] — kept as a call
   /// site compatible name because three files already ask the question.
   int endlessBestOn(Difficulty difficulty) => endlessBest;
+
+  /// The highest tutorial level whose lesson has been played through.
+  ///
+  /// Without this the scripts replayed on **every** entry to levels one to
+  /// three — after a loss, on a retry, and every time a player came back to
+  /// three-star an early board. Six cards before each attempt is how a player
+  /// learns to stop reading them, and it punishes exactly the people doing the
+  /// most careful work.
+  int get lessonsSeen => _prefs.getInt(_lessonsKey) ?? 0;
+
+  /// Remembers that [level]'s lesson has been seen. Monotonic, so replaying an
+  /// earlier lesson on purpose never re-arms a later one.
+  Future<void> noteLessonSeen(int level) async {
+    if (level <= lessonsSeen) {
+      return;
+    }
+    await _prefs.setInt(_lessonsKey, level);
+  }
 
   String get pet => _prefs.getString(_petKey) ?? 'dog';
 
@@ -434,6 +453,10 @@ class Progress {
           key == _dailyLastKey ||
           key == _dailyStreakKey ||
           key == _dailyBestKey ||
+          // A wiped save starts the campaign again from level one, so the
+          // lessons belong with it: a player who has cleared their progress is
+          // back at the board those scripts exist to explain.
+          key == _lessonsKey ||
           key == _petKey) {
         await _prefs.remove(key);
       }

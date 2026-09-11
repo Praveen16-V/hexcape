@@ -149,8 +149,7 @@ enum PickupKind {
 
   /// Whether the pickup system treats it as a powerup rather than a treat.
   /// Resources feed the economy; everything else grants an effect.
-  bool get isPowerup =>
-      this != PickupKind.treat && this != PickupKind.ration;
+  bool get isPowerup => this != PickupKind.treat && this != PickupKind.ration;
 
   /// Whether it pays taps back like a treat does (the recovery the soft-lock
   /// check may count on).
@@ -263,7 +262,8 @@ enum PickupKind {
     PickupKind.harvest => 'HARVEST armed — any tap draws in the nearest prize',
     PickupKind.whistle => 'WHISTLE armed — any tap walks her back three',
     PickupKind.seed => 'SEED armed — tap a solid plain tile to wall it',
-    PickupKind.beacon => 'BEACON armed — any tap plants a lamp where she stands',
+    PickupKind.beacon =>
+      'BEACON armed — any tap plants a lamp where she stands',
     _ => '',
   };
 

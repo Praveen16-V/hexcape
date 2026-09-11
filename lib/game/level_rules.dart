@@ -1168,6 +1168,7 @@ class Campaign {
       _ => 0.0,
     };
     final extras = _extrasFor(level);
+
     /// How heavily the board lies under this mode. One on Normal: nothing in
     /// the authored bands changes. Multiplied at the *end* of every obstacle
     /// density expression so the seeded draws' order is untouched by it.
@@ -1206,7 +1207,10 @@ class Campaign {
       springDensity: level >= springsFrom
           ? math.max(
               _springIntroDensity,
-              baseSpring * pace.obstacleMultiplier * signature.springMultiplier * os,
+              baseSpring *
+                  pace.obstacleMultiplier *
+                  signature.springMultiplier *
+                  os,
             )
           : 0,
       // Floored *at the introduction* for the same reason springs are: a banner
@@ -1258,7 +1262,9 @@ class Campaign {
         0.75,
         math.min(
           _guardSpeedCeiling + difficulty.guardSpeedDelta(level),
-          baseGuardSpeed - pace.guardSpeedRelief + difficulty.guardSpeedDelta(level),
+          baseGuardSpeed -
+              pace.guardSpeedRelief +
+              difficulty.guardSpeedDelta(level),
         ),
       ),
       sentries: level >= sentriesFrom
@@ -1272,7 +1278,9 @@ class Campaign {
           : 0,
       treats: math.max(
         1,
-        _lerpInt(band.treats, t) + signature.extraTreats + difficulty.supplyDelta,
+        _lerpInt(band.treats, t) +
+            signature.extraTreats +
+            difficulty.supplyDelta,
       ),
       powerups: math.max(
         1,
@@ -1311,7 +1319,10 @@ class Campaign {
       hunger: true,
       hungerSecondsPerCell: math.max(
         difficulty.hungerFloor,
-        baseHunger + pace.hungerRelief + hungerRelief + difficulty.hungerRelief(level),
+        baseHunger +
+            pace.hungerRelief +
+            hungerRelief +
+            difficulty.hungerRelief(level),
       ),
       // The rebuilt families. Densities scale with the beat like every other
       // obstacle; light counts floor at one wherever they exist for the same
@@ -1324,7 +1335,8 @@ class Campaign {
       iceDensity: extras.iceDensity * pace.obstacleMultiplier * os,
       alarmDensity: extras.alarmDensity * pace.obstacleMultiplier * os,
       hardpanDensity: extras.hardpanDensity * pace.obstacleMultiplier * os,
-      overgrowthDensity: extras.overgrowthDensity * pace.obstacleMultiplier * os,
+      overgrowthDensity:
+          extras.overgrowthDensity * pace.obstacleMultiplier * os,
       eddyDensity: extras.eddyDensity * pace.obstacleMultiplier * os,
       scaffoldDensity: extras.scaffoldDensity * pace.obstacleMultiplier * os,
       magnetDensity: extras.magnetDensity * pace.obstacleMultiplier * os,
@@ -1557,7 +1569,7 @@ class Campaign {
       treatSeconds: 1.3,
       treatTaps: math.max(1, 1 + difficulty.treatTapDelta),
       regrowth: true,
-            regrowDelay: math.max(
+      regrowDelay: math.max(
         difficulty.regrowFloor,
         3.8 - 0.6 * t + difficulty.regrowRelief(level),
       ),
@@ -1640,7 +1652,8 @@ class Campaign {
     fogFrom => 'You see only what she is near. Carve to look around',
     mireFrom => 'Mire is slow ground. It charges the clock, not your taps',
     springsFrom => 'Springs throw her the way she was already walking',
-    thicketFrom => 'Thicket hides whatever stands behind it. Cut through to see',
+    thicketFrom =>
+      'Thicket hides whatever stands behind it. Cut through to see',
     rationFrom => 'RATION pays taps back, nothing else',
     sleeperFrom => 'Some tiles stay disguised until she is right beside them',
     lanternFrom => 'LANTERN pushes the fog back for a while',
@@ -1651,7 +1664,8 @@ class Campaign {
     cloakFrom => 'CLOAK lets her cross lit ground untouched',
     faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
     stakeFrom => 'STAKE pins one open tile open for good. Arm it from the HUD',
-    thatchFrom => 'One-cross braid: it stays open until she has crossed it once',
+    thatchFrom =>
+      'One-cross braid: it stays open until she has crossed it once',
     trowelFrom => 'TROWEL clears three in a line. Arm it from the HUD',
     iceFrom => 'Ice keeps her heading. Aim the entry; there are no corrections',
     harvestFrom => 'HARVEST fetches the nearest prize. Arm it from the HUD',
@@ -1670,27 +1684,38 @@ class Campaign {
     heelFrom => 'HEEL holds her still for a moment. Arm it from the HUD',
     eddyFrom => 'Eddies push her off her line as she crosses. Mind the drift',
     echoFrom => 'ECHO strikes the mirrored tile too. Arm it from the HUD',
-    scaffoldFrom => 'Scaffolds refuse taps from too close. Clear them from range',
+    scaffoldFrom =>
+      'Scaffolds refuse taps from too close. Clear them from range',
     seedFrom => 'SEED walls one plain tile for good. Arm it from the HUD',
-    slopesFrom => 'Arrows push her the way they point. Read one before you open it',
+    slopesFrom =>
+      'Arrows push her the way they point. Read one before you open it',
     moleFrom => 'MOLE opens any revealed tile, anywhere. Arm it from the HUD',
     magnetFrom => 'Blooms pull her in as she crosses. Choose which to open',
     spinnerFrom => 'Ring lights circle their pivot. The window swings round',
     waystoneFrom => 'WAYSTONE — the bearing home, always quietly shown',
-    blinkerFrom => 'Blinker patches are dark half the time. Tap on the off-beat',
-    beaconFrom => 'A beacon never moves and never relents. Work around its light',
-    gateFrom => 'A gate opens only from its switch tile, somewhere off the route',
-    beaconDropFrom => 'BEACON plants a lamp where she stands. Arm it from the HUD',
-    runnerFrom => 'Runners dash a straight line, then breathe. Cross on the breath',
-    nightEyesFrom => 'OWL EYES — she sees a little further for the rest of the run',
+    blinkerFrom =>
+      'Blinker patches are dark half the time. Tap on the off-beat',
+    beaconFrom =>
+      'A beacon never moves and never relents. Work around its light',
+    gateFrom =>
+      'A gate opens only from its switch tile, somewhere off the route',
+    beaconDropFrom =>
+      'BEACON plants a lamp where she stands. Arm it from the HUD',
+    runnerFrom =>
+      'Runners dash a straight line, then breathe. Cross on the breath',
+    nightEyesFrom =>
+      'OWL EYES — she sees a little further for the rest of the run',
     sunkenFrom => 'Sunken ground only clears from beside it. Carve up to it',
-    mirrorFrom => 'Mirrored tiles open together or not at all. ECHO answers them',
+    mirrorFrom =>
+      'Mirrored tiles open together or not at all. ECHO answers them',
     pouchFrom => 'POUCH doubles the next treat you find',
     thornFrom => 'Thorns cost two seconds underfoot. Step or steer around',
     ironpawFrom => 'IRONPAW — thorns and alarms stop minding her crossing',
     wardenFrom => 'Wardens close every open tile they pass. Keep ahead of it',
-    gloomFrom => 'The middle of this field sits in gloom. Sight is halved there',
-    tremorFrom => 'Vents fire closing surges on a rhythm. Two taps silences one',
+    gloomFrom =>
+      'The middle of this field sits in gloom. Sight is halved there',
+    tremorFrom =>
+      'Vents fire closing surges on a rhythm. Two taps silences one',
     keepsakeFrom => 'KEEPSAKE — one mercy, spent when all is lost',
     _ => null,
   };
@@ -1734,7 +1759,11 @@ class Campaign {
       ],
       LevelSignature.heavyGround =>
         level <= foundationEnd
-            ? const [PickupKind.radiusPlus, PickupKind.pairwork, PickupKind.freeze]
+            ? const [
+                PickupKind.radiusPlus,
+                PickupKind.pairwork,
+                PickupKind.freeze,
+              ]
             : const [
                 PickupKind.maul,
                 PickupKind.blast,
@@ -1885,7 +1914,6 @@ extension on LevelSignature {
     _ => 0,
   };
 }
-
 
 extension on LevelPace {
   /// A signature's wall delta, as this beat will permit it.

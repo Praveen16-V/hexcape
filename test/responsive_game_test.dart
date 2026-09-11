@@ -145,7 +145,10 @@ void main() {
       MaterialApp(
         home: MediaQuery(
           data: const MediaQueryData(size: size),
-          child: Material(color: Palette.background, child: Hud(game: game)),
+          child: Material(
+            color: Palette.background,
+            child: Hud(game: game),
+          ),
         ),
       ),
     );

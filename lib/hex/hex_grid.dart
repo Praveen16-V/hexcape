@@ -119,9 +119,7 @@ class HexGrid {
     if (cell.type == HexType.mirror) {
       final other = cell.partner == null ? null : cells[cell.partner];
       final pairOpen =
-          other == null ||
-          other.isPassable ||
-          (cell.charged && other.charged);
+          other == null || other.isPassable || (cell.charged && other.charged);
       return pairOpen ? base : base + 1;
     }
     return base;

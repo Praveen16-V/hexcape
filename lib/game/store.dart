@@ -141,7 +141,8 @@ class Store extends ChangeNotifier {
           await _progress.setOwnsFullGame(true);
         case PurchaseStatus.error:
           _busy = false;
-          _error = purchase.error?.message ?? 'The purchase did not go through.';
+          _error =
+              purchase.error?.message ?? 'The purchase did not go through.';
         case PurchaseStatus.canceled:
           // Not an error. Someone changing their mind should not be shown a
           // failure message for it.

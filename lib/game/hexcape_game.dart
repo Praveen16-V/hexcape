@@ -422,6 +422,12 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// The scripted opening, on tutorial levels only.
   Tutorial? tutorial;
 
+  /// Set before starting a level to run its lesson again even though the player
+  /// has already seen it. Cleared as the level starts, so it is a one-shot.
+  bool replayLesson = false;
+
+  bool _lessonNoted = false;
+
   bool get tutorialReading =>
       tutorial?.current?.advance == TutorialAdvance.onContinue;
 
@@ -735,7 +741,16 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
     }
 
-    tutorial = Tutorial.forLevel(levelNumber);
+    // Taught once, not every time. The scripts used to be rebuilt on every
+    // entry to levels one to three — a loss and a retry put the player back
+    // through the whole lesson before they could try again — so a lesson
+    // already played through is skipped unless it is asked for by name, from
+    // the home screen's own Learn to play.
+    tutorial = (replayLesson || levelNumber > (progress?.lessonsSeen ?? 0))
+        ? Tutorial.forLevel(levelNumber)
+        : null;
+    replayLesson = false;
+    _lessonNoted = false;
     tutorialTarget = null;
     overlays.remove(Overlays.pause);
     paused = false;
@@ -1351,6 +1366,13 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
       tutorialTarget = script.targetCell(grid, dog, pickups);
     } else {
+      if (script != null && !_lessonNoted) {
+        // Reaching the end of the script is what counts as having been taught
+        // — not finishing the level, which a player may never manage on the
+        // board the lesson happened to land on.
+        _lessonNoted = true;
+        progress?.noteLessonSeen(levelNumber);
+      }
       tutorialTarget = null;
     }
 
@@ -1381,6 +1403,10 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       }
       if (events.fieldChanged) {
         fieldVersion++;
+        // The lesson that says "watch the ground behind her" ends when the
+        // ground behind her actually closes, not on a timer guessing when it
+        // might.
+        tutorial?.noteRegrowth();
         for (final coord in events.snapped) {
           effects.ripple(layout.toPixel(coord), layout.size);
           // REWIND's ledger. Capped rather than compounding: the field only

@@ -93,18 +93,21 @@ void main() {
       expect(Difficulty.fromKey(null), Difficulty.normal);
     });
 
-    test('Normal is its own curve; asking for it explicitly changes nothing', () {
-      // The guard that protects every existing save file, star record and test
-      // in this suite: the *default* campaign and the explicitly-normal one
-      // must stay the same rules.
-      for (var n = 1; n <= Campaign.length + 20; n++) {
-        expect(
-          _fields(Campaign.rulesFor(n, difficulty: Difficulty.normal)),
-          _fields(Campaign.rulesFor(n)),
-          reason: 'level $n differs under an explicit Normal',
-        );
-      }
-    });
+    test(
+      'Normal is its own curve; asking for it explicitly changes nothing',
+      () {
+        // The guard that protects every existing save file, star record and test
+        // in this suite: the *default* campaign and the explicitly-normal one
+        // must stay the same rules.
+        for (var n = 1; n <= Campaign.length + 20; n++) {
+          expect(
+            _fields(Campaign.rulesFor(n, difficulty: Difficulty.normal)),
+            _fields(Campaign.rulesFor(n)),
+            reason: 'level $n differs under an explicit Normal',
+          );
+        }
+      },
+    );
 
     test('the tutorial ignores both modes', () {
       // Three scripted levels are a lesson, not a contest. Both modes leave
@@ -121,11 +124,14 @@ void main() {
             reason: 'tutorial level $n moved on ${d.label}',
           );
           expect(
-            _board(LevelGenerator.generate(
-              specFor(Campaign.rulesFor(n, difficulty: d)),
-            )),
+            _board(
+              LevelGenerator.generate(
+                specFor(Campaign.rulesFor(n, difficulty: d)),
+              ),
+            ),
             _board(ours),
-            reason: 'tutorial level $n generates a different board on ${d.label}',
+            reason:
+                'tutorial level $n generates a different board on ${d.label}',
           );
         }
       }
@@ -223,8 +229,7 @@ void main() {
           expect(
             budget,
             greaterThanOrEqualTo(level.par),
-            reason:
-                'level $n on Hard budget $budget below par ${level.par}',
+            reason: 'level $n on Hard budget $budget below par ${level.par}',
           );
         }
       },

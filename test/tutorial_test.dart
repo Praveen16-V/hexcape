@@ -58,29 +58,40 @@ void main() {
               reason: 'level $n cannot resolve ${step.target.name}',
             );
           }
-          if (step.advance == TutorialAdvance.onContinue) {
-            script.continueLesson();
-          } else if (step.advance == TutorialAdvance.onTap) {
-            final target = script.targetCell(
-              ctx.level.grid,
-              ctx.dog,
-              ctx.level.pickups,
-            )!;
-            ctx.level.grid.at(target)!.clear(0);
-            script.onTapped(
-              target,
-              ctx.level.grid,
-              ctx.dog,
-              ctx.level.pickups,
-              targetBeforeTap: target,
-            );
-          } else {
-            ctx.dog.cell = script.targetCell(
-              ctx.level.grid,
-              ctx.dog,
-              ctx.level.pickups,
-            )!;
-            script.update(0, ctx.level.grid, ctx.dog, ctx.level.pickups);
+          switch (step.advance) {
+            case TutorialAdvance.onContinue:
+              script.continueLesson();
+            case TutorialAdvance.onTap:
+              final target = script.targetCell(
+                ctx.level.grid,
+                ctx.dog,
+                ctx.level.pickups,
+              )!;
+              ctx.level.grid.at(target)!.clear(0);
+              script.onTapped(
+                target,
+                ctx.level.grid,
+                ctx.dog,
+                ctx.level.pickups,
+                targetBeforeTap: target,
+              );
+            case TutorialAdvance.onReach:
+              ctx.dog.cell = script.targetCell(
+                ctx.level.grid,
+                ctx.dog,
+                ctx.level.pickups,
+              )!;
+              script.update(0, ctx.level.grid, ctx.dog, ctx.level.pickups);
+            case TutorialAdvance.onWatch:
+              script.update(
+                step.seconds,
+                ctx.level.grid,
+                ctx.dog,
+                ctx.level.pickups,
+              );
+            case TutorialAdvance.onRegrow:
+              script.noteRegrowth();
+              script.update(0, ctx.level.grid, ctx.dog, ctx.level.pickups);
           }
         }
         expect(script.isDone, isTrue, reason: 'level $n never finished');
@@ -153,16 +164,56 @@ void main() {
     );
 
     test('explanations wait for Continue and reset restores the lesson', () {
-      final ctx = _levelFor(2);
-      final script = Tutorial.forLevel(2)!;
+      // Level three, because it is the one that still opens on an explanation.
+      // Level two now opens by asking the player to carve.
+      final ctx = _levelFor(3);
+      final script = Tutorial.forLevel(3)!;
+      expect(script.current!.advance, TutorialAdvance.onContinue);
       script.update(120, ctx.level.grid, ctx.dog, ctx.level.pickups);
-      expect(script.stepNumber, 1);
+      expect(script.stepNumber, 1, reason: 'time alone never reads a card');
       script.continueLesson();
       expect(script.stepNumber, 2);
       script.skip();
       script.reset();
       expect(script.isDone, isFalse);
       expect(script.stepNumber, 1);
+    });
+
+    test('a lesson about motion never runs on a frozen board', () {
+      // The defect this group exists to prevent from coming back. "Watch the
+      // ground behind her" and "watch the bar" were both `onContinue`, which
+      // stops the run — so the regrowth never happened and the clock never
+      // moved, and the one thing each line asked for was the one thing it made
+      // impossible. Only an explanation may freeze the game.
+      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+        for (final step in Tutorial.forLevel(n)!.steps) {
+          final watching = step.prompt.toLowerCase().contains('watch');
+          if (watching) {
+            expect(
+              step.advance,
+              isNot(TutorialAdvance.onContinue),
+              reason: 'level $n asks the player to watch a stopped board',
+            );
+          }
+        }
+      }
+    });
+
+    test('no action beat can outlive the run it interrupts', () {
+      // An action step whose target the board does not guarantee is reachable
+      // has to give up eventually, or it sits there unsatisfiable while the
+      // field closes in around the player it is talking to.
+      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+        for (final step in Tutorial.forLevel(n)!.steps) {
+          if (step.advance == TutorialAdvance.onReach) {
+            expect(
+              step.releaseAfter,
+              isNotNull,
+              reason: 'level $n waits forever for her to reach something',
+            );
+          }
+        }
+      }
     });
   });
 

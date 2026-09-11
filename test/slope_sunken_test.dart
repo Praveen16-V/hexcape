@@ -153,9 +153,10 @@ void main() {
 
     test('a tap on it says why it failed instead of hitting a neighbour', () {
       final game = makeGame(95);
-      final isolated = ofType(game, HexType.sunken).firstWhere(
-        (c) => !game.grid.hasFooting(c.coord),
-      );
+      final isolated = ofType(
+        game,
+        HexType.sunken,
+      ).firstWhere((c) => !game.grid.hasFooting(c.coord));
       // Stand her right next to it so range is not what refuses.
       game.dog.position = game.layout.toPixel(isolated.coord);
 
@@ -170,16 +171,18 @@ void main() {
       expect(
         result.coord,
         isolated.coord,
-        reason: 'a deliberate tap must never be redirected onto a tile the '
+        reason:
+            'a deliberate tap must never be redirected onto a tile the '
             'player was not aiming at',
       );
     });
 
     test('refusing a tap costs nothing', () {
       final game = makeGame(95);
-      final isolated = ofType(game, HexType.sunken).firstWhere(
-        (c) => !game.grid.hasFooting(c.coord),
-      );
+      final isolated = ofType(
+        game,
+        HexType.sunken,
+      ).firstWhere((c) => !game.grid.hasFooting(c.coord));
       game.dog.position = game.layout.toPixel(isolated.coord);
       final before = game.taps;
       game.handleBoardTapAt(game.layout.toPixel(isolated.coord));

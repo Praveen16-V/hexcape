@@ -212,7 +212,11 @@ void drawPickupGlyph(
         centre.translate(-size * 0.3, -size * 0.5),
         stroke,
       );
-      canvas.drawCircle(centre.translate(-size * 0.3, -size * 0.5), size * 0.12, fill);
+      canvas.drawCircle(
+        centre.translate(-size * 0.3, -size * 0.5),
+        size * 0.12,
+        fill,
+      );
     case PickupKind.wardown:
       // A ward circle with the ward broken out of it.
       canvas.drawCircle(centre, size * 0.7, stroke);
@@ -334,7 +338,10 @@ void drawPickupGlyph(
     case PickupKind.harvest:
       // A horseshoe magnet drawing in a star.
       canvas.drawArc(
-        Rect.fromCircle(center: centre.translate(0, size * 0.1), radius: size * 0.5),
+        Rect.fromCircle(
+          center: centre.translate(0, size * 0.1),
+          radius: size * 0.5,
+        ),
         0,
         math.pi,
         false,
@@ -348,7 +355,11 @@ void drawPickupGlyph(
       );
     case PickupKind.whistle:
       // A whistle: mouthpiece and bowl with the pea shown.
-      canvas.drawCircle(centre.translate(size * 0.15, size * 0.15), size * 0.42, stroke);
+      canvas.drawCircle(
+        centre.translate(size * 0.15, size * 0.15),
+        size * 0.42,
+        stroke,
+      );
       canvas.drawPath(
         Path()
           ..moveTo(centre.dx - size * 0.85, centre.dy - size * 0.3)
@@ -357,7 +368,11 @@ void drawPickupGlyph(
           ..close(),
         stroke,
       );
-      canvas.drawCircle(centre.translate(size * 0.15, size * 0.15), size * 0.12, fill);
+      canvas.drawCircle(
+        centre.translate(size * 0.15, size * 0.15),
+        size * 0.12,
+        fill,
+      );
     case PickupKind.seed:
       // One seed pressed into a soil line.
       canvas.drawOval(
@@ -449,15 +464,14 @@ void drawPickupGlyph(
       );
       canvas.drawCircle(centre, size * 0.2, fill);
       canvas.drawPath(
-        Path()
-          ..addArc(
-            Rect.fromCircle(
-              center: centre.translate(size * 0.62, -size * 0.55),
-              radius: size * 0.3,
-            ),
-            -1.2,
-            3.6,
+        Path()..addArc(
+          Rect.fromCircle(
+            center: centre.translate(size * 0.62, -size * 0.55),
+            radius: size * 0.3,
           ),
+          -1.2,
+          3.6,
+        ),
         stroke,
       );
     case PickupKind.keepsake:

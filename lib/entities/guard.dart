@@ -114,9 +114,8 @@ class Guard {
   bool lampOn = true;
 
   /// 1 -> 0 as a runner telegraphs its next dash.
-  double get windUp => dashes && pauseFor > 0
-      ? (1 - pauseFor / endPause).clamp(0.0, 1.0)
-      : 0;
+  double get windUp =>
+      dashes && pauseFor > 0 ? (1 - pauseFor / endPause).clamp(0.0, 1.0) : 0;
 
   /// Seconds a runner stands at each end. Long enough to see, short enough
   /// that a lane reopens often.
@@ -140,7 +139,9 @@ class Guard {
     final step = forward ? 1 : -1;
     final n = index + step;
     if (n < 0 || n >= patrol.length) {
-      return patrol.isEmpty ? cell : patrol[(index - step).clamp(0, patrol.length - 1)];
+      return patrol.isEmpty
+          ? cell
+          : patrol[(index - step).clamp(0, patrol.length - 1)];
     }
     return patrol[n];
   }
@@ -167,8 +168,9 @@ class Guard {
 
   /// The spinner's sweep angle, for its blades: progress around the ring it
   /// walks, so the vane it carries turns with the window it opens.
-  double get leadAngle =>
-      patrol.length < 2 ? 0.0 : (index + t) / patrol.length * 2 * 3.141592653589793;
+  double get leadAngle => patrol.length < 2
+      ? 0.0
+      : (index + t) / patrol.length * 2 * 3.141592653589793;
 
   void update(double dt) {
     alertFlash = alertFlash - dt * 2.2;

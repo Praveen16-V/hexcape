@@ -31,7 +31,6 @@ Offset unitOf(HexcapeGame game) => Offset(
   (game.dog.position.dy - game.layout.origin.dy) / game.layout.size,
 );
 
-
 /// Open the whole board and return the cell furthest from the dog.
 ///
 /// A level starts almost entirely solid, so a test that wants her to *travel*
@@ -134,7 +133,9 @@ void main() {
     });
 
     test('pixel and hex conversions round-trip under zoom and pan', () {
-      final game = makeGame()..cycleZoom()..cycleZoom();
+      final game = makeGame()
+        ..cycleZoom()
+        ..cycleZoom();
       expect(game.boardCamera.isFit, isFalse);
       for (final cell in game.grid.all) {
         expect(game.layout.toHex(game.layout.toPixel(cell.coord)), cell.coord);
@@ -153,7 +154,9 @@ void main() {
 
   group('Framing while magnified', () {
     test('the board always covers the viewport', () {
-      final game = makeGame()..cycleZoom()..cycleZoom();
+      final game = makeGame()
+        ..cycleZoom()
+        ..cycleZoom();
       // Shove the focus far outside the board and let the clamp answer.
       game.boardCamera.focus = const Offset(-500, -500);
       game.onGameResize(Vector2(_small.width, _small.height));
@@ -185,7 +188,9 @@ void main() {
     });
 
     test('the view catches up when a spring throws her across the board', () {
-      final game = makeGame()..cycleZoom()..cycleZoom();
+      final game = makeGame()
+        ..cycleZoom()
+        ..cycleZoom();
       final far = openBoardAndFindFarCell(game);
       final settled = game.boardCamera.focus;
 
@@ -213,7 +218,11 @@ void main() {
         reason: 'the camera has to have actually followed her',
       );
       final drift = unitOf(game) - game.boardCamera.focus;
-      expect(drift.dx.abs(), lessThan(half.dx), reason: 'lost her off the side');
+      expect(
+        drift.dx.abs(),
+        lessThan(half.dx),
+        reason: 'lost her off the side',
+      );
       expect(
         drift.dy.abs(),
         lessThan(half.dy),
@@ -222,7 +231,9 @@ void main() {
     });
 
     test('she is never lost off an edge while she walks', () {
-      final game = makeGame()..cycleZoom()..cycleZoom();
+      final game = makeGame()
+        ..cycleZoom()
+        ..cycleZoom();
       final far = openBoardAndFindFarCell(game);
       game.dog.launch(
         game.layout.toPixel(far) - game.dog.position,
@@ -340,7 +351,8 @@ void main() {
       expect(
         camera.focus.distance,
         greaterThan(20),
-        reason: 'a camera that never moved would keep a target framed only by '
+        reason:
+            'a camera that never moved would keep a target framed only by '
             'accident',
       );
     });

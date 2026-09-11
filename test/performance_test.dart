@@ -176,7 +176,8 @@ void main() {
       expect(
         stopwatch.elapsedMicroseconds / 300 / 1000,
         lessThan(4.0),
-        reason: 'a scent recompute has to fit inside a frame with room to spare',
+        reason:
+            'a scent recompute has to fit inside a frame with room to spare',
       );
     });
 
@@ -202,7 +203,11 @@ void main() {
       stopwatch.stop();
 
       final frames = (result.seconds * 60).round();
-      expect(frames, greaterThan(300), reason: 'not enough frames to mean much');
+      expect(
+        frames,
+        greaterThan(300),
+        reason: 'not enough frames to mean much',
+      );
       final perFrame = stopwatch.elapsedMicroseconds / frames / 1000;
       // ignore: avoid_print
       print(

@@ -7,9 +7,18 @@ void main() {
       // A pet that only changes colour is the old mistake. The test exists so
       // a new pet cannot be added without saying what she does differently.
       for (final pet in Pets.all) {
-        expect(pet.perk.name, isNotEmpty, reason: '${pet.name} has no perk name');
-        expect(pet.perk.short, isNotEmpty, reason: '${pet.name} has no perk lore');
-        final doesSomething = pet.perk.speedScale != 1.0 ||
+        expect(
+          pet.perk.name,
+          isNotEmpty,
+          reason: '${pet.name} has no perk name',
+        );
+        expect(
+          pet.perk.short,
+          isNotEmpty,
+          reason: '${pet.name} has no perk lore',
+        );
+        final doesSomething =
+            pet.perk.speedScale != 1.0 ||
             pet.perk.revealScale != 1.0 ||
             pet.perk.regrowDelta != 0 ||
             pet.perk.hintBeforeBy != 0 ||

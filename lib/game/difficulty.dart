@@ -139,12 +139,13 @@ enum Difficulty {
   /// rather than through [LevelRules], which has no authored value for it. On
   /// Normal the shift arrives with the campaign proper, like everything else;
   /// in the tutorial the fog remains exactly what the script expects.
-  double revealMultiplierFor(int level) => switch ((this, level > tutorialLevels)) {
-    (Difficulty.normal, true) => 0.92,
-    (Difficulty.normal, false) => 1.0,
-    (Difficulty.hard, true) => 0.6,
-    (Difficulty.hard, false) => 1.0,
-  };
+  double revealMultiplierFor(int level) =>
+      switch ((this, level > tutorialLevels)) {
+        (Difficulty.normal, true) => 0.92,
+        (Difficulty.normal, false) => 1.0,
+        (Difficulty.hard, true) => 0.6,
+        (Difficulty.hard, false) => 1.0,
+      };
 
   /// What the ground charges for standing on it: patrol bites and thorn bites
   /// alike. A number, never a board change — the difficulty invariant (one

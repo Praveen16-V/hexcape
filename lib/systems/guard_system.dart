@@ -163,18 +163,18 @@ class GuardSystem {
         if (route.length < minPatrol) {
           return null;
         }
-        return Guard(
-          patrol: route,
-          cellsPerSecond: cellsPerSecond,
-          kind: kind,
-        );
+        return Guard(patrol: route, cellsPerSecond: cellsPerSecond, kind: kind);
     }
   }
 
   /// A straight dash route: one direction held from [head] until the board
   /// says stop. A runner that turned corners would be a fast patrol; a runner
   /// that never turns is a telegraph you can read two cells early.
-  static List<HexCoord> _straight(HexGrid grid, HexCoord head, math.Random rng) {
+  static List<HexCoord> _straight(
+    HexGrid grid,
+    HexCoord head,
+    math.Random rng,
+  ) {
     final direction = HexCoord.directions[rng.nextInt(6)];
     final route = <HexCoord>[head];
     var cursor = head;

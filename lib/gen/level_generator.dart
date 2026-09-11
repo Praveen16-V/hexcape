@@ -1174,9 +1174,8 @@ class LevelGenerator {
     if (!spec.gloom) {
       return;
     }
-    final rows = [
-      for (final c in grid.cells.keys) c,
-    ]..sort((a, b) => a.r != b.r ? a.r.compareTo(b.r) : a.q.compareTo(b.q));
+    final rows = [for (final c in grid.cells.keys) c]
+      ..sort((a, b) => a.r != b.r ? a.r.compareTo(b.r) : a.q.compareTo(b.q));
     if (rows.isEmpty) {
       return;
     }

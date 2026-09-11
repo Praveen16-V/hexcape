@@ -52,7 +52,10 @@ HexcapeGame _walking({int frames = 30}) {
 }
 
 /// The first step along her route a warning is allowed to name, or -1.
-int _hintableStep(HexcapeGame game, {int from = HexcapeGame.hintLookaheadFrom}) {
+int _hintableStep(
+  HexcapeGame game, {
+  int from = HexcapeGame.hintLookaheadFrom,
+}) {
   final hexesPerSecond = game.dog.speed / game.layout.width;
   for (
     var step = from;
@@ -250,7 +253,11 @@ void main() {
         PickupKind.freeze,
         reason: 'the card went before the freeze did',
       );
-      expect(game.pickupNoticeReadFor, 0, reason: 'read window is not the life');
+      expect(
+        game.pickupNoticeReadFor,
+        0,
+        reason: 'read window is not the life',
+      );
 
       game.debugElapseNotices(1 + HexcapeGame.pickupNoticeFadeSeconds + 0.5);
       expect(game.pickupNotice, isNull);

@@ -460,6 +460,9 @@ class _GameShellState extends State<GameShell>
                   onCampaign: _openCampaign,
                   onTutorial: () {
                     _tuning.zenMode = false;
+                    // Asked for by name, so it runs again even for a player
+                    // who has long since been taught it.
+                    _game.replayLesson = true;
                     _openLevel(1, restart: true);
                   },
                   onDaily: _openDaily,
