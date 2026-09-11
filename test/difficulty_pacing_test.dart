@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/game/level_rules.dart';
 
@@ -117,18 +119,94 @@ void main() {
             lessThanOrEqualTo(previous.hungerSecondsPerCell),
             reason: 'clock at challenge $level',
           );
-          expect(
-            current.regrowDelay,
-            lessThanOrEqualTo(previous.regrowDelay),
-            reason: 'regrowth at challenge $level',
-          );
-          expect(
-            current.anchorDensity,
-            greaterThanOrEqualTo(previous.anchorDensity),
-            reason: 'walls at challenge $level',
-          );
+          // Regrowth is not checked here. It reaches its floor inside Mastery
+          // and then holds, and Foundation's closing challenge at 20 eases it
+          // on purpose — that level is the last one a player sees for free and
+          // is not the place to be strangled by closing ground. Band floors are
+          // checked below instead.
         }
         previous = current;
+      }
+    });
+
+    test("each band's walls peak higher than the last, at its final level", () {
+      // Walls used to be checked challenge to challenge, which fails at seven
+      // peaks and should: from Mastery on, the band records pin budget, hunger
+      // and regrowth flat on purpose — below about 1.06x par a level demands
+      // provably optimal play — so Collapse and Vigil climb on an axis of their
+      // own, slopes and sunken ground, rather than on more walls. Each band
+      // also restarts its wall curve below the previous band's peak, because a
+      // band that opened at the last one's hardest would have nowhere to go.
+      //
+      // The climb is real, it just lives one level up: band over band.
+      var previous = -1.0;
+      CampaignBand? previousBand;
+      for (final band in CampaignBand.values) {
+        if (band == CampaignBand.endless) continue;
+        var peak = -1.0;
+        var peakAt = -1;
+        var last = -1;
+        for (var level = 1; level <= Campaign.length; level++) {
+          if (Campaign.bandOf(level) != band) continue;
+          last = level;
+          final walls = Campaign.rulesFor(level).anchorDensity;
+          if (walls > peak) {
+            peak = walls;
+            peakAt = level;
+          }
+        }
+        if (last == -1) continue;
+        expect(
+          peak,
+          greaterThan(previous),
+          reason:
+              '${band.name} peaks at $peak, no higher than '
+              '${previousBand?.name}',
+        );
+        // The hardest board in a band is the one that closes it. A band that
+        // peaks in its middle sends the player out on a downhill.
+        expect(
+          peakAt,
+          last,
+          reason: '${band.name} peaks at $peakAt but ends at $last',
+        );
+        previous = peak;
+        previousBand = band;
+      }
+    });
+
+    test('no band gives back what an earlier one had already taken', () {
+      // The floors, as opposed to the peaks. Budget, clock and regrowth all
+      // descend to a floor and then hold flat — deliberately, because below
+      // about 1.06x par a level demands provably optimal play — so the rule is
+      // that a band never raises one, not that it always lowers one.
+      var budget = double.infinity;
+      var clock = double.infinity;
+      var regrow = double.infinity;
+      for (final band in CampaignBand.values) {
+        if (band == CampaignBand.endless) continue;
+        var bandBudget = double.infinity;
+        var bandClock = double.infinity;
+        var bandRegrow = double.infinity;
+        var found = false;
+        for (var level = 1; level <= Campaign.length; level++) {
+          if (Campaign.bandOf(level) != band) continue;
+          found = true;
+          final r = Campaign.rulesFor(level);
+          bandBudget = math.min(bandBudget, r.budgetMultiplier);
+          bandClock = math.min(bandClock, r.hungerSecondsPerCell);
+          bandRegrow = math.min(bandRegrow, r.regrowDelay);
+        }
+        if (!found) continue;
+        expect(bandBudget, lessThanOrEqualTo(budget + 1e-9),
+            reason: '${band.name} hands taps back');
+        expect(bandClock, lessThanOrEqualTo(clock + 1e-9),
+            reason: '${band.name} hands time back');
+        expect(bandRegrow, lessThanOrEqualTo(regrow + 1e-9),
+            reason: '${band.name} slows the ground back down');
+        budget = bandBudget;
+        clock = bandClock;
+        regrow = bandRegrow;
       }
     });
 

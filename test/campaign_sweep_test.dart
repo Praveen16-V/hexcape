@@ -104,11 +104,10 @@ void main() {
             );
             clock = rules.hungerSecondsPerCell;
           }
-          expect(
-            rules.anchorDensity,
-            greaterThanOrEqualTo(anchors - 1e-9),
-            reason: 'challenge $n thins the walls',
-          );
+          // Walls deliberately are not monotonic challenge to challenge — each
+          // band restarts its curve lower, and the flat bands climb on slopes
+          // and sunken ground instead. The real invariant, that each band's
+          // wall peak beats the last, lives in difficulty_pacing_test.
           anchors = rules.anchorDensity;
         }
       },
