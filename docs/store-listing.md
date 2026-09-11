@@ -11,7 +11,7 @@ them. Counts below are current as written.
 
 ## App name
 
-*Limit 30 characters.*
+_Limit 30 characters._
 
 ```
 Hexcape
@@ -19,19 +19,19 @@ Hexcape
 
 ## Short description
 
-*Limit 80 characters. This is the line under the title in search results, and it
-does more work than any other sentence in the listing.*
+_Limit 80 characters. This is the line under the title in search results, and it
+does more work than any other sentence in the listing._
 
 ```
 Carve a path through a collapsing hex field. She never stops walking.
 ```
 
-*(69 characters.)*
+_(69 characters.)_
 
 ## Full description
 
-*Limit 4000 characters. Plain text; Play strips most formatting but keeps line
-breaks.*
+_Limit 4000 characters. Plain text; Play strips most formatting but keeps line
+breaks._
 
 ```
 A dog is walking toward her dinner. She will not stop, she will not wait, and
@@ -90,19 +90,19 @@ else to buy after it. Buy it once and it follows your Google account to every
 device you own.
 ```
 
-*(~2050 characters.)*
+_(~2050 characters.)_
 
 ---
 
 ## Graphics checklist
 
-| Asset | Spec | Status |
-|---|---|---|
-| App icon | 512 × 512, 32-bit PNG | **Done** — `assets/icon/icon.png` is already exactly this: 512×512 RGBA, fully opaque. Upload as-is. |
-| Feature graphic | 1024 × 500 JPEG or 24-bit PNG, **no alpha** | **Needs designing** |
-| Phone screenshots | 2–8, portrait, 16:9 to 9:16, min 320px | **Needs capturing** |
-| 7" tablet screenshots | Optional | Skip for v1 |
-| 10" tablet screenshots | Optional | Skip for v1 |
+| Asset                  | Spec                                        | Status                                                                                               |
+| ---------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| App icon               | 512 × 512, 32-bit PNG                       | **Done** — `assets/icon/icon.png` is already exactly this: 512×512 RGBA, fully opaque. Upload as-is. |
+| Feature graphic        | 1024 × 500 JPEG or 24-bit PNG, **no alpha** | **Needs designing**                                                                                  |
+| Phone screenshots      | 2–8, portrait, 16:9 to 9:16, min 320px      | **Needs capturing**                                                                                  |
+| 7" tablet screenshots  | Optional                                    | Skip for v1                                                                                          |
+| 10" tablet screenshots | Optional                                    | Skip for v1                                                                                          |
 
 ### Screenshot shot list
 
@@ -129,14 +129,14 @@ Avoid screenshotting a failure state or the paywall.
 
 ## Categorisation and contact
 
-| Field | Value |
-|---|---|
-| App or game | Game |
-| Category | Puzzle |
-| Tags | Puzzle, Casual, Single player, Offline |
-| Free or paid | Free (with one in-app purchase) |
-| Email | toolsilahub@gmail.com |
-| Website | https://praveen16-v.github.io/hexcape/ |
+| Field          | Value                                                     |
+| -------------- | --------------------------------------------------------- |
+| App or game    | Game                                                      |
+| Category       | Puzzle                                                    |
+| Tags           | Puzzle, Casual, Single player, Offline                    |
+| Free or paid   | Free (with one in-app purchase)                           |
+| Email          | support@toolsila.com                                      |
+| Website        | https://praveen16-v.github.io/hexcape/                    |
 | Privacy policy | https://praveen16-v.github.io/hexcape/privacy-policy.html |
 
 ---
@@ -145,14 +145,14 @@ Avoid screenshotting a failure state or the paywall.
 
 Created under Monetize → Products → One-time products.
 
-| Field | Value |
-|---|---|
-| Product ID | `hexcape.full` — **must match `kFullGameId` in `lib/game/store.dart:12` exactly** |
-| Type | One-time (managed) product; the code calls `buyNonConsumable` |
-| Name | The Full Trail |
-| Description | Unlocks levels 21–100, the Collapse and Vigil chapters, and Endless. One purchase, no subscription. |
-| Price | ₹249 (India) / $2.99 (US) — set the base price and let Play convert |
-| Status | **Active** (an inactive product returns no `ProductDetails` and the paywall correctly reports billing unavailable) |
+| Field       | Value                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| Product ID  | `hexcape.full` — **must match `kFullGameId` in `lib/game/store.dart:12` exactly**                                  |
+| Type        | One-time (managed) product; the code calls `buyNonConsumable`                                                      |
+| Name        | The Full Trail                                                                                                     |
+| Description | Unlocks levels 21–100, the Collapse and Vigil chapters, and Endless. One purchase, no subscription.                |
+| Price       | ₹249 (India) / $2.99 (US) — set the base price and let Play convert                                                |
+| Status      | **Active** (an inactive product returns no `ProductDetails` and the paywall correctly reports billing unavailable) |
 
 A note on price: the app never hardcodes it. `Store.price` reads
 `ProductDetails.price`, which Play returns already localised and converted, so
@@ -167,17 +167,17 @@ Every item below blocks release until it is green. The answers are not guesses;
 each one is checkable against the source, and the reason is given so that if the
 app ever changes, it is obvious which answer has to change with it.
 
-| Form | Answer | Why it is true |
-|---|---|---|
-| Privacy policy | https://praveen16-v.github.io/hexcape/privacy-policy.html | Served from `docs/` on GitHub Pages |
-| App access | All functionality available without special access | There is no login of any kind |
-| Ads | No ads | No ad SDK in `pubspec.yaml`; no `AD_ID` permission in the merged manifest |
-| Data safety | No data collected, no data shared | Zero HTTP calls in `lib/`; all state is local `shared_preferences` |
-| Target audience | 13+ | Chosen to stay outside the Families policy for the first launch |
-| Financial features | None | No lending, banking, or crypto |
-| Government app | No | |
-| Health | No | |
-| News | No | |
+| Form               | Answer                                                    | Why it is true                                                            |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Privacy policy     | https://praveen16-v.github.io/hexcape/privacy-policy.html | Served from `docs/` on GitHub Pages                                       |
+| App access         | All functionality available without special access        | There is no login of any kind                                             |
+| Ads                | No ads                                                    | No ad SDK in `pubspec.yaml`; no `AD_ID` permission in the merged manifest |
+| Data safety        | No data collected, no data shared                         | Zero HTTP calls in `lib/`; all state is local `shared_preferences`        |
+| Target audience    | 13+                                                       | Chosen to stay outside the Families policy for the first launch           |
+| Financial features | None                                                      | No lending, banking, or crypto                                            |
+| Government app     | No                                                        |                                                                           |
+| Health             | No                                                        |                                                                           |
+| News               | No                                                        |                                                                           |
 
 ### Content rating (IARC) notes
 

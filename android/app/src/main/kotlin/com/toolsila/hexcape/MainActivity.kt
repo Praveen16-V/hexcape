@@ -1,4 +1,4 @@
-package com.hexcape.hexcape
+package com.toolsila.hexcape
 
 import io.flutter.embedding.android.FlutterActivity
 

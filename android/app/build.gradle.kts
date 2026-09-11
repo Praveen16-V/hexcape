@@ -38,7 +38,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "com.hexcape.hexcape"
+    namespace = "com.toolsila.hexcape"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -50,7 +50,7 @@ android {
     defaultConfig {
         // Permanent once the first build is uploaded: Play identifies the app
         // by this string for the rest of its life and it cannot be changed.
-        applicationId = "com.hexcape.hexcape"
+        applicationId = "com.toolsila.hexcape"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
