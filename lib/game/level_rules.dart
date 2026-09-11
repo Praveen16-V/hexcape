@@ -515,7 +515,15 @@ class Campaign {
   static const _slopeIntroDensity = 0.05;
 
   /// Enough sunken ground to be walked into rather than stepped around.
-  static const _sunkenIntroDensity = 0.10;
+  ///
+  /// 0.10 was enough on a full board and not on the one that announces it.
+  /// Level 83's silhouette cuts it to 164 cells where its neighbours run 253,
+  /// so the same density put three tiles on the banner level and six on the
+  /// practice beat after it — the mechanic at its thinnest on the one board
+  /// whose whole job is to teach it. A density floor cannot see the size of
+  /// the board it lands on; this is the smallest value that clears four on
+  /// the short board, and it leaves level 84 exactly where it was.
+  static const _sunkenIntroDensity = 0.12;
 
   /// Enough cracked ground on a board to be met rather than merely present.
   ///
@@ -1837,7 +1845,14 @@ class Campaign {
 /// difficulty curve's way. Signatures land on combination and breather levels;
 /// the challenge peaks are all [LevelSignature.gauntlet], which zeroes every
 /// entry here and is where the band's own numbers are felt undiluted.
-extension on LevelSignature {
+/// The board a signature asks for, as deltas against the band's own curve.
+///
+/// Named, and so visible outside this file, because the suppression half of a
+/// signature is load-bearing and worth a test: a spring level carrying the
+/// band's full wall density is a gauntlet that happens to have springs, since
+/// momentum has nowhere to land. Measuring that between two levels folds in
+/// pace relief and the band's climb; these are the numbers themselves.
+extension SignatureShape on LevelSignature {
   double get anchorDelta => switch (this) {
     LevelSignature.openTrail => -0.05,
     LevelSignature.heavyGround => -0.03,

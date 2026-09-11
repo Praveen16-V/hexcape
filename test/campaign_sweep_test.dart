@@ -82,7 +82,6 @@ void main() {
         // pressure; the full-pressure challenge peaks must still keep climbing.
         var budget = double.infinity;
         var clock = double.infinity;
-        var anchors = -1.0;
         for (var n = 1; n <= Campaign.length; n++) {
           final rules = Campaign.rulesFor(n);
           if (rules.pace != LevelPace.challenge) {
@@ -108,7 +107,6 @@ void main() {
           // band restarts its curve lower, and the flat bands climb on slopes
           // and sunken ground instead. The real invariant, that each band's
           // wall peak beats the last, lives in difficulty_pacing_test.
-          anchors = rules.anchorDensity;
         }
       },
       timeout: const Timeout(Duration(minutes: 4)),

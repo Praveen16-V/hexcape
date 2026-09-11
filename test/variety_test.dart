@@ -184,9 +184,21 @@ void main() {
       // land. A margin the pace relief alone could produce would not prove it.
       final gauntlet = Campaign.rulesFor(66);
       expect(Campaign.signatureFor(66), LevelSignature.gauntlet);
-      expect(gauntlet.anchorDensity - fault.anchorDensity, greaterThan(0.03));
-      expect(gauntlet.anchorDensity - spring.anchorDensity, greaterThan(0.03));
-      expect(gauntlet.heavyDensity - fault.heavyDensity, greaterThan(0.03));
+      // Measured on the signature, not between two levels. Subtracting one
+      // level's realised density from another's mixes pace relief into the
+      // answer — 66 is an introduction beat and 64 a practice one — and a
+      // margin the pace produced is exactly what the note above says must not
+      // count. It was reading 0.027 between 64 and 66 while springLine's own
+      // suppression was a healthy 0.035 the whole time.
+      expect(LevelSignature.gauntlet.anchorDelta, 0);
+      expect(LevelSignature.faultLine.anchorDelta, lessThanOrEqualTo(-0.03));
+      expect(LevelSignature.springLine.anchorDelta, lessThanOrEqualTo(-0.03));
+      expect(LevelSignature.faultLine.heavyDelta, lessThanOrEqualTo(-0.03));
+      // And it survives into the boards: undiluted is still the densest of the
+      // four, which is the half a delta on an enum cannot prove on its own.
+      expect(gauntlet.anchorDensity, greaterThan(fault.anchorDensity));
+      expect(gauntlet.anchorDensity, greaterThan(spring.anchorDensity));
+      expect(gauntlet.heavyDensity, greaterThan(fault.heavyDensity));
       // The spikes, held against the same undiluted peak.
       expect(spring.springDensity, greaterThan(gauntlet.springDensity * 1.5));
       expect(fault.faultDensity, greaterThan(gauntlet.faultDensity * 1.5));

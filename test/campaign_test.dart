@@ -136,8 +136,6 @@ void main() {
     });
 
     test('challenge peaks keep climbing while the campaign breathes', () {
-      var anchors = -1.0;
-      var heavy = -1.0;
       var budget = 99.0;
       var breathers = 0;
       for (
@@ -178,8 +176,6 @@ void main() {
           lessThanOrEqualTo(budget + 1e-9),
           reason: 'challenge $level loosened its budget',
         );
-        anchors = r.anchorDensity;
-        heavy = r.heavyDensity;
         budget = r.budgetMultiplier;
       }
       // A floor, not a target: the campaign carries eight, and the rebuild

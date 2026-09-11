@@ -40,12 +40,18 @@ void main() {
       final b = HexCell(const HexCoord(3, 3), HexType.mirror)
         ..partner = const HexCoord(0, 0)
         ..link = 1;
-      expect(a.hit(0), isFalse); // a charge is not an opening
+      // charge(), not hit(). hexcape_game routes a tap on a mirror to
+      // _carveMirror, which arms the cell; hit() is the generic path in the
+      // else branch beside it and would open the tile outright, which is the
+      // one thing a mirror is defined not to do on its own.
+      a.charge();
       expect(a.charged, isTrue);
       expect(a.isPassable, isFalse);
-      // Charging the twin while the first is armed completes the pair.
-      expect(b.hit(0), isFalse);
+      // Charging the twin while the first is armed completes the pair — but
+      // neither half opens until the game says so, which is the point.
+      b.charge();
       expect(b.charged, isTrue);
+      expect(b.isPassable, isFalse);
       // Completion is the game's job when it sees the pair agree — bar/mirror
       // state lives on the cells; _carveMirror is the keeper of the rule.
       a.clear(0);
@@ -57,8 +63,12 @@ void main() {
     test('contact ground is typed apart from throw tiles', () {
       for (final t in HexType.values) {
         final isContactHazard = t == HexType.thorn || t == HexType.alarm;
+        // Read the reason: a tile that moves her must NOT also be one that
+        // hurts on contact. This asserted the opposite — that anything which
+        // throws or pushes had to be a thorn or an alarm — so spring failed it
+        // for the entirely correct behaviour of throwing her without biting.
         expect(
-          t.throwsHer || t.pushesContinuously ? isContactHazard : true,
+          t.throwsHer || t.pushesContinuously ? !isContactHazard : true,
           isTrue,
           reason: '$t cannot both throw and bite',
         );
@@ -100,8 +110,17 @@ void main() {
       guard.update(0.02);
       expect(guard.lampOn, isTrue);
       expect(guard.lit, isNotEmpty);
-      guard.update(Guard.blinkLit + Guard.blinkDark - 0.04);
+      // Still lit at the far end of its lit half: it does not flicker early.
+      // This used to advance a whole cycle less 0.04 from a point 0.01 inside
+      // the lit half, which lands 0.03 *into the next dark half* — so the lamp
+      // was correctly off and the test asked for the wrong thing.
+      guard.update(Guard.blinkLit - 0.02);
       expect(guard.lampOn, isTrue);
+      // And dark again as the next cycle opens. That is the beat repeating,
+      // which is what this test is named for and never actually checked.
+      guard.update(0.04);
+      expect(guard.lampOn, isFalse);
+      expect(guard.lit, isEmpty);
     });
 
     test('a runner pauses at its ends', () {
