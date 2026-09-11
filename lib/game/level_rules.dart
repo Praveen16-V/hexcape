@@ -1473,21 +1473,27 @@ class Campaign {
       return LevelPace.challenge;
     }
     // Rebuilt cadence: anything an introduction or practice beat claims is
-    // out of both of these, and each challenge peak that lost its slot was
-    // re-dealt to the nearest combination level in the same band. 30 and 52
-    // were already shadowed by practice beats before the rebuild; the sets
-    // below are now exactly what they say.
+    // out of both of these, because both are checked above and win.
+    //
+    // These sets used to claim they were "exactly what they say" while six
+    // entries were inert — 31, 53 and 84 had been taken by introduction and
+    // practice beats, 55 and 74 the same, and 68 appeared in both sets where
+    // breather wins. Listing a level that cannot have the pace listed is worse
+    // than listing nothing: it reads as an authored decision and is a dead
+    // letter. They are removed rather than relocated, because with fifty-three
+    // gates to teach there are exactly two free slots left after a challenge
+    // (61 and 81) and nowhere to put them.
     const breathers = {
-      25, 28, 31, 50, 53, 56, //
+      25, 28, 50, 56, //
       62, 68, //
-      84, 96, 99,
+      96, 99,
     };
     if (breathers.contains(level)) return LevelPace.breather;
     const challenges = {
       8, 11, 14, 17, // Foundation
       24, 26, 27, 32, // Pressure (34/37/39 sit on thatch/ice/alarm practice)
-      43, 46, 49, 55, 57, // Mastery
-      65, 68, 71, 74, 77, // Collapse
+      43, 46, 49, 57, // Mastery (55 sits on a practice beat)
+      65, 71, 77, // Collapse (68 is a breather, 74 a practice beat)
       85, 88, 91, 95, // Vigil
     };
     if (challenges.contains(level)) return LevelPace.challenge;
