@@ -201,3 +201,41 @@ types?". Play Billing is not your collection — Google handles the transaction 
 the app never sees payment details. The `INTERNET` and `ACCESS_NETWORK_STATE`
 permissions in the merged manifest come from the billing plugin, not from any
 code of ours.
+
+---
+
+## Release path
+
+The developer account is a **personal** one, so Google requires a closed test
+with **at least 12 testers opted in continuously for 14 days** before production
+access can even be applied for. That clock cannot be shortened and it dominates
+the schedule, so start it as soon as there is an uploadable build — the listing
+art and copy can be finished while it runs.
+
+Order that respects the gating:
+
+1. Payments profile (Play Console → Setup). Verification takes days and nothing
+   about the in-app product can be created until it is done.
+2. Create the app, upload an AAB to **Internal testing**. Most console sections
+   stay locked until a bundle carrying the `BILLING` permission exists on a track.
+3. Create the `hexcape.full` product and set it Active. Add license testers
+   (Setup → License testing) so the paywall can be exercised without real money.
+4. Fill in every App content form using the table above.
+5. Promote to **Closed testing**, recruit 15–16 testers for slack on the 12
+   minimum, and let the 14 days run. Testers must install through the Play link
+   — billing does not work for a sideloaded build.
+6. Apply for production access, then roll out staged.
+
+### Build facts, verified against a real bundle
+
+- `flutter build appbundle --release` succeeds on Flutter 3.44.9 / AGP 9.0.1 /
+  Gradle 9.1.0. The `.aab` is ~51 MB, but roughly 27 MB of that is
+  `BUNDLE-METADATA` (R8 mapping and native debug symbols) which Play strips, and
+  the rest is three ABIs Play splits between. **A real arm64 device downloads
+  about 11 MB.** The old 51 MB universal APK was never representative.
+- All four native libraries (`libflutter`, `libapp`, `libdartjni`,
+  `libdatastore_shared_counter`) have 16 KB-aligned LOAD segments, so the
+  16 KB page-size requirement for new apps is already satisfied.
+- With `android/key.properties` absent the bundle is signed `CN=Android Debug`
+  and Play will reject it. Check the signer before uploading:
+  `keytool -printcert -jarfile <path to aab>`.
