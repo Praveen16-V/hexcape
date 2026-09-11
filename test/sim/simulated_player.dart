@@ -33,6 +33,7 @@ class SimResult {
     required this.hungerCapacity,
     this.guardHits = 0,
     this.springLaunches = 0,
+    this.maxWedged = 0,
     this.reason = 'won',
   });
 
@@ -52,6 +53,14 @@ class SimResult {
   /// How many times a patrol caught her, and how many springs threw her.
   final int guardHits;
   final int springLaunches;
+
+  /// The longest unbroken stretch she spent asking to move and going nowhere.
+  ///
+  /// Her recovery ladder starts at a quarter of a second and has placed her on
+  /// a tile outright by nine tenths, so anything approaching a second means
+  /// both rungs failed and she is wedged in the geometry — the failure rivets
+  /// make permanent, because no tap can change a board they wall in.
+  final double maxWedged;
 
   int get spare => budget - taps;
 }
@@ -121,6 +130,7 @@ SimResult play({
   var nextTapAt = 0.0;
   var lastProgressAt = 0.0;
   var bestDistance = grid.distanceToExit(grid.start);
+  var maxWedged = 0.0;
   const dt = 1 / 60;
 
   SimResult finish(bool won, String reason) => SimResult(
@@ -132,6 +142,7 @@ SimResult play({
     hungerCapacity: hunger.capacity,
     guardHits: guardHits,
     springLaunches: springLaunches,
+    maxWedged: maxWedged,
     reason: reason,
   );
 
@@ -298,6 +309,10 @@ SimResult play({
         tuning.tapRadiusFor(layout.width) * powerups.tapRadiusMultiplier * 1.2,
       ),
     );
+
+    if (dog.wedgedFor > maxWedged) {
+      maxWedged = dog.wedgedFor;
+    }
 
     // Progress means closing the gap along a route that actually exists, so
     // this uses the anchor-aware field the dog herself steers on.

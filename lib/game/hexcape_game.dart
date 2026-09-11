@@ -1307,7 +1307,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
       layout: layout,
       tuning: tuning,
       fieldVersion: fieldVersion,
-      regrowthActive: playing && tuning.regrowthEnabled && !tuning.zenMode,
+      // The local, not a second derivation of it. Re-deriving it here dropped
+      // the FREEZE term, so the powerup held the field still while the clock
+      // that crushes her kept counting -- crushed by ground that was not
+      // moving, holding the tool whose entire promise is the opposite.
+      regrowthActive: regrowthActive,
       // A pet's pace rides the same slot as a sprint's: one multiplier, one
       // place, and no second speed channel to mis-balance.
       speedMultiplier: powerups.speedMultiplier * pet.perk.speedScale,
@@ -1320,7 +1324,15 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // Eddy and magnet are *continuous* forces, unlike the throws: they lean on
     // her velocity for as long as she stands on them, which is what makes them
     // readable instead of startling.
-    if (!surepaw && under != null && under.type.pushesContinuously) {
+    // Stood down while she is wedged. An eddy's job is to deny her a resting
+    // place, which in a pocket walled by rivets means shoving her at a wall
+    // that will never open -- and it pushes in exactly the opposite direction
+    // to the one recovery the game sanctions, so the two would fight forever.
+    // It costs the mechanic nothing: this is zero on every frame she moves.
+    if (!surepaw &&
+        under != null &&
+        under.type.pushesContinuously &&
+        dog.wedgedFor <= 0) {
       final centre = layout.toPixel(dog.cell);
       final away = dog.position - centre;
       if (away.distance > 1e-4) {

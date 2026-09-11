@@ -167,16 +167,12 @@ class HexGrid {
   /// value rather than being absent, so callers can compare without a null.
   int distanceToExit(HexCoord c) => exitDistance[c] ?? 1 << 20;
 
-  /// True when every direction out of [c] is blocked. Drives the "nowhere to
-  /// drift" idle, and is the single-cell shorthand for [isBoxedIn].
-  bool isEnclosed(HexCoord c) => c.neighbours.every(blocks);
-
   /// True when nothing she could step into is open. Drives the boxed-in
   /// failure state (§10).
   ///
   /// [footprint] is every cell her collision body touches, not just the cell
-  /// under her centre — and that distinction is the whole reason this exists
-  /// alongside [isEnclosed]. Regrowth holds every occupied cell short of the
+  /// under her centre — and that distinction is the whole point. Regrowth
+  /// holds every occupied cell short of the
   /// snap so she is never crushed without warning, so while she straddles a
   /// shared edge it holds *both* of them, indefinitely. A two-cell hole
   /// exactly her own size therefore stays passable forever; asking only
