@@ -14,12 +14,17 @@ void main() {
       'owns_full': true,
     });
     final progress = await Progress.load();
+    // Real levels, checked against `Campaign.paceFor`. The previous set was
+    // authored when the schedule was a different shape and had drifted to
+    // naming three paces their levels no longer had.
+    // Learning is absent on purpose: LevelDetail hides the whole pace block
+    // behind `if (!rules.isTutorial)`, so levels 1-3 never show one.
     const examples = {
       9: LevelPace.introduction,
       10: LevelPace.practice,
-      11: LevelPace.combination,
-      12: LevelPace.challenge,
-      13: LevelPace.breather,
+      7: LevelPace.combination,
+      8: LevelPace.challenge,
+      25: LevelPace.breather,
     };
     for (final entry in examples.entries) {
       await tester.pumpWidget(

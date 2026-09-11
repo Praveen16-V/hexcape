@@ -247,7 +247,9 @@ const allReferenceEntries = <ReferenceEntry>[
         'hotter, one leaves the ground slower to close — but none of them is '
         'the strictly right one. Stars buy the company, not a shortcut.',
     icon: Icons.pets,
-    unlocksAt: 0,
+    // Scout costs no stars, so pets are a level-one idea. Zero said the same
+    // thing only because the filter is `<=`; 1 is what it means.
+    unlocksAt: 1,
   ),
   ReferenceEntry(
     section: ReferenceSection.rules,

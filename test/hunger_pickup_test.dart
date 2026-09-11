@@ -195,11 +195,13 @@ void main() {
       expect(effects.heldCharges, isEmpty);
     });
 
-    test('every powerup is either timed or a charge, never neither', () {
-      // A kind that is neither would be granted and then silently do nothing.
+    test('every powerup is timed, a charge, or a passive', () {
+      // A kind that is none of the three would be granted and then silently do
+      // nothing. Passives are the third arm and were missing here: a pouch is
+      // neither timed nor armed, it waits on the next treat and doubles it.
       for (final kind in PickupKind.values.where((k) => k.isPowerup)) {
         expect(
-          kind.isCharge || kind.duration > 0,
+          kind.isCharge || kind.duration > 0 || kind.isPassive,
           isTrue,
           reason: '${kind.name} does nothing when granted',
         );
@@ -316,9 +318,18 @@ void main() {
       final level = LevelGenerator.generate(
         const LevelSpec(seed: 3, treats: 3, powerups: 2),
       );
+      // `treats:` asks for that much *food*, not that many of one kind. The
+      // generator turns round(treats / 3) of them into the taps-only ration
+      // before placement, so asking for three is two treats and one ration.
+      // Counting only PickupKind.treat read that split as a level coming up
+      // one short, on ninety-eight of the hundred campaign levels.
+      final food = level.pickups.where((p) => p.kind.refundsTaps);
       final treats = level.pickups.where((p) => p.kind == PickupKind.treat);
+      final rations = level.pickups.where((p) => p.kind == PickupKind.ration);
       final powerups = level.pickups.where((p) => p.kind.isPowerup);
-      expect(treats.length, 3);
+      expect(food.length, 3);
+      expect(treats.length, 2);
+      expect(rations.length, 1);
       expect(powerups.length, 2);
       // Cycling the kinds keeps a level from offering the same thing twice.
       expect(powerups.map((p) => p.kind).toSet().length, 2);
@@ -338,8 +349,17 @@ void main() {
         );
         final costs = PickupSystem.detourCosts(level.grid);
         for (final pickup in level.pickups) {
-          placed++;
           final cost = costs[pickup.coord]!;
+          // A ration rides along in this spec, because asking for treats asks
+          // for food and part of it is dealt as rations. It is a different
+          // promise — taps back but no time — so it carries its own budget and
+          // must not be measured against the treat's.
+          if (pickup.kind == PickupKind.ration) {
+            expect(cost.taps, lessThanOrEqualTo(2), reason: 'ration, seed $seed');
+            expect(cost.steps, lessThanOrEqualTo(4), reason: 'ration, seed $seed');
+            continue;
+          }
+          placed++;
           expect(cost.taps, lessThanOrEqualTo(1), reason: 'seed $seed');
           expect(cost.steps, lessThanOrEqualTo(2), reason: 'seed $seed');
         }
@@ -355,6 +375,8 @@ void main() {
         PickupKind.scent: (taps: 4, steps: 5),
         PickupKind.blast: (taps: 6, steps: 6),
         PickupKind.dig: (taps: 4, steps: 6),
+        PickupKind.lantern: (taps: 4, steps: 5),
+        PickupKind.cloak: (taps: 4, steps: 6),
       };
       for (var seed = 0; seed < 40; seed++) {
         final level = LevelGenerator.generate(
@@ -363,8 +385,18 @@ void main() {
         final costs = PickupSystem.detourCosts(level.grid);
         for (final pickup in level.pickups) {
           final cost = costs[pickup.coord]!;
-          final limit = limits[pickup.kind]!;
-          expect(cost.taps, lessThanOrEqualTo(limit.taps));
+          final limit = limits[pickup.kind];
+          // Was a bare `!`, so adding a powerup to the offered pool failed here
+          // as a null dereference with nothing to say. What it is actually
+          // asking is how far this new tool is worth walking for.
+          expect(
+            limit,
+            isNotNull,
+            reason:
+                '${pickup.kind.name} has no detour limit here — say how far '
+                'it is worth walking for',
+          );
+          expect(cost.taps, lessThanOrEqualTo(limit!.taps));
           expect(cost.steps, lessThanOrEqualTo(limit.steps));
         }
       }
