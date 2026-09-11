@@ -195,11 +195,13 @@ void main() {
       expect(effects.heldCharges, isEmpty);
     });
 
-    test('every powerup is either timed or a charge, never neither', () {
-      // A kind that is neither would be granted and then silently do nothing.
+    test('every powerup is timed, a charge, or a passive', () {
+      // A kind that is none of the three would be granted and then silently do
+      // nothing. Passives are the third arm and were missing here: a pouch is
+      // neither timed nor armed, it waits on the next treat and doubles it.
       for (final kind in PickupKind.values.where((k) => k.isPowerup)) {
         expect(
-          kind.isCharge || kind.duration > 0,
+          kind.isCharge || kind.duration > 0 || kind.isPassive,
           isTrue,
           reason: '${kind.name} does nothing when granted',
         );
