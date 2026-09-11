@@ -8,8 +8,11 @@ import '../hex/hex_grid.dart';
 /// What a step points at.
 ///
 /// Named by **rule, not coordinate**, because every board is generated — there
-/// is no cell 4,-7 to hardcode. The rule is resolved against the live grid each
-/// frame, so a highlight follows the game rather than a script written blind.
+/// is no cell 4,-7 to hardcode. The rule is resolved against the live grid, so
+/// a highlight follows the game rather than a script written blind — but it is
+/// resolved *once per lesson* and then held, because a rule re-run every frame
+/// answers a question the player is not being asked. Resolution and release are
+/// both in [Tutorial.targetCell], and the two together are the whole design.
 enum TutorialTarget {
   /// The next cell she needs opened, on the cheapest route to the bone.
   nextOnRoute,
@@ -107,10 +110,26 @@ class Tutorial {
   final List<TutorialStep> steps;
 
   int _index = 0;
-  HexCoord? _reachTarget;
   bool _done = false;
   double _watched = 0;
   bool _sawRegrowth = false;
+
+  /// The tile the highlight is standing on, the lesson that put it there, and
+  /// how far from her it was when it did.
+  ///
+  /// A latch, not a cache: the point is that it is *released by events* rather
+  /// than re-run per frame. See [targetCell].
+  HexCoord? _held;
+  int _heldStep = -1;
+  int _heldDistance = 0;
+
+  /// The treat or charge this beat was set on.
+  ///
+  /// Kept apart from [_held] on purpose. The hold belongs to the *mark* and is
+  /// released as soon as the tile stops matching the rule; this is the beat's
+  /// own commitment, which [TutorialAdvance.onReach] has to end on — including
+  /// when the reason it stopped matching is that she just picked the thing up.
+  HexCoord? _reachTarget;
 
   /// The field just closed a cell. Called by the game so a
   /// [TutorialAdvance.onRegrow] beat ends on the thing it is describing.
@@ -119,7 +138,12 @@ class Tutorial {
   int get stepNumber => (_index + 1).clamp(1, steps.length);
   int get stepCount => steps.length;
 
-  void skip() => _done = true;
+  /// Gives up on the script. The mark goes with it: a pointer that outlives
+  /// the lesson that set it is a hint about nothing.
+  void skip() {
+    _done = true;
+    _clearHold();
+  }
 
   /// Explanations wait for acknowledgement; action steps require real play.
   void continueLesson() {
@@ -138,6 +162,7 @@ class Tutorial {
 
   void reset() {
     _index = 0;
+    _clearHold();
     _reachTarget = null;
     _done = false;
     _watched = 0;
@@ -146,18 +171,119 @@ class Tutorial {
 
   void _next() {
     _index++;
+    _clearHold();
     _reachTarget = null;
     _watched = 0;
     _sawRegrowth = false;
   }
 
+  void _clearHold() {
+    _held = null;
+    _heldStep = -1;
+    _heldDistance = 0;
+  }
+
   /// The cell this step points at, resolved against the board as it is now.
+  ///
+  /// "As it is now" means *when the lesson was asked*, not *on this frame*.
+  /// Every rule above starts from her own cell, so re-running one per frame
+  /// re-picks its answer on every step she takes: the cheapest route from here
+  /// is not the cheapest route from one cell further on, and while she crosses
+  /// an open stretch several tiles ahead qualify in turn. A mark that hops
+  /// between candidates is the one thing this must not be — the player spends
+  /// the beat watching the tile that lit up last rather than the one to tap,
+  /// and a gate that refuses every other tap starts to look arbitrary.
+  ///
+  /// So one answer is held per lesson, released only by the events that make
+  /// it wrong rather than merely nearer:
+  ///
+  ///  * the step moving on, which [_next] does for every kind of ending;
+  ///  * the tile ceasing to be what the rule named — opened by her tap,
+  ///    opened by a dig or a launch, grown back over, or picked up;
+  ///  * her walking far enough away that the lesson belongs where she is now,
+  ///    which is what [_walkedOff] decides.
+  ///
+  /// The middle one is what stops the hold reading as a freeze: the mark sits
+  /// on the tile she is asked to open, stays there the whole way across, and
+  /// moves on the moment she has reached it, which is when the next tile
+  /// needs it. And since a gate refuses every tap but the one on the held
+  /// tile, a hold could in principle outlive its answer and lock the player
+  /// out of their own run — which is why both release checks are consulted
+  /// before the hold is honoured.
   HexCoord? targetCell(HexGrid grid, Dog dog, List<Pickup> pickups) {
     final step = current;
     if (step == null) {
+      _clearHold();
       return null;
     }
-    return switch (step.target) {
+    final held = _held;
+    if (held != null &&
+        _heldStep == _index &&
+        _stillAsks(step.target, held, grid, pickups) &&
+        !_walkedOff(step, held, dog)) {
+      return held;
+    }
+    final resolved = _resolve(step.target, grid, dog, pickups);
+    _held = resolved;
+    _heldStep = resolved == null ? -1 : _index;
+    _heldDistance = resolved?.distanceTo(dog.cell) ?? 0;
+    return resolved;
+  }
+
+  /// Whether she has put enough ground between herself and the mark that the
+  /// lesson it marks is the wrong lesson for where she is now.
+  ///
+  /// Only the beats a tap settles re-ask, and only once she is a cell further
+  /// off than when the mark was set: from there the rule's own reach covers
+  /// her, so a fresh answer is nearer *and* costs nothing extra, while a mark
+  /// pinned to ground she is walking away from is a gate that will not open.
+  /// A beat settled by reaching something keeps its target however far it is —
+  /// trading a treat for a nearer one mid-detour is how a lesson turns into a
+  /// coin toss, which is why [TutorialTarget.nearestPickup] commits to a cell
+  /// in [_resolve].
+  bool _walkedOff(TutorialStep step, HexCoord held, Dog dog) {
+    // The distance she is allowed to put between herself and the mark before it
+    // is re-pointed at where she actually is.
+    const slack = 1;
+    return step.advance == TutorialAdvance.onTap &&
+        held.distanceTo(dog.cell) > _heldDistance + slack;
+  }
+
+  /// Whether the tile under the mark is still the tile the rule names — i.e.
+  /// whether the lesson it was pinned for is still unanswered.
+  static bool _stillAsks(
+    TutorialTarget target,
+    HexCoord held,
+    HexGrid grid,
+    List<Pickup> pickups,
+  ) {
+    final cell = grid.at(held);
+    if (cell == null) {
+      return false;
+    }
+    // A tile to open is asked for until it is open. One test covers both ways
+    // the lesson ends — her tap, and her walking onto ground something else had
+    // opened — so neither needs a rule of its own.
+    final open = grid.isClearable(held);
+    final waiting = pickups.any((p) => p.coord == held && !p.collected);
+    return switch (target) {
+      // Never marked, so never held.
+      TutorialTarget.none => false,
+      TutorialTarget.nextOnRoute || TutorialTarget.widenPath => open,
+      TutorialTarget.nearestAnchor => cell.type == HexType.anchor,
+      TutorialTarget.nearestHeavy => cell.isSolid && cell.type == HexType.heavy,
+      TutorialTarget.nearestPickup => waiting,
+    };
+  }
+
+  /// The tile the rule names, taken fresh from the board.
+  HexCoord? _resolve(
+    TutorialTarget target,
+    HexGrid grid,
+    Dog dog,
+    List<Pickup> pickups,
+  ) {
+    return switch (target) {
       TutorialTarget.none => null,
       TutorialTarget.nextOnRoute => _nextOnRoute(grid, dog),
       TutorialTarget.widenPath => _widenPath(grid, dog),
@@ -171,6 +297,10 @@ class Tutorial {
         dog,
         (c) => c.type == HexType.heavy && c.isSolid,
       ),
+      // The beat commits once, and [_held] keeps that commit visible for its
+      // whole life. Re-picking "the nearest" from wherever she has got to would
+      // let a second treat steal the mark mid-detour — and the collect that
+      // releases the hold has to be answered against the cell it set out for.
       TutorialTarget.nearestPickup => _reachTarget ??= _nearestPickup(
         dog,
         pickups,
@@ -335,7 +465,11 @@ class Tutorial {
   static Tutorial? forLevel(int level) => switch (level) {
     1 => Tutorial(const [
       TutorialStep(
-        prompt: 'Tap the glowing tile',
+        // The goal in the first words she reads, because the first lesson is a
+        // tap on a tile and a tap on a tile looks like the whole game. The bone
+        // is on the board already, glowing, so the line points at something she
+        // can see rather than at a noun she has to imagine.
+        prompt: 'Open a way to the bone: tap the glowing tile',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
@@ -357,7 +491,21 @@ class Tutorial {
         target: TutorialTarget.widenPath,
         advance: TutorialAdvance.onTap,
       ),
-      TutorialStep(prompt: 'More open space, more speed. Find the bone!'),
+      TutorialStep(prompt: 'More open space, more speed'),
+      // The line the whole level exists for, and the one no amount of tapping
+      // can imply. Four beats of "open this tile" teach that the board is the
+      // game; then the board is open, the card is gone, and nothing has said
+      // that clearing ground is only how she gets somewhere. **She has to
+      // arrive at the bone**, and every lesson above is a means to that.
+      //
+      // Named on the first card so she knows what she is aiming at, and again
+      // here because a goal read before the very first tap is a slogan while
+      // one read after four taps that moved her is an instruction. Being the
+      // final beat also puts it on the card whose button reads "Let's play", so
+      // the last words before the run is hers are the thing she has to do.
+      TutorialStep(
+        prompt: 'She has to reach the bone herself — keep opening a way to it',
+      ),
     ]),
     // Regrowth and the two special tiles.
     //

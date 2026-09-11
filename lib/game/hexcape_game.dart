@@ -431,7 +431,13 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   bool get tutorialReading =>
       tutorial?.current?.advance == TutorialAdvance.onContinue;
 
-  /// The cell the tutorial is pointing at, resolved each frame for the renderer.
+  /// The cell the tutorial is pointing at, for the renderer.
+  ///
+  /// Written every frame the script is live, but re-resolved only when the beat
+  /// behind it is answered: [Tutorial.targetCell] holds one tile per lesson so
+  /// the mark cannot hop between candidates while she is walking towards them.
+  /// Writing it every frame anyway is what keeps a released hold — the tile
+  /// opened, the treat taken — from leaving a mark frozen on the board.
   HexCoord? tutorialTarget;
 
   /// Saved progress, or null before it has loaded.
@@ -2905,7 +2911,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
 
     // A gated tutorial step refuses everything but the tile it is pointing at,
     // so the lesson cannot be skimmed past. It costs nothing — a refused tap is
-    // not a wasted one.
+    // not a wasted one. And because [Tutorial.targetCell] holds its answer for
+    // the life of the beat, the tile captured here is the one that was glowing
+    // when the finger went down, not one re-picked from wherever she has got to.
     final script = tutorial;
     final targetBeforeTap = script?.targetCell(grid, dog, pickups);
     if (script != null &&
