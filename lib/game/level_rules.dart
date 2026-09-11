@@ -689,7 +689,26 @@ class Campaign {
   /// replacement is a compact diamond with a shorter protected route and room
   /// beside every route cell on both Normal and Hard, while retaining the
   /// heavy-ground identity promised by “Hard Shell”.
-  static const _authoredSeedOverrides = {11: 11441};
+  ///
+  /// Level 20 had a worse version of the same disease, on the level that can
+  /// least afford it. It is the Foundation finale, and the level
+  /// `Entitlements.freeThrough` names — the last board a player sees before
+  /// being asked for money. Its generated field answered to a straight line:
+  /// nineteen steps up the centre column of a 183-cell diamond, with the
+  /// entire left half an inert mass of rivets the route never came near. Hard
+  /// piled thirteen more rivets and six more brambles onto that board and left
+  /// the straight line untouched, so the mode changed the numbers without
+  /// changing the question.
+  ///
+  /// Its replacement forks. The field splits at her feet into a left flank and
+  /// a right one that rejoin at the bone, and the two cost within two taps of
+  /// each other — which is what makes the choice a choice rather than a
+  /// cheaper answer and a mistake. Hard takes the *other* flank: the heavier
+  /// ground flips which side is cheaper, so the two modes are two different
+  /// boards rather than one board at two prices. It also lands two spare taps
+  /// on Hard where the old board left one, which on the last free level is the
+  /// difference between a tight finish and a coin toss.
+  static const _authoredSeedOverrides = {11: 11441, 20: 26895};
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
