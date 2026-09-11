@@ -157,6 +157,66 @@ void main() {
       expect(find.text('Unlock all stages'), findsNothing);
     });
 
+    testWidgets('nor is the switch that reveals it', (tester) async {
+      // The row above it is the real leak: a player who finds "Developer tools"
+      // is two taps from the whole paid campaign. Since the store listing sells
+      // 80 levels, this test is guarding revenue, not tidiness.
+      final progress = await Progress.load();
+      await open(tester, progress);
+      expect(find.text('Developer tools'), findsNothing);
+    });
+
+    testWidgets('seven taps on the title bring it back', (tester) async {
+      // The panel has to stay reachable in a release build: every playtest of
+      // this project is one, so compiling it out would cost more than it saves.
+      final progress = await Progress.load();
+      await open(tester, progress);
+
+      final title = find.text('SETTINGS');
+      for (var i = 0; i < 6; i++) {
+        await tester.tap(title);
+      }
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Developer tools'),
+        findsNothing,
+        reason: 'six taps is not seven',
+      );
+
+      await tester.tap(title);
+      await tester.pumpAndSettle();
+      expect(find.text('Developer tools'), findsOneWidget);
+    });
+
+    testWidgets('a sheet reopened after the gesture starts hidden again', (
+      tester,
+    ) async {
+      // The count lives in the widget state, so closing the sheet drops it.
+      // Without that a player could accumulate seven taps over a week.
+      final progress = await Progress.load();
+      await open(tester, progress);
+      for (var i = 0; i < 7; i++) {
+        await tester.tap(find.text('SETTINGS'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Developer tools'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await open(tester, progress);
+      expect(find.text('Developer tools'), findsNothing);
+    });
+
+    testWidgets('but stays put once the panel is actually in use', (
+      tester,
+    ) async {
+      // Having turned it on, we should not have to tap our way back in on every
+      // visit for the rest of the playtest.
+      final progress = await Progress.load();
+      await progress.setDeveloperTools(true);
+      await open(tester, progress);
+      expect(find.text('Developer tools'), findsOneWidget);
+    });
+
     testWidgets('appears once developer tools are on, and toggles', (
       tester,
     ) async {

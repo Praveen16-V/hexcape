@@ -34,8 +34,34 @@ class SettingsSheet extends StatefulWidget {
   State<SettingsSheet> createState() => _SettingsSheetState();
 }
 
+/// Taps on the title that reveal the developer row.
+///
+/// Long enough that nobody arrives by fidgeting, short enough to do one-handed
+/// while holding a test device.
+const _devGestureTaps = 7;
+
 class _SettingsSheetState extends State<SettingsSheet> {
   Progress get _p => widget.progress;
+
+  /// Counts taps on the SETTINGS title. Not persisted, and the state goes with
+  /// the sheet, so closing it puts the count back to zero — a player cannot
+  /// accumulate seven taps across a week of visits.
+  int _titleTaps = 0;
+
+  /// Whether this sitting has earned the developer row. Ored with the stored
+  /// [Progress.developerTools] below, so once the panel is genuinely in use it
+  /// stays visible without re-entering the gesture every time.
+  bool _devRevealed = false;
+
+  void _tapTitle() {
+    if (_devRevealed || _p.developerTools) {
+      return;
+    }
+    _titleTaps++;
+    if (_titleTaps >= _devGestureTaps) {
+      setState(() => _devRevealed = true);
+    }
+  }
 
   Future<void> _apply(Future<void> Function() write) async {
     await write();
@@ -73,13 +99,20 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'SETTINGS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2.4,
+              // The way into the developer row. Opaque so the whole line is the
+              // target, and deliberately silent — no counter, no "3 more taps",
+              // nothing a curious player could follow to the end.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _tapTitle,
+                child: const Text(
+                  'SETTINGS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2.4,
+                  ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -150,32 +183,39 @@ class _SettingsSheetState extends State<SettingsSheet> {
                   ),
                 ),
               ],
-              const SizedBox(height: 10),
-              Divider(color: Palette.lockedEdge, height: 1),
-              const SizedBox(height: 10),
-              _Toggle(
-                label: 'Developer tools',
-                blurb:
-                    'The tuning panel: sliders, a level jump, and a button '
-                    'that erases your progress. Off unless you mean it.',
-                value: _p.developerTools,
-                onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
-              ),
-              // Nested inside the developer switch rather than sitting beside it.
-              // This one opens the paid campaign, so it must not be a thing a
-              // player can find; behind a toggle they have already had to turn on
-              // deliberately, it grants nothing the level jump in that same panel
-              // does not already give away.
-              if (_p.developerTools)
+              // Everything below here is ours, not the player's, and it is not
+              // in the sheet at all until the title gesture asks for it. The
+              // panel it opens holds a level jump and a button that erases a
+              // save; the switch under it opens the paid campaign outright.
+              // Scrolling to the bottom of your own settings must not be a way
+              // to find either.
+              if (_devRevealed || _p.developerTools) ...[
+                const SizedBox(height: 10),
+                Divider(color: Palette.lockedEdge, height: 1),
+                const SizedBox(height: 10),
                 _Toggle(
-                  label: 'Unlock all stages',
+                  label: 'Developer tools',
                   blurb:
-                      'Every level playable, in any order, for testing. Your '
-                      'real progress is untouched and comes back when this '
-                      'goes off.',
-                  value: _p.unlockAllLevels,
-                  onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
+                      'The tuning panel: sliders, a level jump, and a button '
+                      'that erases your progress. Off unless you mean it.',
+                  value: _p.developerTools,
+                  onChanged: (v) => _apply(() => _p.setDeveloperTools(v)),
                 ),
+                // Nested inside the developer switch rather than sitting beside
+                // it, so reaching the paid campaign costs the gesture *and* a
+                // deliberate toggle. At that point it grants nothing the level
+                // jump in the same panel does not already give away.
+                if (_p.developerTools)
+                  _Toggle(
+                    label: 'Unlock all stages',
+                    blurb:
+                        'Every level playable, in any order, for testing. Your '
+                        'real progress is untouched and comes back when this '
+                        'goes off.',
+                    value: _p.unlockAllLevels,
+                    onChanged: (v) => _apply(() => _p.setUnlockAllLevels(v)),
+                  ),
+              ],
             ],
           ),
         ),
