@@ -32,6 +32,45 @@ class LevelRecord {
   final Difficulty difficulty;
 
   bool get played => stars > 0;
+
+  /// The better of two records for the same level, field by field.
+  ///
+  /// The rule [Progress.recordWin] already applies to a replay, lifted out so
+  /// the cloud merge cannot drift from it: **every field only ever improves.**
+  /// That is what makes syncing safe in both directions — a save arriving from
+  /// another device can add to this one and can never take anything away, so
+  /// there is no version of the merge that loses a three-star run.
+  LevelRecord mergedWith(LevelRecord other) {
+    final best = stars >= other.stars ? this : other;
+    final worst = identical(best, this) ? other : this;
+    return LevelRecord(
+      stars: best.stars,
+      // Zero means "never finished", so any real result beats it.
+      bestTaps: _betterInt(bestTaps, other.bestTaps),
+      bestTime: _betterDouble(bestTime, other.bestTime),
+      // Follows the stars, because it exists to say what they cost. Equal star
+      // counts hand the badge to the harder setting.
+      difficulty:
+          best.stars == worst.stars &&
+              worst.difficulty.rank > best.difficulty.rank
+          ? worst.difficulty
+          : best.difficulty,
+    );
+  }
+
+  /// The lower of two "best" numbers, treating zero as absent rather than as
+  /// an unbeatable record.
+  static int _betterInt(int a, int b) {
+    if (a == 0) return b;
+    if (b == 0) return a;
+    return a < b ? a : b;
+  }
+
+  static double _betterDouble(double a, double b) {
+    if (a == 0) return b;
+    if (b == 0) return a;
+    return a < b ? a : b;
+  }
 }
 
 /// Everything that has to survive closing the app.
@@ -433,6 +472,174 @@ class Progress {
       return null;
     }
     return DateTime.utc(y, m, d);
+  }
+
+  // -------------------------------------------------------------------------
+  // Cloud sync (§ saved games). The snapshot is what travels; the merge is what
+  // makes travelling safe.
+  // -------------------------------------------------------------------------
+
+  /// The version stamped into every snapshot.
+  ///
+  /// Read but never trusted: [mergeSnapshot] ignores a snapshot from a *newer*
+  /// build rather than guessing at fields it has never heard of. A player with
+  /// two devices on two versions must not have the older one quietly discard
+  /// what the newer one wrote.
+  static const snapshotVersion = 1;
+
+  /// Everything worth carrying between devices.
+  ///
+  /// Deliberately **not** everything in the file. Settings — volume, zoom,
+  /// haptics, reduced motion — are comfort choices about *this* phone, and a
+  /// tablet is not wrong to be louder than a handset. The purchase is not here
+  /// either: Play is the record for that and re-queries on every launch, so
+  /// shipping a copy of it in a save file would only create a second answer
+  /// that can disagree.
+  Map<String, Object?> toSnapshot() => {
+    'v': snapshotVersion,
+    'unlocked': unlocked,
+    'endless': endlessBest,
+    'lessons': lessonsSeen,
+    'pet': pet,
+    'trial': trialUsed,
+    'daily_last': dailyLastCleared,
+    'daily_streak': dailyStreak,
+    'daily_best': dailyBestStreak,
+    'levels': {
+      for (final entry in _records.entries)
+        '${entry.key}': {
+          'stars': entry.value.stars,
+          'taps': entry.value.bestTaps,
+          'time': entry.value.bestTime,
+          'diff': entry.value.difficulty.storageKey,
+        },
+    },
+  };
+
+  /// Folds a snapshot from another device into this save.
+  ///
+  /// **Additive in every field, without exception.** The cloud is not an
+  /// authority here and the local file is not either — the better of the two
+  /// wins each number, so the operation is safe to run in any order, any number
+  /// of times, and after any amount of offline play. That is what lets sync
+  /// happen quietly in the background instead of behind a "which save do you
+  /// want to keep?" dialog nobody can answer correctly.
+  ///
+  /// Returns whether anything changed, so a caller can skip writing back a
+  /// snapshot identical to the one it just read.
+  Future<bool> mergeSnapshot(Map<String, Object?> snapshot) async {
+    final version = snapshot['v'];
+    if (version is! int || version > snapshotVersion) {
+      return false;
+    }
+    var changed = false;
+
+    Future<void> raiseInt(String key, String prefsKey, int current) async {
+      final incoming = snapshot[key];
+      if (incoming is int && incoming > current) {
+        await _prefs.setInt(prefsKey, incoming);
+        changed = true;
+      }
+    }
+
+    await raiseInt('unlocked', _unlockedKey, unlocked);
+    await raiseInt('endless', _endlessKey, endlessBest);
+    await raiseInt('lessons', _lessonsKey, lessonsSeen);
+
+    // Once spent, spent. Syncing this is what stops a reinstall handing out a
+    // second free look at the trial level.
+    if (snapshot['trial'] == true && !trialUsed) {
+      await _prefs.setBool(_trialKey, true);
+      changed = true;
+    }
+
+    // A choice rather than an achievement, so it only fills a gap: whoever is
+    // still on the default has not chosen, and a fresh install always is.
+    // Compared against the current value as well as the default, because
+    // writing the same string back still counts as a write — and a merge that
+    // reports a change it did not make turns an idle sync into an endless
+    // round trip.
+    final incomingPet = snapshot['pet'];
+    if (incomingPet is String &&
+        incomingPet.isNotEmpty &&
+        incomingPet != pet &&
+        pet == 'dog') {
+      await _prefs.setString(_petKey, incomingPet);
+      changed = true;
+    }
+
+    // The streak belongs to whichever device cleared a daily most recently;
+    // the best streak is simply the higher of the two, since it is a record.
+    final incomingLast = snapshot['daily_last'];
+    final incomingStreak = snapshot['daily_streak'];
+    if (incomingLast is String &&
+        incomingStreak is int &&
+        incomingLast.compareTo(dailyLastCleared) > 0) {
+      await _prefs.setString(_dailyLastKey, incomingLast);
+      await _prefs.setInt(_dailyStreakKey, incomingStreak);
+      changed = true;
+    }
+    await raiseInt('daily_best', _dailyBestKey, dailyBestStreak);
+
+    final levels = snapshot['levels'];
+    if (levels is Map) {
+      for (final entry in levels.entries) {
+        final level = int.tryParse('${entry.key}');
+        final fields = entry.value;
+        if (level == null || fields is! Map) {
+          continue;
+        }
+        // Read defensively rather than cast. This data came off a network and
+        // out of a file that another build wrote; a single bad field must cost
+        // that field, never the save.
+        final incoming = LevelRecord(
+          stars: _asInt(fields['stars']),
+          bestTaps: _asInt(fields['taps']),
+          bestTime: _asDouble(fields['time']),
+          difficulty: Difficulty.fromKey(
+            fields['diff'] is String ? fields['diff'] as String : null,
+          ),
+        );
+        final existing = recordFor(level);
+        final merged = existing.mergedWith(incoming);
+        if (merged.stars == existing.stars &&
+            merged.bestTaps == existing.bestTaps &&
+            merged.bestTime == existing.bestTime &&
+            merged.difficulty == existing.difficulty) {
+          continue;
+        }
+        _records[level] = merged;
+        await _prefs.setInt('lvl_${level}_stars', merged.stars);
+        await _prefs.setInt('lvl_${level}_taps', merged.bestTaps);
+        await _prefs.setDouble('lvl_${level}_time', merged.bestTime);
+        await _prefs.setString(
+          'lvl_${level}_diff',
+          merged.difficulty.storageKey,
+        );
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static int _asInt(Object? value) => value is num ? value.toInt() : 0;
+
+  static double _asDouble(Object? value) => value is num ? value.toDouble() : 0;
+
+  /// Opens the campaign as far as the player has already paid to see.
+  ///
+  /// The fallback for when sync cannot run at all — no Play Games on the
+  /// device, sign-in declined, offline on the one launch after a reinstall.
+  /// The purchase comes back from Play either way, so without this the player
+  /// owns a hundred levels and is looking at level one with no way forward but
+  /// to replay all of it. Gated on owning the game, and monotonic like every
+  /// other write here, so it can never lower a frontier.
+  Future<bool> openBoughtCampaign() async {
+    if (!ownsFullGame || unlocked >= Campaign.length) {
+      return false;
+    }
+    await _prefs.setInt(_unlockedKey, Campaign.length);
+    return true;
   }
 
   /// Wipes everything. Only reachable from the debug panel.

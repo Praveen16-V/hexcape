@@ -71,7 +71,9 @@ BUILT TO BE PLAYED ANYWHERE
 
 • No internet required. Every level works in airplane mode.
 • No ads. Not between levels, not on the map, not anywhere.
-• No accounts, no sign-up, no data collected. Your progress lives on your phone.
+• No ads, no sign-up, nothing to join. Play offline, forever.
+• Progress lives on your phone. Turn on Play Games backup if you want it to
+  follow you to another one — entirely your choice, and off until you ask.
 • One thumb, one hand, portrait. Made for the bus.
 • Difficulty you can set and change, at any time, without losing progress.
 • Reduced motion, vibration and sound toggles, and full screen-reader labels on
@@ -170,9 +172,9 @@ app ever changes, it is obvious which answer has to change with it.
 | Form               | Answer                                                    | Why it is true                                                            |
 | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Privacy policy     | https://praveen16-v.github.io/hexcape/privacy-policy.html | Served from `docs/` on GitHub Pages                                       |
-| App access         | All functionality available without special access        | There is no login of any kind                                             |
+| App access         | All functionality available without special access        | Play Games sign-in is optional and gates nothing — every level is playable without it |
 | Ads                | No ads                                                    | No ad SDK in `pubspec.yaml`; no `AD_ID` permission in the merged manifest |
-| Data safety        | No data collected, no data shared                         | Zero HTTP calls in `lib/`; all state is local `shared_preferences`        |
+| Data safety        | See the section below — no longer a flat "no"              | Play Games saved games sends progress to the player's own Google account when they opt in |
 | Target audience    | 13+                                                       | Chosen to stay outside the Families policy for the first launch           |
 | Financial features | None                                                      | No lending, banking, or crypto                                            |
 | Government app     | No                                                        |                                                                           |
@@ -196,11 +198,47 @@ Two questions need an honest answer rather than a reflexive no:
 
 ### Data safety, in the form's own terms
 
-Answer **"No"** to "Does your app collect or share any of the required user data
-types?". Play Billing is not your collection — Google handles the transaction and
+**This answer changed when progress sync was added, and the old one is now
+wrong.** It used to be a flat "No", on the grounds that there were no HTTP calls
+in `lib/` at all. Play Games saved games is a real transfer of player data, and
+answering "No" beside a feature that syncs is the kind of thing that gets an app
+pulled rather than merely queried.
+
+Answer **"Yes"**, and then declare the narrowest true thing:
+
+| Field | Answer |
+| --- | --- |
+| Data type | "Other in-app actions" — game progress (levels, stars, times) |
+| Collected or shared | **Collected**, not shared. It goes to the player's own Google account, not to us |
+| Optional or required | **Optional.** Sync is off until the player turns it on in Settings |
+| Purpose | App functionality |
+| Encrypted in transit | Yes — handled by Play Games Services |
+| Can the user request deletion | Yes — through Play Games' own saved-game management |
+
+We never see any of it. There is no server of ours, no analytics, and no
+account we hold: the save goes from the player's phone to the player's Drive.
+Say that plainly rather than leaving it implied.
+
+Play Billing is still not your collection — Google handles the transaction and
 the app never sees payment details. The `INTERNET` and `ACCESS_NETWORK_STATE`
-permissions in the merged manifest come from the billing plugin, not from any
-code of ours.
+permissions in the merged manifest come from the billing and games plugins,
+not from any code of ours.
+
+### Play Games Services setup, which release now depends on
+
+Sync cannot work until this exists, and the app ships a placeholder for it:
+
+1. Play Console → **Play Games Services → Setup and management → Configuration**,
+   create a project and link it to this app.
+2. Add an **OAuth consent screen** and a **credential** for the Android app,
+   using the release signing certificate's SHA-1.
+3. Enable **Saved Games** on the project.
+4. Copy the numeric project id into
+   `android/app/src/main/res/values/games_ids.xml`, replacing the
+   `000000000000` placeholder.
+
+Until step 4 is done, `CloudSave.connect` fails and the Settings row reports
+that it could not sync. Nothing else in the game is affected.
 
 ---
 

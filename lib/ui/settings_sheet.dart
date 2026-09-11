@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/cloud_save.dart';
 import '../game/progress.dart';
 import '../theme/palette.dart';
 import 'difficulty_picker.dart';
@@ -16,6 +17,7 @@ class SettingsSheet extends StatefulWidget {
     required this.progress,
     required this.onChanged,
     required this.onRestore,
+    this.cloud,
     super.key,
   });
 
@@ -29,6 +31,14 @@ class SettingsSheet extends StatefulWidget {
   /// this device, in which case the row is not shown at all rather than offered
   /// and then failing.
   final Future<void> Function()? onRestore;
+
+  /// Progress sync, or null in the tests and previews that do not have one.
+  ///
+  /// The row it draws is the **only** place in the game that can open a Play
+  /// Games sign-in sheet. Everywhere else, sync either already has a session
+  /// or does nothing at all — which is what keeps "no accounts, no sign-up"
+  /// true for every player who does not come here and ask.
+  final CloudSave? cloud;
 
   @override
   State<SettingsSheet> createState() => _SettingsSheetState();
@@ -165,11 +175,27 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 value: _p.hints,
                 onChanged: (v) => _apply(() => _p.setHints(v)),
               ),
-              if (widget.onRestore != null) ...[
+              if (widget.cloud != null) ...[
                 const SizedBox(height: 4),
-                // Someone who reinstalls, or picks up a second device, needs a way
-                // to get back what they paid for that does not involve paying
-                // again. It is required policy on iOS and simply correct here.
+                _SyncRow(cloud: widget.cloud!, progress: _p),
+              ],
+              // Hidden once the game is owned, and that is not merely tidiness.
+              // `Store.init` already calls `restorePurchases` on every launch,
+              // so this button is for the run where that failed — and the only
+              // state it can change is an entitlement the app does not yet
+              // have. To someone who already owns the game it is a control
+              // that cannot do anything, worded like a transaction.
+              //
+              // The comment this replaces called it required policy. That is
+              // Apple's rule, and it applies to a build this game does not
+              // have: hexcape ships to Play only, where the launch query above
+              // is what restores the entitlement.
+              if (widget.onRestore != null && !_p.ownsFullGame) ...[
+                const SizedBox(height: 4),
+                // Someone who reinstalls, or picks up a second device, needs a
+                // way to get back what they paid for that does not involve
+                // paying again, for the run where the automatic restore did
+                // not land.
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -324,6 +350,110 @@ class _Slider extends StatelessWidget {
           activeColor: Palette.dogBody,
         ),
         const SizedBox(height: 6),
+      ],
+    );
+  }
+}
+
+/// The progress-sync row: one line of state and one thing to do about it.
+///
+/// Worded around *progress*, never around an account. A player reading this
+/// wants to know whether their stars are safe if the phone goes in a river;
+/// "sign in to Google Play Games" answers a question they did not ask.
+class _SyncRow extends StatefulWidget {
+  const _SyncRow({required this.cloud, required this.progress});
+
+  final CloudSave cloud;
+  final Progress progress;
+
+  @override
+  State<_SyncRow> createState() => _SyncRowState();
+}
+
+class _SyncRowState extends State<_SyncRow> {
+  @override
+  void initState() {
+    super.initState();
+    widget.cloud.addListener(_onCloud);
+  }
+
+  @override
+  void dispose() {
+    widget.cloud.removeListener(_onCloud);
+    super.dispose();
+  }
+
+  void _onCloud() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = widget.cloud;
+    final blurb = cloud.busy
+        ? 'Syncing…'
+        : cloud.error != null
+        // The message itself is a plugin string and can be anything, so it is
+        // not shown. What a player can act on is "it did not work, try again".
+        ? 'Could not sync just now. Your progress is safe on this phone.'
+        : cloud.signedIn
+        ? 'Your stars and levels follow your Google account to any phone.'
+        : 'Off. Progress lives only on this phone — reinstalling loses it.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              cloud.signedIn ? Icons.cloud_done : Icons.cloud_off,
+              size: 18,
+              color: cloud.signedIn
+                  ? Palette.dogBody
+                  : Colors.white.withValues(alpha: 0.45),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Back up progress',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: Text(
+            blurb,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 18),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              // Disabled rather than hidden while busy: a row that vanishes
+              // mid-tap is how a player ends up signing in twice.
+              onPressed: cloud.busy
+                  ? null
+                  : cloud.signedIn
+                  ? cloud.sync
+                  : cloud.connect,
+              style: TextButton.styleFrom(
+                foregroundColor: Palette.dogBody,
+                padding: EdgeInsets.zero,
+              ),
+              child: Text(cloud.signedIn ? 'Sync now' : 'Turn on'),
+            ),
+          ),
+        ),
       ],
     );
   }

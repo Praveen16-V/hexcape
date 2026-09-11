@@ -30,6 +30,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Play Games Services, for progress sync. The id lives in
+             res/values/games_ids.xml and is a placeholder until the Play Games
+             Services project is created in Play Console. The game works
+             without it; only the sync row in Settings does not. -->
+        <meta-data
+            android:name="com.google.android.gms.games.APP_ID"
+            android:value="@string/game_services_project_id" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

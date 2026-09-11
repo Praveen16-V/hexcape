@@ -265,6 +265,14 @@ class _LevelMapState extends State<LevelMap> {
                   hardClears: _hardClears,
                   onBack: widget.onBack,
                 ),
+                if (widget.progress.ownsFullGame &&
+                    widget.progress.unlocked <= 1)
+                  _ReopenBought(
+                    onOpen: () async {
+                      await widget.progress.openBoughtCampaign();
+                      if (mounted) setState(() {});
+                    },
+                  ),
                 ValueListenableBuilder<CampaignBand>(
                   valueListenable: _visible,
                   builder: (context, current, _) => _BandRail(
@@ -736,4 +744,56 @@ class _ContinueBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The offer shown to someone who owns the game and is looking at level one.
+///
+/// It means their save did not come back — a reinstall with sync off, or a
+/// phone whose backup never ran — while the purchase did, because Play
+/// re-queries that on every launch. Without this they own a hundred levels and
+/// the only way forward is to replay all of them.
+///
+/// Deliberately on the map rather than in a launch dialog. Evaluated at build
+/// time, so a sync that *is* running has already had its chance to restore the
+/// frontier and this simply never appears — which is a timing problem a dialog
+/// fired from `initState` cannot avoid.
+///
+/// It does not pretend to restore anything. The stars are genuinely gone; what
+/// it gives back is access to the levels that were paid for, and the wording
+/// says exactly that rather than implying a recovery that did not happen.
+class _ReopenBought extends StatelessWidget {
+  const _ReopenBought({required this.onOpen});
+
+  final Future<void> Function() onOpen;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: Palette.bandPressure.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Palette.bandPressure.withValues(alpha: 0.35)),
+    ),
+    child: Row(
+      children: [
+        const Expanded(
+          child: Text(
+            'You own the full trail, but this phone has no progress on it. '
+            'Open every chapter?',
+            style: TextStyle(color: Colors.white, fontSize: 12.5, height: 1.35),
+          ),
+        ),
+        const SizedBox(width: 10),
+        TextButton(
+          onPressed: onOpen,
+          style: TextButton.styleFrom(
+            foregroundColor: Palette.bandPressure,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          child: const Text('OPEN ALL'),
+        ),
+      ],
+    ),
+  );
 }

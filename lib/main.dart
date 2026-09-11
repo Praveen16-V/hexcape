@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flame/game.dart';
@@ -11,6 +12,7 @@ import 'game/haptics.dart';
 import 'game/hexcape_game.dart';
 import 'game/pets.dart';
 import 'game/progress.dart';
+import 'game/cloud_save.dart';
 import 'game/store.dart';
 import 'game/tuning.dart';
 import 'l10n/strings.dart';
@@ -96,6 +98,12 @@ class _GameShellState extends State<GameShell>
   late final TuningConfig _tuning = TuningConfig();
   late final HexcapeGame _game = HexcapeGame(tuning: _tuning)
     ..progress = widget.progress
+    // Fire and forget, and silent on failure: a player who has just finished a
+    // level must never be interrupted by a sync that could not reach the
+    // network. Whatever this misses, the next full sync carries.
+    ..onProgressRecorded = () {
+      unawaited(_cloud.push());
+    }
     ..boardCamera.zoom = widget.progress.zoom
     ..pet = Pets.byId(widget.progress.pet, stars: widget.progress.totalStars);
 
@@ -114,6 +122,9 @@ class _GameShellState extends State<GameShell>
   int _campaignToken = 0;
 
   late final Store _store = Store(widget.progress);
+
+  /// Progress sync. Opt-in, and silent until the player asks for it.
+  late final CloudSave _cloud = CloudSave(widget.progress);
 
   /// The level currently built and running, if any.
   ///
@@ -136,6 +147,12 @@ class _GameShellState extends State<GameShell>
     // Nothing awaits this. The free game must never wait on billing, which is
     // unavailable on some devices and absent entirely offline.
     _store
+      ..addListener(_onStore)
+      ..start();
+    // Nor on sync, for the same reason and with one more: `start` only notices
+    // a session Play Games already has. It never opens a sign-in sheet, so a
+    // player who has not asked for sync is not interrupted by one.
+    _cloud
       ..addListener(_onStore)
       ..start();
   }
@@ -210,6 +227,7 @@ class _GameShellState extends State<GameShell>
         progress: widget.progress,
         onChanged: _applySettings,
         onRestore: _store.available ? _store.restore : null,
+        cloud: _cloud,
       ),
     );
     if (mounted) {
@@ -219,6 +237,9 @@ class _GameShellState extends State<GameShell>
 
   @override
   void dispose() {
+    _cloud
+      ..removeListener(_onStore)
+      ..dispose();
     _store
       ..removeListener(_onStore)
       ..dispose();

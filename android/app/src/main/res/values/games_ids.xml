@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Play Games Services project id, which the SDK reads from the manifest at
+  startup.
+
+  This file is a PLACEHOLDER and the value below is not a real project. Create
+  the Play Games Services project in Play Console (Play Games Services > Setup
+  and management > Configuration), link it to this app, and paste the numeric
+  project id here. Until then Play Games sign-in fails at runtime — which the
+  game handles: `CloudSave.start` never opens a sheet, and `connect` reports a
+  failure the settings row words as "could not sync just now". Nothing else in
+  the game is affected, because nothing in the game waits on sync.
+
+  The id is not a secret. It identifies the game to Play Games in the same way
+  the application id identifies it to Play, and it ships inside every APK.
+-->
+<resources>
+    <string name="game_services_project_id" translatable="false">000000000000</string>
+</resources>

@@ -443,6 +443,14 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Saved progress, or null before it has loaded.
   Progress? progress;
 
+  /// Called once a result has been written to [progress], win or loss.
+  ///
+  /// A callback rather than a `CloudSave` field, because the game has no
+  /// business knowing that sync exists: it records the run and says so, and
+  /// what listens is somebody else's problem. Null everywhere except the live
+  /// app, so every test that drives the game keeps working untouched.
+  void Function()? onProgressRecorded;
+
   bool get isLastCampaignLevel => levelNumber >= Campaign.length;
 
   /// Taps allowed this run, derived from par. Spending them all does not end
@@ -1844,6 +1852,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
           difficulty: difficultyForRun,
         );
       }
+      onProgressRecorded?.call();
     }
     // The one moment in the game that has earned a freeze.
     juice.freeze(0.07);
