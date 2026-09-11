@@ -16,8 +16,8 @@ void main() {
       // changed under them.
       return Progress.load().then((p) {
         expect(p.volume, 0.85);
-        expect(p.regrowthSound, isFalse);
         expect(p.haptics, isTrue);
+        expect(p.music, isTrue);
         expect(p.reducedMotion, isFalse);
         expect(p.hints, isTrue);
       });
@@ -26,7 +26,7 @@ void main() {
     test('every setting survives a reload', () async {
       final p = await Progress.load();
       await p.setVolume(0.25);
-      await p.setRegrowthSound(true);
+      await p.setMusic(false);
       await p.setHaptics(false);
       await p.setReducedMotion(true);
       await p.setHints(false);
@@ -34,7 +34,7 @@ void main() {
 
       final reopened = await Progress.load();
       expect(reopened.volume, 0.25);
-      expect(reopened.regrowthSound, isTrue);
+      expect(reopened.music, isFalse);
       expect(reopened.haptics, isFalse);
       expect(reopened.reducedMotion, isTrue);
       expect(reopened.hints, isFalse);

@@ -149,12 +149,12 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 onChanged: (v) => _apply(() => _p.setVolume(v)),
               ),
               _Toggle(
-                label: 'Regrowth sound',
+                label: 'Music',
                 blurb:
-                    'The warning before a tile snaps shut. Off by default — '
-                    'you still feel it.',
-                value: _p.regrowthSound,
-                onChanged: (v) => _apply(() => _p.setRegrowthSound(v)),
+                    'A quiet loop under the menus, and quieter still while you '
+                    'are playing.',
+                value: _p.music,
+                onChanged: (v) => _apply(() => _p.setMusic(v)),
               ),
               _Toggle(
                 label: 'Vibration',

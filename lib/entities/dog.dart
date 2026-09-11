@@ -94,9 +94,10 @@ class Dog {
   double nowhereToGoFor = 0;
 
   /// The wall she is waiting on: the nearest thing to the food that a tap
-  /// could still open on the edge of her pocket. She turns to look at it while
-  /// she waits. Null when nothing bordering her can be opened at all, which is
-  /// not a wait — the soft-lock check owns that ending.
+  /// could still open on the edge of her pocket. This identifies the useful
+  /// opening for feedback without changing her stationary presentation.
+  /// Null when nothing bordering her can be opened at all, which is not a wait
+  /// — the soft-lock check owns that ending.
   HexCoord? gazeTarget;
 
   /// Every cell she has stood in this run. Used only to stop the "take any
@@ -1050,17 +1051,9 @@ class Dog {
       turnRate += (turn / math.max(dt, 1e-4) - turnRate) * 0.25;
     } else {
       turnRate *= 0.9;
-      // Waiting is not the same as being switched off. She turns to face the
-      // wall she needs gone, slowly enough to read as looking rather than
-      // steering, which is the difference between a dog with a problem and a
-      // dog that has stopped working. Nothing here moves her.
-      final gaze = gazeTarget;
-      if (gaze != null) {
-        final away = layout.toPixel(gaze) - position;
-        if (away.distance > 1e-3) {
-          _turnToward(math.atan2(away.dy, away.dx), 2.2, dt);
-        }
-      }
+      // Hold the last travelled heading while stationary. Turning toward an
+      // editable wall without moving made the sprite look like it was being
+      // rotated by the board rather than choosing a direction of travel.
     }
 
     // Tie the gait to distance covered so the trot never runs on the spot.

@@ -92,7 +92,7 @@ class Progress {
   // has to migrate the old ones, and a corrupt value costs one toggle rather
   // than all of them.
   static const _volumeKey = 'opt_volume';
-  static const _regrowthSoundKey = 'opt_regrowth_sound';
+  static const _musicKey = 'opt_music';
   static const _hapticsKey = 'opt_haptics';
   static const _reducedMotionKey = 'opt_reduced_motion';
   static const _hintsKey = 'opt_hints';
@@ -303,11 +303,13 @@ class Progress {
   double get volume => (_prefs.getDouble(_volumeKey) ?? 0.85).clamp(0.0, 1.0);
   Future<void> setVolume(double v) => _prefs.setDouble(_volumeKey, v);
 
-  /// Whether regrowth makes a sound. Off by default: the player asked for the
-  /// warning to be felt rather than heard, because it overlapped the tap sound.
-  bool get regrowthSound => _prefs.getBool(_regrowthSoundKey) ?? false;
-  Future<void> setRegrowthSound(bool on) =>
-      _prefs.setBool(_regrowthSoundKey, on);
+  /// Whether the music bed plays.
+  ///
+  /// On by default, and separate from [volume] on purpose: "turn the game down"
+  /// and "I do not want music" are different requests, and a player who wants
+  /// the tap scale without a bed under it should not have to silence both.
+  bool get music => _prefs.getBool(_musicKey) ?? true;
+  Future<void> setMusic(bool on) => _prefs.setBool(_musicKey, on);
 
   bool get haptics => _prefs.getBool(_hapticsKey) ?? true;
   Future<void> setHaptics(bool on) => _prefs.setBool(_hapticsKey, on);

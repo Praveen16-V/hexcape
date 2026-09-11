@@ -180,9 +180,17 @@ class TuningConfig extends ChangeNotifier {
   /// Whether the field's own noises — the regrowth warning and a hex closing —
   /// are audible.
   ///
-  /// Off by default: they fire in waves exactly while the player is tapping
-  /// fastest, and in play they trod all over the tap notes. Their **haptics
-  /// still fire** regardless, so the warning is felt without being heard.
+  /// Off, and **no longer a player setting**. They fire in waves exactly while
+  /// the player is tapping fastest, and in play they trod all over the tap
+  /// notes; with a music bed under those as well there is even less room. Their
+  /// **haptics still fire** regardless, so the warning is felt without being
+  /// heard — which is what the design wanted from the start.
+  ///
+  /// It stays here, and stays in the debug panel, because being able to *hear*
+  /// the field while tuning it is worth keeping. What it is not is a question
+  /// worth putting to a player: the honest answer was always "off", and a
+  /// settings row whose right value never changes is a row that only offers
+  /// somebody the chance to make their game worse.
   bool regrowthSound = false;
 
   /// Screen shake and hit-stop strength. Zero removes both entirely — juice

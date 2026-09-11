@@ -118,6 +118,23 @@ void main() {
       expect(dog.enclosedFor, 0, reason: 'the opening position must not kill');
     });
 
+    test('holds its last facing while stationary', () {
+      final grid = _field(cleared: const [HexCoord.zero]);
+      final dog = Dog(
+        position: _layout.toPixel(HexCoord.zero),
+        cell: HexCoord.zero,
+      )..facing = 0.63;
+
+      _run(dog, grid, TuningConfig(), seconds: 3);
+
+      expect(dog.speed, lessThan(1.0));
+      expect(
+        dog.facing,
+        closeTo(0.63, 1e-9),
+        reason: 'an idle sprite must not swivel toward a nearby wall',
+      );
+    });
+
     test('walks down a cleared corridor to the far end', () {
       final corridor = [for (var r = 0; r >= -7; r--) HexCoord(0, r)];
       final grid = _field(exit: const HexCoord(0, -7), cleared: corridor);

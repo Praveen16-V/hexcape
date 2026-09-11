@@ -29,8 +29,11 @@ class HomeDog extends StatefulWidget {
 }
 
 class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
-  final math.Random _random = math.Random();
   _HomeAction _action = _HomeAction.jump;
+  var _sequenceIndex = 0;
+  double _restingX = 0;
+  double _travelFrom = 0;
+  double _travelTo = 0;
   bool _motionEnabled = false;
 
   late final AnimationController _idle = AnimationController(
@@ -42,12 +45,14 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
     if (status != AnimationStatus.completed || !_motionEnabled || !mounted) {
       return;
     }
-    if (_action != _HomeAction.idle) {
-      setState(() => _action = _HomeAction.idle);
-    } else {
-      const choices = [_HomeAction.walk, _HomeAction.run, _HomeAction.jump];
-      setState(() => _action = choices[_random.nextInt(choices.length)]);
+    if (_action.travels) _restingX = _travelTo;
+    _sequenceIndex = (_sequenceIndex + 1) % _homeSequence.length;
+    final next = _homeSequence[_sequenceIndex];
+    if (next.travels) {
+      _travelFrom = _restingX;
+      _travelTo = _restingX >= 0.45 ? -1 : 1;
     }
+    setState(() => _action = next);
     _idle.duration = _action.duration;
     _idle.forward(from: 0);
   }
@@ -90,25 +95,17 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
         animation: _idle,
         builder: (context, _) {
           final t = _idle.value;
-          final wave = math.sin(t * math.pi * 2);
           final active = _motionEnabled ? _action : _HomeAction.idle;
-          final airborne = active.jumpArc(t);
-          final travelAmount = active == _HomeAction.walk
-              ? widget.size * 0.11
-              : active == _HomeAction.run
-              ? widget.size * 0.17
-              : 0.0;
-          final travelling = travelAmount > 0;
-          final outward = t < 0.5;
-          final leg = outward ? t * 2 : (t - 0.5) * 2;
-          final travel = travelling
-              ? (outward
-                    ? Curves.easeInOut.transform(leg) * travelAmount
-                    : (1 - Curves.easeInOut.transform(leg)) * travelAmount)
-              : 0.0;
-          final facing = travelling && !outward ? -1.0 : 1.0;
-          final lift = airborne * widget.size * 0.14;
-          final frame = active.spriteFrame(t);
+          final motion = active.sample(
+            t,
+            restingX: _restingX,
+            travelFrom: _travelFrom,
+            travelTo: _travelTo,
+          );
+          final travel = motion.x * widget.size * 0.075;
+          final lift = motion.lift * widget.size * 0.18;
+          final landing = motion.compression;
+          final shadowScale = (1 - motion.lift * 0.42).clamp(0.52, 1.0);
 
           return Stack(
             alignment: Alignment.center,
@@ -119,7 +116,8 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
                 bottom: widget.size * 0.11,
                 height: widget.size * 0.13,
                 child: Transform.scale(
-                  scaleX: (1 - lift.abs() / widget.size * 2.2).clamp(0.56, 1.0),
+                  scaleX: shadowScale,
+                  scaleY: 1 + motion.lift * 0.10,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(widget.size),
@@ -137,12 +135,12 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
               Transform.translate(
                 offset: Offset(travel, -lift),
                 child: Transform.rotate(
-                  angle: wave * (active == _HomeAction.run ? 0.025 : 0.012),
+                  angle: motion.pitch,
                   alignment: Alignment.bottomCenter,
                   child: Transform.scale(
                     alignment: Alignment.bottomCenter,
-                    scaleX: facing * (1 - wave * 0.008),
-                    scaleY: 1 + wave * 0.014,
+                    scaleX: motion.facing * (1 + landing * 0.055),
+                    scaleY: 1 - landing * 0.075 + motion.breathe,
                     child: ClipRect(
                       child: SizedBox(
                         width: widget.size,
@@ -151,7 +149,7 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              left: -frame * widget.size,
+                              left: -motion.frame * widget.size,
                               width: widget.size * 8,
                               height: widget.size,
                               child: Image.asset(
@@ -184,35 +182,118 @@ class _HomeDogState extends State<HomeDog> with SingleTickerProviderStateMixin {
 
 enum _HomeAction { idle, walk, run, jump }
 
+const _homeSequence = <_HomeAction>[
+  _HomeAction.jump,
+  _HomeAction.idle,
+  _HomeAction.walk,
+  _HomeAction.idle,
+  _HomeAction.run,
+  _HomeAction.idle,
+];
+
+typedef _HomeMotion = ({
+  double x,
+  double lift,
+  double compression,
+  double pitch,
+  double breathe,
+  double facing,
+  int frame,
+});
+
 extension on _HomeAction {
   Duration get duration => switch (this) {
-    _HomeAction.idle => const Duration(milliseconds: 1900),
-    _HomeAction.walk => const Duration(milliseconds: 2600),
-    _HomeAction.run => const Duration(milliseconds: 1700),
-    _HomeAction.jump => const Duration(milliseconds: 1350),
+    _HomeAction.idle => const Duration(milliseconds: 1450),
+    _HomeAction.walk => const Duration(milliseconds: 2300),
+    _HomeAction.run => const Duration(milliseconds: 2100),
+    _HomeAction.jump => const Duration(milliseconds: 1250),
   };
 
-  int spriteFrame(double t) => switch (this) {
-    _HomeAction.idle => 0,
-    _HomeAction.walk => (t * 8).floor().clamp(0, 7) % 4,
-    _HomeAction.run => 4 + (t * 12).floor().clamp(0, 11) % 4,
-    _HomeAction.jump => t < 0.28 ? 5 : (t < 0.72 ? 6 : 7),
-  };
+  bool get travels => this == _HomeAction.walk || this == _HomeAction.run;
 
-  /// Crouch, accelerate upward, hang briefly, then land under gravity. The
-  /// final compression gives the next grounded pose somewhere to settle.
-  double jumpArc(double t) {
-    if (this != _HomeAction.jump) return 0;
-    if (t < 0.16) {
-      return -0.10 * Curves.easeOut.transform(t / 0.16);
+  /// Samples one physically legible pose. Locomotion advances by distance, so
+  /// paws meet the floor at a steady cadence; jumping has anticipation,
+  /// take-off, a parabolic flight and a short landing compression.
+  _HomeMotion sample(
+    double t, {
+    required double restingX,
+    required double travelFrom,
+    required double travelTo,
+  }) {
+    final breathe = math.sin(t * math.pi * 2) * 0.012;
+    if (this == _HomeAction.idle) {
+      return (
+        x: restingX,
+        lift: 0,
+        compression: 0,
+        pitch: 0,
+        breathe: breathe,
+        facing: travelTo < travelFrom ? -1 : 1,
+        frame: 0,
+      );
     }
-    if (t < 0.48) {
-      return -0.10 + 1.10 * Curves.easeOutCubic.transform((t - 0.16) / 0.32);
+
+    if (travels) {
+      final progress = Curves.easeInOutCubic.transform(t);
+      final x = travelFrom + (travelTo - travelFrom) * progress;
+      final cycles = this == _HomeAction.run ? 4.0 : 3.5;
+      final stride = t * cycles;
+      final phase = (stride * 4).floor() % 4;
+      final contact = math.sin(stride * math.pi * 2).abs();
+      return (
+        x: x,
+        lift: contact * (this == _HomeAction.run ? 0.10 : 0.045),
+        compression: 0,
+        pitch:
+            math.sin(stride * math.pi * 2) *
+            (this == _HomeAction.run ? 0.025 : 0.012),
+        breathe: 0,
+        facing: travelTo < travelFrom ? -1 : 1,
+        frame: (this == _HomeAction.run ? 4 : 0) + phase,
+      );
     }
-    if (t < 0.80) {
-      return 1 - Curves.easeInCubic.transform((t - 0.48) / 0.32);
+
+    // Keep the planted pose long enough for the crouch to register, then use
+    // the strongest silhouettes already present in the sheet. The parabola is
+    // zero at take-off/landing and reaches one at the apex.
+    const takeOff = 0.18;
+    const touchDown = 0.82;
+    if (t < takeOff) {
+      final u = Curves.easeIn.transform(t / takeOff);
+      return (
+        x: restingX,
+        lift: -u * 0.045,
+        compression: u,
+        pitch: -u * 0.035,
+        breathe: 0,
+        facing: travelTo < travelFrom ? -1 : 1,
+        frame: t < 0.11 ? 0 : 4,
+      );
     }
-    return -0.06 * math.sin((t - 0.80) / 0.20 * math.pi);
+    if (t < touchDown) {
+      final u = (t - takeOff) / (touchDown - takeOff);
+      final arc = 4 * u * (1 - u);
+      return (
+        x: restingX,
+        lift: arc,
+        compression: 0,
+        pitch: (0.5 - u) * 0.07,
+        breathe: 0,
+        facing: travelTo < travelFrom ? -1 : 1,
+        frame: u < 0.22 ? 4 : (u < 0.58 ? 5 : 6),
+      );
+    }
+    final u = ((t - touchDown) / (1 - touchDown)).clamp(0.0, 1.0);
+    final settle = math.sin(u * math.pi) * (1 - u);
+    return (
+      x: restingX,
+      lift: 0,
+      compression: settle,
+      pitch: settle * 0.025,
+      breathe: 0,
+      facing: travelTo < travelFrom ? -1 : 1,
+      frame: u < 0.42 ? 7 : 0,
+    );
   }
 }
 

@@ -70,8 +70,6 @@ class DogComponent extends Component {
         ? (1 - game.hunger.fraction / 0.3).clamp(0.0, 1.0)
         : 0.0;
     final startle = game.startleFlash;
-    final idle = _idlePerformance(dog);
-
     // Squash and stretch from acceleration (§10), plus a flinch when the field
     // snaps shut beside her.
     final stretch = 1 + dog.surge * 0.14 - startle * 0.12;
@@ -79,24 +77,18 @@ class DogComponent extends Component {
 
     // Trot bob, tied to distance covered rather than to the clock.
     final moving = (dog.velocity.distance / (r * 5)).clamp(0.0, 1.0);
-    final artMoving = math.max(moving, idle.moving);
+    final artMoving = moving;
     final motion = game.tuning.reducedMotion ? 0.0 : 1.0;
     final bob =
         -math.sin(dog.gaitPhase * math.pi * 2).abs() *
-            r *
-            0.12 *
-            moving *
-            motion -
-        math.sin(game.elapsed * math.pi * (2.5 + idle.moving * 2)).abs() *
-            r *
-            0.06 *
-            idle.moving *
-            motion;
+        r *
+        0.12 *
+        moving *
+        motion;
     final breath =
         math.sin(game.elapsed * 2.8) * 0.025 * (1 - artMoving) * motion;
-    final lift =
-        alert * r * 0.22 - weary * r * 0.1 - startle * r * 0.06 + idle.lift * r;
-    final presentationFlip = game.phase == GamePhase.idle ? idle.facing : _flip;
+    final lift = alert * r * 0.22 - weary * r * 0.1 - startle * r * 0.06;
+    final presentationFlip = _flip;
     final lean = (-dog.turnRate * 0.02).clamp(-0.35, 0.35) * presentationFlip;
 
     canvas.save();
@@ -119,11 +111,7 @@ class DogComponent extends Component {
         r,
         weary,
         artMoving,
-        forcedFrame: game.phase == GamePhase.idle
-            ? idle.frame
-            : moving <= 0.08
-            ? 0
-            : null,
+        forcedFrame: moving <= 0.08 ? 0 : null,
       );
     } else if (sprite != null) {
       _renderSpriteBody(canvas, sprite, r, weary);
@@ -138,64 +126,6 @@ class DogComponent extends Component {
     }
 
     canvas.restore();
-  }
-
-  /// A presentation-only routine for the untouched board. Frame zero is the
-  /// neutral four-paws-planted stance; movement frames only appear during a
-  /// deliberate walk, jump or run beat. Physics and timers remain untouched.
-  ({double lift, double moving, double facing, int frame}) _idlePerformance(
-    Dog dog,
-  ) {
-    if (game.phase != GamePhase.idle || dog.speed > 1) {
-      return (lift: 0, moving: 0, facing: _flip, frame: 0);
-    }
-    if (game.tuning.reducedMotion) {
-      return (lift: 0, moving: 0, facing: 1, frame: 0);
-    }
-    final beat = game.elapsed % 10.0;
-    if (beat < 1.0) {
-      return (lift: 0, moving: 0, facing: 1, frame: 0);
-    }
-    if (beat < 3.0) {
-      return (
-        lift: 0,
-        moving: 0.34,
-        facing: 1,
-        frame: ((beat - 1.0) * 5).floor() % 4,
-      );
-    }
-    if (beat < 4.4) {
-      final t = (beat - 3.0) / 1.4;
-      final lift = math.sin(t * math.pi) * 0.78;
-      return (
-        lift: lift,
-        moving: 0.7,
-        facing: 1,
-        frame: t < 0.24 ? 5 : (t < 0.76 ? 6 : 7),
-      );
-    }
-    if (beat < 6.4) {
-      return (
-        lift: 0,
-        moving: 0.86,
-        facing: 1,
-        frame: 4 + ((beat - 4.4) * 7).floor() % 4,
-      );
-    }
-    if (beat < 7.2) {
-      final t = (beat - 6.4) / 0.8;
-      return (lift: 0, moving: 0, facing: math.cos(t * math.pi), frame: 0);
-    }
-    if (beat < 9.2) {
-      return (
-        lift: 0,
-        moving: 0.34,
-        facing: -1,
-        frame: ((beat - 7.2) * 5).floor() % 4,
-      );
-    }
-    final t = (beat - 9.2) / 0.8;
-    return (lift: 0, moving: 0, facing: -math.cos(t * math.pi), frame: 0);
   }
 
   /// Selects a real drawn pose from the distance-driven gait cycle.

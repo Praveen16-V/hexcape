@@ -44,6 +44,43 @@ class Tuning {
 
   /// The heartbeat under the low-hunger crescendo.
   static const heartbeatHz = 62.0;
+
+  // -------------------------------------------------------------------------
+  // The music bed.
+  // -------------------------------------------------------------------------
+
+  /// Seconds per bar, and how many bars the loop runs for. Sixty beats per
+  /// minute leaves room for the player's tap rhythm while still giving the dog
+  /// a gentle travelling pulse.
+  static const musicBarSeconds = 4.0;
+  static const musicBars = 8;
+
+  /// One voiced chord per bar. The bass descends C-B-A-G-F-E-D-G while the
+  /// upper voices move by small intervals; that makes the loop feel like a
+  /// journey without turning it into a tune that becomes tiring on repeat.
+  static const musicChords = <List<double>>[
+    [130.81, 196.00, 246.94, 293.66], // Cmaj9
+    [123.47, 196.00, 246.94, 329.63], // G6 / B
+    [110.00, 164.81, 261.63, 392.00], // Am7
+    [98.00, 164.81, 246.94, 293.66], // Em7 / G
+    [87.31, 130.81, 164.81, 196.00], // Fmaj9
+    [82.41, 130.81, 196.00, 261.63], // C / E
+    [73.42, 110.00, 130.81, 174.61], // Dm7
+    [98.00, 146.83, 196.00, 261.63], // Gsus4
+  ];
+
+  /// The lead stays below the tap streak and uses a full C-major palette. The
+  /// F and B are brief passing colour; the strong notes remain pentatonic.
+  static const musicMelodyHz = <double>[
+    261.63, // C4
+    293.66, // D4
+    329.63, // E4
+    349.23, // F4
+    392.00, // G4
+    440.00, // A4
+    493.88, // B4
+    523.25, // C5
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +368,247 @@ List<double> heartbeat() => _sequence([
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The music bed
+// ---------------------------------------------------------------------------
+
+/// Adds [samples] into [out] at [offset] seconds, **wrapping past the end**.
+///
+/// The wrap is the entire trick behind a seamless loop. A note struck near the
+/// end of the last bar has a two-second tail; written normally that tail is
+/// either truncated — a click every time the loop repeats — or it lengthens
+/// the file so the loop no longer lines up with the bar. Folding it back onto
+/// the opening instead means the tail is *already playing* when the loop
+/// restarts, which is exactly what it would be doing if the music simply
+/// carried on. There is no seam to hear because there is no seam.
+void _addWrapped(List<double> out, double offset, List<double> samples) {
+  if (out.isEmpty) return;
+  final start = (offset * _rate).round();
+  for (var i = 0; i < samples.length; i++) {
+    out[(start + i) % out.length] += samples[i];
+  }
+}
+
+/// A warm sustained voice built from two slightly detuned fundamentals, an
+/// octave and a quiet fifth. Their slow beating gives the bed movement without
+/// the brittle organ quality of stacked plain sine waves.
+List<double> _warmPad(double freq, double seconds, {double colour = 0}) {
+  final n = (seconds * _rate).round();
+  final out = List<double>.filled(n, 0);
+  final attack = math.min(1.15, seconds * 0.30);
+  final release = math.min(1.8, seconds * 0.40);
+  var phaseA = 0.0;
+  var phaseB = 0.0;
+  var phaseOctave = 0.0;
+  var phaseFifth = 0.0;
+  for (var i = 0; i < n; i++) {
+    final t = i / _rate;
+    final double e;
+    if (t < attack) {
+      e = 0.5 - 0.5 * math.cos(math.pi * t / attack);
+    } else if (t > seconds - release) {
+      final u = (seconds - t) / release;
+      e = 0.5 - 0.5 * math.cos(math.pi * u.clamp(0.0, 1.0));
+    } else {
+      e = 1.0;
+    }
+    final drift = math.sin(t * 0.47 + colour) * 0.0012;
+    phaseA += 2 * math.pi * freq * (0.997 + drift) / _rate;
+    phaseB += 2 * math.pi * freq * (1.003 - drift) / _rate;
+    phaseOctave += 2 * math.pi * freq * 2.001 / _rate;
+    phaseFifth += 2 * math.pi * freq * 1.498 / _rate;
+    final shimmer = 0.82 + 0.18 * math.sin(t * 0.71 + colour * 2);
+    out[i] =
+        (0.48 * math.sin(phaseA) +
+            0.44 * math.sin(phaseB) +
+            0.13 * shimmer * math.sin(phaseOctave) +
+            0.09 * math.sin(phaseFifth)) *
+        e;
+  }
+  return out;
+}
+
+/// A round nylon-string pluck. Independent partial decays remove the electronic
+/// 'beep' of a single oscillator and leave a soft wooden attack.
+List<double> _nylonPluck(double freq, {double seconds = 1.65}) {
+  final n = (seconds * _rate).round();
+  final out = List<double>.filled(n, 0);
+  for (var i = 0; i < n; i++) {
+    final t = i / _rate;
+    final attack = (t / 0.008).clamp(0.0, 1.0);
+    final fundamental = math.sin(2 * math.pi * freq * t) * math.exp(-t * 2.15);
+    final second =
+        math.sin(2 * math.pi * freq * 2.01 * t + 0.25) * math.exp(-t * 4.2);
+    final third =
+        math.sin(2 * math.pi * freq * 3.02 * t + 0.7) * math.exp(-t * 7.0);
+    out[i] = attack * (fundamental * 0.78 + second * 0.24 + third * 0.09);
+  }
+  final finger = _noise(0.028, decay: 0.008, lowpassHz: 2600);
+  for (var i = 0; i < finger.length; i++) {
+    out[i] += finger[i] * 0.11;
+  }
+  return out;
+}
+
+/// Bell-like lead with inharmonic upper partials and a soft mallet transient.
+List<double> _kalimba(double freq, {double seconds = 2.4}) {
+  final n = (seconds * _rate).round();
+  final out = List<double>.filled(n, 0);
+  for (var i = 0; i < n; i++) {
+    final t = i / _rate;
+    final attack = (t / 0.006).clamp(0.0, 1.0);
+    out[i] =
+        attack *
+        (math.sin(2 * math.pi * freq * t) * math.exp(-t * 1.75) +
+            0.26 *
+                math.sin(2 * math.pi * freq * 2.73 * t + 0.4) *
+                math.exp(-t * 5.4) +
+            0.12 *
+                math.sin(2 * math.pi * freq * 4.08 * t + 1.1) *
+                math.exp(-t * 8.0));
+  }
+  return out;
+}
+
+List<double> _warmBass(double freq) {
+  final n = (2.5 * _rate).round();
+  final out = List<double>.filled(n, 0);
+  for (var i = 0; i < n; i++) {
+    final t = i / _rate;
+    final e = (t / 0.035).clamp(0.0, 1.0) * math.exp(-t * 1.15);
+    out[i] =
+        (math.sin(2 * math.pi * freq * t) +
+            0.22 * math.sin(2 * math.pi * freq * 2 * t)) *
+        e;
+  }
+  return out;
+}
+
+List<double> _handDrum({double accent = 1}) => _mix(
+  [
+    _tone(92, 0.34, decay: 0.095, attack: 0.004, freqEnd: 58),
+    _noise(0.075, decay: 0.022, lowpassHz: 1250),
+  ],
+  gains: [0.72 * accent, 0.16 * accent],
+);
+
+List<double> _brush() => _mix(
+  [
+    _noise(0.12, decay: 0.035, attack: 0.008, lowpassHz: 5200),
+    _tone(310, 0.08, decay: 0.022, attack: 0.004),
+  ],
+  gains: [0.24, 0.035],
+);
+
+/// Adds a quiet wrapped room tail. Wrapping is essential: a conventional echo
+/// would be cut off at the file boundary and expose the loop every 32 seconds.
+void _room(List<double> out, List<double> source) {
+  for (final echo in const [(0.19, 0.12), (0.37, 0.075), (0.61, 0.045)]) {
+    final delay = (echo.$1 * _rate).round();
+    for (var i = 0; i < source.length; i++) {
+      out[(i + delay) % out.length] += source[i] * echo.$2;
+    }
+  }
+}
+
+double _softClip(double sample) {
+  final e = math.exp(sample * 2);
+  return (e - 1) / (e + 1);
+}
+
+/// The looping bed.
+///
+/// A warm, quietly adventurous eight-bar loop: breathing strings, a travelling
+/// nylon ostinato, rounded bass, restrained hand percussion, and a short
+/// kalimba answer. The arrangement grows across the loop and thins again before
+/// the seam, giving it shape without competing with play.
+List<double> music() {
+  final barSeconds = Tuning.musicBarSeconds;
+  final total = barSeconds * Tuning.musicBars;
+  final n = (total * _rate).round();
+  final pads = List<double>.filled(n, 0);
+  final bass = List<double>.filled(n, 0);
+  final strings = List<double>.filled(n, 0);
+  final lead = List<double>.filled(n, 0);
+  final percussion = List<double>.filled(n, 0);
+
+  const arpeggio = [0, 2, 1, 3, 2, 1, 3, 2];
+  for (var c = 0; c < Tuning.musicChords.length; c++) {
+    final at = c * barSeconds;
+    final voices = Tuning.musicChords[c];
+    for (var v = 0; v < voices.length; v++) {
+      _addWrapped(
+        pads,
+        at - 0.16 + v * 0.045,
+        _warmPad(voices[v], barSeconds * 1.32, colour: c + v * 0.4),
+      );
+    }
+    _addWrapped(bass, at, _warmBass(voices.first / 2));
+    _addWrapped(bass, at + barSeconds / 2, _warmBass(voices.first / 2));
+
+    // The first bar is intentionally open; the picked pattern arrives once the
+    // harmony is established and becomes lighter again at the cadence.
+    if (c > 0) {
+      for (var step = 0; step < arpeggio.length; step++) {
+        var hz = voices[arpeggio[(step + c) % arpeggio.length]];
+        while (hz < 185) {
+          hz *= 2;
+        }
+        final human = ((c * 17 + step * 11) % 7 - 3) * 0.004;
+        _addWrapped(
+          strings,
+          at + step * barSeconds / 8 + human,
+          _nylonPluck(hz),
+        );
+      }
+    }
+
+    if (c >= 2 && c <= 6) {
+      _addWrapped(percussion, at, _handDrum(accent: c == 4 ? 1.15 : 1));
+      _addWrapped(percussion, at + barSeconds / 2, _handDrum(accent: 0.72));
+      for (var beat = 1; beat < 8; beat += 2) {
+        _addWrapped(percussion, at + beat * barSeconds / 8, _brush());
+      }
+    }
+  }
+
+  // Two short call-and-response phrases, with rests doing as much work as the
+  // notes. The last bar is melody-free so the return to bar one can breathe.
+  const phrase = <(int, double, int, double)>[
+    (1, 1.0, 4, 0.78),
+    (1, 2.5, 5, 0.66),
+    (2, 0.5, 7, 0.88),
+    (2, 2.0, 5, 0.62),
+    (3, 1.0, 4, 0.72),
+    (4, 0.5, 2, 0.68),
+    (4, 1.5, 3, 0.58),
+    (4, 2.5, 4, 0.80),
+    (5, 0.5, 5, 0.74),
+    (5, 2.0, 7, 0.92),
+    (6, 0.5, 4, 0.70),
+    (6, 2.0, 1, 0.62),
+    (6, 3.0, 0, 0.78),
+  ];
+  for (final note in phrase) {
+    final at = note.$1 * barSeconds + note.$2 * (barSeconds / 4);
+    final voice = _kalimba(Tuning.musicMelodyHz[note.$3]);
+    _addWrapped(lead, at, [for (final sample in voice) sample * note.$4]);
+  }
+
+  final room = List<double>.filled(n, 0);
+  _room(room, strings);
+  _room(room, lead);
+
+  final mixed = _mix(
+    [pads, bass, strings, lead, percussion, room],
+    gains: [0.22, 0.25, 0.20, 0.17, 0.16, 0.55],
+  );
+  // A very gentle tape-like rounding catches stacked attacks while preserving
+  // the quiet detail. `_finish` still owns the final peak and headroom.
+  final ceiling = _softClip(1.18);
+  return [for (final sample in mixed) _softClip(sample * 1.18) / ceiling];
+}
+
 void main() {
   final dir = Directory('assets/audio');
   dir.createSync(recursive: true);
@@ -350,6 +628,7 @@ void main() {
     'bark': bark(),
     'whimper': whimper(),
     'heartbeat': heartbeat(),
+    'music_theme': music(),
   };
 
   var total = 0;

@@ -5,6 +5,8 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'audio/music.dart';
+import 'game/cloud_save.dart';
 import 'game/daily.dart';
 import 'game/difficulty.dart';
 import 'game/entitlements.dart';
@@ -12,7 +14,6 @@ import 'game/haptics.dart';
 import 'game/hexcape_game.dart';
 import 'game/pets.dart';
 import 'game/progress.dart';
-import 'game/cloud_save.dart';
 import 'game/store.dart';
 import 'game/tuning.dart';
 import 'l10n/strings.dart';
@@ -46,6 +47,9 @@ void main() async {
       systemNavigationBarColor: Palette.background,
     ),
   );
+  // Before the first player of any kind is built — see Music.configureSession.
+  // Nothing waits on the result; a device that refuses it still plays.
+  await Music.configureSession();
   // Loaded before the first frame so the game can open on the level the player
   // actually got to, rather than starting at one and jumping.
   final progress = await Progress.load();
@@ -126,6 +130,10 @@ class _GameShellState extends State<GameShell>
   /// Progress sync. Opt-in, and silent until the player asks for it.
   late final CloudSave _cloud = CloudSave(widget.progress);
 
+  /// The music bed. Owned by the app rather than by any screen, so moving
+  /// between the home page, the map and a level never restarts the loop.
+  late final Music _music = Music();
+
   /// The level currently built and running, if any.
   ///
   /// Without this, going to the map and coming back called `requestLevel`,
@@ -172,12 +180,15 @@ class _GameShellState extends State<GameShell>
     final p = widget.progress;
     _tuning
       ..volume = p.volume
-      ..regrowthSound = p.regrowthSound
       ..reducedMotion = p.reducedMotion
       ..hintsEnabled = p.hints
       ..difficulty = p.difficulty
       ..developerTools = p.developerTools;
     Haptics.enabled = p.haptics;
+    _music
+      ..enabled = p.music
+      ..volume = p.volume;
+    unawaited(_music.apply());
     if (_game.isReady) {
       _game.syncDeveloperTools();
     }
@@ -237,6 +248,7 @@ class _GameShellState extends State<GameShell>
 
   @override
   void dispose() {
+    unawaited(_music.dispose());
     _cloud
       ..removeListener(_onStore)
       ..dispose();
@@ -439,6 +451,15 @@ class _GameShellState extends State<GameShell>
         ),
       },
     );
+
+    // The bed ducks while a level is running and comes back up in the menus.
+    // Done here rather than at each of the four places `_screen` moves, because
+    // `apply` is idempotent and returns immediately when nothing has changed —
+    // so the state the music follows is read in one place, from the state
+    // itself, and cannot fall out of step with a screen change that forgot to
+    // announce itself.
+    _music.inLevel = _screen == _Screen.level;
+    unawaited(_music.apply());
 
     return PopScope(
       // Back leaves the campaign map for home, the level for the campaign map
