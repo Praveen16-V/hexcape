@@ -515,7 +515,15 @@ class Campaign {
   static const _slopeIntroDensity = 0.05;
 
   /// Enough sunken ground to be walked into rather than stepped around.
-  static const _sunkenIntroDensity = 0.10;
+  ///
+  /// 0.10 was enough on a full board and not on the one that announces it.
+  /// Level 83's silhouette cuts it to 164 cells where its neighbours run 253,
+  /// so the same density put three tiles on the banner level and six on the
+  /// practice beat after it — the mechanic at its thinnest on the one board
+  /// whose whole job is to teach it. A density floor cannot see the size of
+  /// the board it lands on; this is the smallest value that clears four on
+  /// the short board, and it leaves level 84 exactly where it was.
+  static const _sunkenIntroDensity = 0.12;
 
   /// Enough cracked ground on a board to be met rather than merely present.
   ///
