@@ -120,10 +120,30 @@ class Dog {
   int _fieldVersionSeen = -1;
   List<HexCoord> _route = const [];
 
-  /// Time spent having every attempted movement axis rejected. A brief hit is
-  /// an ordinary wall collision; a sustained hit with a route is the rare
-  /// two-wall pinch where sequential collision resolution cannot escape.
-  double _pinchedFor = 0;
+  /// The speed her steering actually asked for this frame.
+  ///
+  /// Compared against the ground she covered, this is what separates a dog
+  /// walking from a dog leaning her whole weight on geometry that will not
+  /// move. Nothing else in this file measures intent, and without it a wedge
+  /// is indistinguishable from standing still on purpose.
+  double _wantedSpeed = 0;
+
+  /// How long she has asked to move and gone nowhere.
+  ///
+  /// This replaces an older counter that only ticked when her *centre* was
+  /// driven into a solid cell. At walking pace her step is about a third of
+  /// the standoff the collision solver guarantees, so that could never happen
+  /// and the recovery it gated was unreachable. What actually wedges her is
+  /// the depenetration pass cancelling every frame of travel, which leaves the
+  /// centre test perfectly happy. Measure the outcome, not one cause of it.
+  double _wedgedFor = 0;
+
+  /// Seconds of gentle recovery still to run. See [_aimPoint].
+  double _unwedgeFor = 0;
+
+  /// Time since the route was last rebuilt. A wedged dog changes none of the
+  /// things that normally trigger a rebuild, so she needs a clock of her own.
+  double _sinceRoute = 0;
 
   /// Cells she is currently refusing to walk into — a guard's lit ground.
   /// Held so the route can be rebuilt when the patrol moves, which is a change
@@ -159,6 +179,11 @@ class Dog {
 
   double get speed => velocity.distance;
 
+  /// How long she has been pressing into something that will not move. Zero on
+  /// every frame she is actually travelling. Read by the game so a tile that
+  /// pushes her continuously can stand down while she recovers.
+  double get wedgedFor => _wedgedFor;
+
   /// Reaching the food is a cell event, not a hidden centre-radius test.
   /// Steering has no next waypoint once this cell is entered, so requiring a
   /// smaller inner circle can leave her correctly standing on the bone while
@@ -181,6 +206,37 @@ class Dog {
 
   /// Shapes how openness maps onto speed. See [_steer].
   static const _opennessCurve = 1.5;
+
+  /// Fraction of the speed she asked for that still counts as travelling.
+  ///
+  /// A legitimate slide along a wall achieves `wanted * cos(angle)`, so only a
+  /// press within about 78 degrees of head-on scores at all — and an ordinary
+  /// collision is transient by construction, because the tangential component
+  /// carries her off the wall within a few frames.
+  static const _wedgeStallRatio = 0.2;
+
+  /// Seconds of going nowhere before the gentle recovery starts. Fifteen
+  /// frames: long enough that grazing a corner mid-crossing never reaches it.
+  static const _wedgeThreshold = 0.25;
+
+  /// How long the gentle recovery aims her at her own cell centre.
+  static const _unwedgeSeconds = 1.0;
+
+  /// Seconds of going nowhere before she is placed on the centre outright.
+  /// The walk gets roughly two thirds of a second first, which covers the one
+  /// circumradius she can possibly be from it.
+  static const _snapAfter = 0.9;
+
+  /// How often a wedged dog asks the routing question again.
+  static const _rerouteWhileWedged = 0.4;
+
+  /// Fraction of her collision radius a line of sight must leave clear.
+  ///
+  /// Under one on purpose: depenetration parks her at *exactly* that radius
+  /// from a wall, so demanding the full width would reject the corridor she is
+  /// already standing in and collapse all smoothing the moment she touches
+  /// anything.
+  static const _lineClearance = 0.9;
 
   void update({
     required double dt,
@@ -219,10 +275,19 @@ class Dog {
       _blockedSeen = blocked.isEmpty ? const {} : Set.of(blocked);
     }
 
+    // Every trigger but the last is a change to the *world*. Being wedged is
+    // the one state where nothing about the world changes and the answer still
+    // needs revisiting: rivets never bump [fieldVersion], she has not changed
+    // cell, and there is no patrol — so the aim that wedged her would be
+    // re-fed sixty times a second forever. Her visited set has grown in the
+    // meantime, which is enough for the "take any opening she has not walked"
+    // fallback to produce a different answer.
+    _sinceRoute += dt;
     if (evicted ||
         patrolMoved ||
         fieldVersion != _fieldVersionSeen ||
-        cell != previousCell) {
+        cell != previousCell ||
+        (_wedgedFor > 0 && _sinceRoute >= _rerouteWhileWedged)) {
       _fieldVersionSeen = fieldVersion;
       _recomputeRoute(grid, blocked);
     }
@@ -231,14 +296,21 @@ class Dog {
 
     _trackEnclosure(grid, layout, dt, regrowthActive);
     final previousVelocity = velocity;
+    // Decided before steering, because the recovery works by changing what she
+    // aims at and [_aimPoint] runs inside [_steer].
+    _advanceRecovery(layout, dt);
     // Outranks a launch: a spring firing her across the board while the player
     // has just paid to hold her still would spend the tool on nothing.
     if (holdFor > 0) {
       holdFor = math.max(0, holdFor - dt);
       launchFor = 0;
       velocity = Offset.zero;
+      _wantedSpeed = 0;
     } else if (launchFor > 0) {
       launchFor = math.max(0, launchFor - dt);
+      // A throw is intent too: a spring that fires her into a corner has to be
+      // covered by the same detector as a walk that presses into one.
+      _wantedSpeed = velocity.distance;
     } else {
       _steer(
         dt,
@@ -250,7 +322,10 @@ class Dog {
         groundSpeedScale,
       );
     }
+    final movedFrom = position;
     _move(dt, grid, layout);
+    _trackWedge(dt, layout, movedFrom);
+    _settleIfStillWedged(grid, layout, blocked);
     // Only a wait she is actually *serving* counts. She sets the flag the
     // instant she arrives somewhere, a beat before the next cell opens, and
     // coasts to a stop over the frames after — timing it from the flag alone
@@ -286,25 +361,49 @@ class Dog {
     if (!grid.blocks(cell)) {
       return false;
     }
-    HexCoord? refuge;
-    var bestDistance = double.infinity;
-    for (final candidate in cell.disc(2)) {
-      if (!grid.isPassable(candidate)) {
-        continue;
-      }
-      final d = (layout.toPixel(candidate) - position).distanceSquared;
-      if (d < bestDistance) {
-        bestDistance = d;
-        refuge = candidate;
-      }
-    }
+    // Ranked, not simply nearest.
+    //
+    // Taking the closest open cell in two rings looks equivalent and is not:
+    // from inside a wall the nearest hole can be on the far side of it, in a
+    // pocket the player never opened. A safety net that can drop her in a
+    // different pocket is a worse bug than the one it catches -- it either
+    // hands her progress nobody paid for, or strands her somewhere no tap can
+    // reach. So prefer ground her body is already touching, then ground
+    // beside her, and nothing further out at all.
+    final refuge =
+        _nearestPassable(occupiedCells(layout), grid, layout) ??
+        _nearestPassable(cell.neighbours, grid, layout);
     if (refuge == null) {
+      // Nothing she touches and nothing beside her is open. The old search
+      // widened to two rings here, which is how she could end up on the far
+      // side of a rivet; there is no honest move left, so leave her and let
+      // [_trackEnclosure] put a clock on it.
       return false;
     }
     position = layout.toPixel(refuge);
     velocity = Offset.zero;
     cell = refuge;
     return true;
+  }
+
+  HexCoord? _nearestPassable(
+    Iterable<HexCoord> candidates,
+    HexGrid grid,
+    HexLayout layout,
+  ) {
+    HexCoord? best;
+    var bestDistance = double.infinity;
+    for (final candidate in candidates) {
+      if (!grid.isPassable(candidate)) {
+        continue;
+      }
+      final d = (layout.toPixel(candidate) - position).distanceSquared;
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = candidate;
+      }
+    }
+    return best;
   }
 
   /// Flood-fill the open pocket the dog is standing in, then pick where to go.
@@ -544,6 +643,11 @@ class Dog {
       }
     }
 
+    // What she asked for, before momentum gets a say. Recorded here rather
+    // than derived from [velocity] afterwards because the whole point is to
+    // compare intent against the ground she actually covered.
+    _wantedSpeed = desired.distance;
+
     // Momentum (§2.2): the dog keeps walking after a gap opens, so overshoot
     // is possible and hesitation has a cost.
     //
@@ -558,6 +662,24 @@ class Dog {
   /// can reach in a straight line. Aiming only at the next hex centre makes
   /// the dog zig-zag down straight corridors.
   Offset? _aimPoint(HexGrid grid, HexLayout layout) {
+    if (_unwedgeFor > 0 && grid.isPassable(cell)) {
+      // Recovery: walk to the middle of the tile she is already standing on.
+      //
+      // This always works, from any position inside an open cell and against
+      // any arrangement of walls. The centre is the deepest point of a convex
+      // hexagon, one inradius from every face against a body of roughly a
+      // third that; her distance to a solid neighbour is at least her distance
+      // to the line their shared edge sits on, and that distance varies
+      // linearly along the walk, ending at the inradius. So her clearance
+      // never decreases on the way there, and no alternation between two walls
+      // can cancel the move -- the direction home lies inside the feasible
+      // cone of every wall currently pressing on her.
+      //
+      // It is legitimate for the same reason the two cases below are: the aim
+      // stays inside a passable cell she already occupies, so it creates no
+      // route progress and opens no wall. It is a walk, not a snap.
+      return layout.toPixel(cell);
+    }
     if (_route.length < 2) {
       // Crossing a shared edge changes [cell] before her body has finished
       // entering the new hex. Route selection can quite correctly decide that
@@ -581,20 +703,119 @@ class Dog {
         break;
       }
     }
+    if (chosen == 1) {
+      final throat = _throatAim(_route[1], grid, layout);
+      if (throat != null) {
+        return throat;
+      }
+    }
     return layout.toPixel(_route[chosen]);
   }
 
+  /// The middle of the shared edge into [next], while that edge is the
+  /// tightest kind of passage in the game.
+  ///
+  /// A hexagon's edge equals its circumradius, so a throat with a wall at both
+  /// corners is exactly one `size` wide against a body of `0.68 * size` -- a
+  /// sixth of a hex of room per side, and none at all if she arrives off the
+  /// axis. Aiming at the midpoint makes the approach perpendicular, which is
+  /// the only line that uses the whole margin.
+  ///
+  /// Deliberately not applied to every step. Funnelling through edge midpoints
+  /// is smoother in general, but it would change the feel of every corridor in
+  /// the game and undercut the smoothing [_maxSmoothing] exists to provide. It
+  /// earns its place only where the margin is what is actually failing, which
+  /// is why both corner hexes have to be solid and why smoothing must already
+  /// have given up.
+  Offset? _throatAim(HexCoord next, HexGrid grid, HexLayout layout) {
+    final index = HexCoord.directions.indexOf(next - cell);
+    if (index < 0) {
+      return null;
+    }
+    if (!grid.blocks(cell + HexCoord.directions[(index + 1) % 6]) ||
+        !grid.blocks(cell + HexCoord.directions[(index + 5) % 6])) {
+      return null;
+    }
+    final centre = layout.toPixel(cell);
+    final beyond = layout.toPixel(next);
+    final axis = beyond - centre;
+    // Once her centre is through, the midpoint is behind her and aiming at it
+    // would pull her back onto the seam she has just crossed.
+    final along =
+        (position.dx - centre.dx) * axis.dx +
+        (position.dy - centre.dy) * axis.dy;
+    if (along >= axis.distanceSquared * 0.5) {
+      return null;
+    }
+    // Pointed *at* the throat, held *beyond* it.
+    //
+    // The midpoint of two adjacent centres lands exactly on their shared edge,
+    // and steering straight at it is what pulls an off-axis approach back onto
+    // the axis before the gap narrows. But it cannot be the aim itself:
+    // [_steer]'s arrival damping does not know a waypoint from a destination,
+    // so she would decelerate to nothing on the seam and cross every throat in
+    // the game at a crawl. Aiming a whole hex further along that same bearing
+    // keeps the correction and drops the braking.
+    //
+    // Aiming at the next centre instead would do neither: from off the axis
+    // that line only halves her offset by the time she reaches the gap, which
+    // is the half that does not fit.
+    final toThroat = (centre + beyond) / 2 - position;
+    if (toThroat.distance < 1e-6) {
+      return null;
+    }
+    return position + (toThroat / toThroat.distance) * layout.width;
+  }
+
+  /// Whether her *body* can travel this line, not just her centre.
+  ///
+  /// The distinction is not academic. Take three cells around a sixty degree
+  /// bend: the straight line between the first and last centres does not
+  /// merely pass near the shared edge of the two cells between them, it
+  /// contains it -- same bearing, collinear endpoints. Every sample along that
+  /// span sits exactly on the boundary, hex rounding picks a side by floating
+  /// point luck, and a line with a rivet on one side gets approved. She is
+  /// then aimed down a path her body overlaps by its whole radius, and spends
+  /// every frame being pushed back out of a wall she is steering into.
+  ///
+  /// Rejecting too much is cheap: [_aimPoint] falls back to the next cell of
+  /// the route, so the worst case is less smoothing, never less movement.
   bool _hasClearLine(Offset from, Offset to, HexGrid grid, HexLayout layout) {
     final delta = to - from;
     final distance = delta.distance;
     final steps = math.max(2, (distance / (layout.inradius * 0.5)).ceil());
+    final room = collisionRadius(layout) * _lineClearance;
     for (var i = 1; i <= steps; i++) {
       final p = from + delta * (i / steps);
-      if (grid.blocks(layout.toHex(p))) {
+      if (grid.blocks(layout.toHex(p)) || clearanceAt(p, grid, layout) < room) {
         return false;
       }
     }
     return true;
+  }
+
+  /// How much room her body has at [p]: the distance to the nearest solid hex
+  /// face, or infinity when nothing solid is near.
+  ///
+  /// Shares [_closestPointOnPolygon] with the collision solver on purpose, so
+  /// the test that decides where to aim and the test that decides where she
+  /// may stand can never disagree about the same piece of geometry.
+  ///
+  /// Searching the containing cell's neighbours is complete, not a heuristic:
+  /// the nearest cell two steps away comes no closer than a full `size` to any
+  /// point inside the middle one, and her body is barely a third of that.
+  static double clearanceAt(Offset p, HexGrid grid, HexLayout layout) {
+    var room = double.infinity;
+    for (final n in layout.toHex(p).neighbours) {
+      if (!grid.blocks(n)) {
+        continue;
+      }
+      final d = (_closestPointOnPolygon(p, layout.corners(n)) - p).distance;
+      if (d < room) {
+        room = d;
+      }
+    }
+    return room;
   }
 
   void _move(double dt, HexGrid grid, HexLayout layout) {
@@ -631,23 +852,14 @@ class Dog {
         next = slideY;
         velocity = Offset(0, velocity.dy);
       } else {
-        _pinchedFor += dt;
-        if (_pinchedFor >= 0.18 && _route.length > 1) {
-          // Recover inside the same logical open tile. This is deliberately a
-          // small depenetration, not route progress or player assistance: it
-          // only removes the sub-tile offset that wedged her collision disc.
-          final centre = layout.toPixel(cell);
-          if (grid.isPassable(cell)) {
-            position = centre;
-            _pinchedFor = 0;
-          }
-        }
+        // Both axes refused. Stop, and leave the recovery to [_trackWedge] --
+        // there is exactly one stall measure in this file and it is the one
+        // that watches whether she actually travelled.
         velocity = Offset.zero;
         return;
       }
     }
     position = next;
-    _pinchedFor = 0;
 
     // The dog is a disc, not a point, so push it clear of any solid hex it
     // overlaps. Two passes settles the corner case of touching two walls at
@@ -683,6 +895,93 @@ class Dog {
     }
   }
 
+  /// Book-keeping for the gentle recovery, run before steering each frame.
+  ///
+  /// Starting it clears her velocity once. The wedge is a standing press into
+  /// a wall, and carrying that momentum into the recovery would just aim the
+  /// same force at the same corner for another few frames.
+  void _advanceRecovery(HexLayout layout, double dt) {
+    if (_unwedgeFor > 0) {
+      _unwedgeFor = math.max(0, _unwedgeFor - dt);
+      // Arrived. Nothing is gained by holding the aim once she is on the spot,
+      // and releasing early hands her straight back to ordinary steering.
+      if ((layout.toPixel(cell) - position).distance <= layout.size * 0.05) {
+        _unwedgeFor = 0;
+      }
+      return;
+    }
+    if (_wedgedFor >= _wedgeThreshold) {
+      _unwedgeFor = _unwedgeSeconds;
+      velocity = Offset.zero;
+    }
+  }
+
+  /// Did she get where she asked to go?
+  ///
+  /// The floor is the same "actually moving" threshold used for the waiting
+  /// clock and the gait, and it is what keeps a dog correctly easing onto a
+  /// cell centre from reading as wedged: [_steer]'s arrival damping drives the
+  /// speed she asks for toward zero as she arrives.
+  void _trackWedge(double dt, HexLayout layout, Offset from) {
+    final achieved = (position - from).distance / math.max(dt, 1e-4);
+    if (_wantedSpeed > layout.width * 0.15 &&
+        achieved < _wantedSpeed * _wedgeStallRatio) {
+      _wedgedFor += dt;
+    } else {
+      _wedgedFor = 0;
+    }
+  }
+
+  /// Last resort: put her on the centre of a cell her body already occupies.
+  ///
+  /// Bounded by the circumradius, because she is by definition inside that
+  /// cell — this moves her less than one hex and cannot carry her past a wall.
+  /// It is deliberately second: it reads as a snap rather than a walk, and the
+  /// aim in [_aimPoint] is provably sufficient whenever her own cell is open,
+  /// so reaching this means that premise was already broken — a launch
+  /// overshoot, or ground that closed under her.
+  void _settleIfStillWedged(
+    HexGrid grid,
+    HexLayout layout,
+    Set<HexCoord> blocked,
+  ) {
+    if (_wedgedFor < _snapAfter) {
+      return;
+    }
+    final refuge = _settleCell(grid, layout);
+    if (refuge == null) {
+      return;
+    }
+    position = layout.toPixel(refuge);
+    velocity = Offset.zero;
+    cell = refuge;
+    _wedgedFor = 0;
+    _unwedgeFor = 0;
+    _recomputeRoute(grid, blocked);
+  }
+
+  /// Open ground she is already standing on, nearest first. Never anywhere
+  /// else: putting her in a cell she does not already touch would be opening a
+  /// wall for her, which is the one thing no recovery may do.
+  HexCoord? _settleCell(HexGrid grid, HexLayout layout) {
+    if (grid.isPassable(cell)) {
+      return cell;
+    }
+    HexCoord? best;
+    var bestDistance = double.infinity;
+    for (final candidate in occupiedCells(layout)) {
+      if (!grid.isPassable(candidate)) {
+        continue;
+      }
+      final d = (layout.toPixel(candidate) - position).distanceSquared;
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = candidate;
+      }
+    }
+    return best;
+  }
+
   /// Being boxed in only counts once the dog has actually had somewhere to go.
   ///
   /// She starts the level walled in on all six sides, so without this gate a
@@ -710,6 +1009,14 @@ class Dog {
       return;
     }
     if (regrowthActive && hasBeenFree) {
+      enclosedFor += dt;
+    } else if (!grid.isPassable(cell) && _settleCell(grid, layout) == null) {
+      // Sealed in stone: her centre is inside a wall, nothing her body touches
+      // is open, and the eviction net found nowhere to put her. Steering has
+      // no aim, the solver has no constraint left to relieve, and no tap can
+      // change any of it. Every other enclosure is regrowth closing on her and
+      // is gated on regrowth running; this one is not, because regrowth is not
+      // what put her there.
       enclosedFor += dt;
     } else {
       enclosedFor = 0;

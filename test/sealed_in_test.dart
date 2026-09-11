@@ -107,6 +107,14 @@ void main() {
     // leave her for a frame when a cell snaps shut against her. Steering is
     // allowed to finish entering either open tile; both outcomes still have
     // to start the boxed-in grace period rather than wait for hunger.
+    //
+    // This test is more delicate than it looks, and anything that changes how
+    // fast she settles should expect to hear from it. Settling onto one tile
+    // shrinks her footprint from two cells to one, and [HexGrid.isBoxedIn]
+    // then reads the tile she just left as a way out — so the grace period
+    // only runs because regrowth seals that tile within a few hundred
+    // milliseconds of her letting go of it. A change that leaves her hovering
+    // on the seam for longer breaks this, and the break is the real bug.
     final dog = Dog(
       position: (_layout.toPixel(here) + _layout.toPixel(beside)) / 2,
       cell: here,
