@@ -182,8 +182,17 @@ class ReferenceMark extends StatelessWidget {
 }
 
 const allReferenceEntries = <ReferenceEntry>[
-  // ── The four rules, first: everything else on this page is a verb of
-  // one of these.
+  // ── The goal and the rules around it: everything else on this page is a verb
+  // of one of these.
+  ReferenceEntry(
+    section: ReferenceSection.rules,
+    name: 'The bone',
+    blurb:
+        'The one thing a level asks for: get her to it. Opening tiles is the '
+        'way there, never the prize — land her on the bone and the run is won, '
+        'whatever is left standing around her.',
+    icon: Icons.bakery_dining,
+  ),
   ReferenceEntry(
     section: ReferenceSection.rules,
     name: 'She never stops',

@@ -6,6 +6,7 @@ import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/progress.dart';
 import 'package:hexcape/game/tuning.dart';
 import 'package:hexcape/game/tutorial.dart';
+import 'package:hexcape/hex/hex_coord.dart';
 import 'package:hexcape/ui/hud.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -59,6 +60,47 @@ void main() {
     expect(script.isDone, isTrue);
     expect(find.text('Skip'), findsNothing);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the mark holds its tile while she crosses to it', (
+    tester,
+  ) async {
+    // The complaint this beat exists to keep fixed: the tile the lesson points
+    // at is the first one on the route *from where she is standing*, so a mark
+    // recomputed per frame re-picks itself on every step she takes and hops
+    // between candidates ahead of her. It holds one tile until the tile is
+    // opened; only then does it move on.
+    final game = HexcapeGame(tuning: TuningConfig())
+      ..onGameResize(Vector2(390, 844))
+      ..startLevel(level: 1);
+    final script = game.tutorial!;
+    final marked = script.targetCell(game.grid, game.dog, game.pickups)!;
+    for (var frame = 0; frame < 240 && script.stepNumber == 1; frame++) {
+      game.onTapDown(BoardTap(game, game.layout.toPixel(marked)));
+      game.update(1 / 60);
+    }
+    expect(script.stepNumber, 2, reason: 'the tap answers the first beat');
+
+    // A tapped tile buys a frame of hit-stop, so give the beat that follows a
+    // few frames to put its own mark up before anything is read off it.
+    for (var frame = 0; frame < 6; frame++) {
+      game.update(1 / 60);
+      if (game.tutorialTarget != marked) break;
+    }
+    final held = game.tutorialTarget!;
+    expect(held, isNot(marked), reason: 'the next beat marks the next tile');
+    final seen = <HexCoord>{held};
+    final wasAt = game.dog.position;
+    for (var frame = 0; frame < 180; frame++) {
+      game.update(1 / 60);
+      seen.add(game.tutorialTarget!);
+    }
+    expect(seen, {held}, reason: 'the mark moved under her feet: $seen');
+    expect(
+      game.dog.position,
+      isNot(wasAt),
+      reason: 'she was walking the whole time, which is the point',
+    );
   });
 
   testWidgets('Tutorial fits a narrow phone with large text', (tester) async {

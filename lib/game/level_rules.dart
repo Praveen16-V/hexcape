@@ -852,7 +852,11 @@ class Campaign {
         seed: seed,
         columns: 7,
         rows: 11,
-        teaches: 'Tap a tile — she walks into whatever opens',
+        // The drift lesson, and the objective, in the order a first level needs
+        // them. The HUD line below the board is the only thing a player who
+        // skips the lesson ever reads about what a level is *for*, and tiles
+        // opening by themselves look like the point.
+        teaches: 'Open a way to the bone — she walks into whatever opens',
       ),
       // Regrowth and the two special tiles together. They were a level each
       // when the tutorial was five long; the gate is what makes merging them

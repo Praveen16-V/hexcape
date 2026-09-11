@@ -139,6 +139,58 @@ void main() {
       );
     });
 
+    test('the mark holds one tile until the lesson is answered', () {
+      // Every rule is resolved from her own cell, so re-asking one on each
+      // frame re-picks the answer on each step she takes — several tiles ahead
+      // of her qualify in turn, and the tile she is being told to tap keeps
+      // moving. The mark is held for the life of the lesson instead, and the
+      // event that moves it is the one the lesson is about.
+      final ctx = _levelFor(1);
+      final grid = ctx.level.grid;
+      final script = Tutorial(const [
+        TutorialStep(
+          prompt: 'Tap the glowing tile',
+          target: TutorialTarget.nextOnRoute,
+          advance: TutorialAdvance.onTap,
+          gate: true,
+        ),
+        TutorialStep(
+          prompt: 'And the next',
+          target: TutorialTarget.nextOnRoute,
+          advance: TutorialAdvance.onTap,
+        ),
+      ]);
+
+      final marked = script.targetCell(grid, ctx.dog, ctx.level.pickups)!;
+      for (final near in marked.neighbours) {
+        ctx.dog.cell = near;
+        expect(
+          script.targetCell(grid, ctx.dog, ctx.level.pickups),
+          marked,
+          reason: 'walking must not move the tile she was told to tap',
+        );
+        expect(
+          script.allowsTap(near, grid, ctx.dog, ctx.level.pickups),
+          isFalse,
+          reason: 'the gate follows the mark, not her feet',
+        );
+        expect(
+          script.allowsTap(marked, grid, ctx.dog, ctx.level.pickups),
+          isTrue,
+        );
+      }
+
+      // The other half: reaching it is what hands the mark to the next tile, so
+      // the hold never outlives the answer and strands a gate on open ground.
+      ctx.dog.cell = grid.start;
+      grid.at(marked)!.clear(0);
+      expect(
+        script.targetCell(grid, ctx.dog, ctx.level.pickups),
+        isNot(marked),
+        reason: 'an answered lesson must not keep its mark',
+      );
+    });
+
     test(
       'an action waits for the player and Skip always releases the gate',
       () {

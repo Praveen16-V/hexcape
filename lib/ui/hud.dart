@@ -1100,7 +1100,7 @@ class TutorialCard extends StatelessWidget {
                 Text(
                   switch (step.advance) {
                     TutorialAdvance.onTap =>
-                      'Tap the marked tile on the board to continue.',
+                      'Tap the glowing tile on the board to continue.',
                     TutorialAdvance.onReach =>
                       'Open a route so your dog can reach the marked treat.',
                     // The watching beats are the ones that need the player to
