@@ -169,9 +169,42 @@ class HexGrid {
   /// value rather than being absent, so callers can compare without a null.
   int distanceToExit(HexCoord c) => exitDistance[c] ?? 1 << 20;
 
-  /// True when every direction out of [c] is blocked. Drives the boxed-in
-  /// failure state (§10) and the "nowhere to drift" idle.
+  /// True when every direction out of [c] is blocked. Drives the "nowhere to
+  /// drift" idle, and is the single-cell shorthand for [isBoxedIn].
   bool isEnclosed(HexCoord c) => c.neighbours.every(blocks);
+
+  /// True when nothing she could step into is open. Drives the boxed-in
+  /// failure state (§10).
+  ///
+  /// [footprint] is every cell her collision body touches, not just the cell
+  /// under her centre — and that distinction is the whole reason this exists
+  /// alongside [isEnclosed]. Regrowth holds every occupied cell short of the
+  /// snap so she is never crushed without warning, so while she straddles a
+  /// shared edge it holds *both* of them, indefinitely. A two-cell hole
+  /// exactly her own size therefore stays passable forever; asking only
+  /// whether her centre cell's six neighbours are solid calls that pocket
+  /// open, the grace period never starts, and she is left wedged in ground
+  /// that can neither close on her nor let her out.
+  ///
+  /// Ground she is standing on is not an escape route, so only cells outside
+  /// the footprint count. Cells of the footprint that are solid are skipped
+  /// rather than searched from: she is only brushing a wall there, and reading
+  /// its far side would find openings she cannot reach through it.
+  bool isBoxedIn(Set<HexCoord> footprint) {
+    for (final c in footprint) {
+      if (!isPassable(c)) {
+        continue;
+      }
+      for (final n in c.neighbours) {
+        if (!footprint.contains(n) && isPassable(n)) {
+          return false;
+        }
+      }
+    }
+    // Nothing she touches is open at all — sealed in stone, which the eviction
+    // safety net has already failed to answer.
+    return true;
+  }
 
   /// Fraction of the cells within [radius] of [c] that are passable, measured
   /// against how many cells actually exist there. This is the openness that
