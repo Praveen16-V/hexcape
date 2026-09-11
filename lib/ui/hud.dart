@@ -283,6 +283,12 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
         1.0,
       );
 
+  /// How long she must actually be standing still with nowhere to go before
+  /// the HUD says so. Long enough to sit out the ordinary pauses between one
+  /// cell opening and the next; short enough that a player who has genuinely
+  /// stopped is not left reading an empty screen.
+  static const _waitBeforeNaming = 0.8;
+
   /// §12.5: teach tap, then drift, then regrowth — never all three at once.
   static String? _hintFor(HexcapeGame game) {
     if (game.isOver) {
@@ -297,6 +303,13 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
 
     if (game.dog.waitingForPatrol && !game.dog.isLaunched) {
       return 'Patrol ahead — she avoids the light';
+    }
+
+    // Outranks the banner and the level's own lesson, because it is the only
+    // line that explains why the board has gone quiet. A patrol beats it: that
+    // wait ends on its own, so naming the light is the more useful of the two.
+    if (game.dog.nowhereToGoFor >= _waitBeforeNaming && !game.dog.isLaunched) {
+      return Strings.hintNowhereToGo;
     }
 
     // Something just happened that needs words — a charge waiting to be spent,

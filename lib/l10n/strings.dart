@@ -89,6 +89,11 @@ class Strings {
   static const hintDrift = 'She walks to whatever opens up';
   static const hintRegrowth = 'Cleared tiles grow back — keep moving';
 
+  /// She has run out of pocket: standing on the best cell she can reach, with
+  /// nothing left to walk to. Naming it is the whole point — without a line
+  /// here a correct stop is indistinguishable from a hung game.
+  static const hintNowhereToGo = 'She is waiting — open a way beside her';
+
   // Debug panel.
   static const debug = 'DEBUG';
   static const tapRadius = 'Tap radius';

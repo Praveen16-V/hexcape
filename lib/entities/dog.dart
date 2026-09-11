@@ -77,6 +77,28 @@ class Dog {
   /// Distinguishes a patrol stopping her from a corridor that needs opening.
   bool waitingForPatrol = false;
 
+  /// She has a pocket to stand in and no reason to be anywhere else in it:
+  /// nothing reachable is closer to the food and every cell of it is ground
+  /// she has already walked. Steering is *correct* to hold her here — the way
+  /// on has to be opened, not chosen — but it is the one state where a dog
+  /// that simply stops looks like a dog that has broken.
+  ///
+  /// Distinct from [waitingForPatrol], which is a wait with a clock on it, and
+  /// from being boxed in, which has nowhere to stand at all and ends the run.
+  bool nowhereToGo = false;
+
+  /// How long that wait has actually lasted. She passes through [nowhereToGo]
+  /// for a few frames in ordinary play — every time she arrives somewhere
+  /// before the next cell opens — so anything that speaks to the player about
+  /// it has to wait out the blips or it flickers.
+  double nowhereToGoFor = 0;
+
+  /// The wall she is waiting on: the nearest thing to the food that a tap
+  /// could still open on the edge of her pocket. She turns to look at it while
+  /// she waits. Null when nothing bordering her can be opened at all, which is
+  /// not a wait — the soft-lock check owns that ending.
+  HexCoord? gazeTarget;
+
   /// Every cell she has stood in this run. Used only to stop the "take any
   /// opening" fallback from walking her back and forth over old ground.
   final Set<HexCoord> _visited = {};
@@ -229,6 +251,15 @@ class Dog {
       );
     }
     _move(dt, grid, layout);
+    // Only a wait she is actually *serving* counts. She sets the flag the
+    // instant she arrives somewhere, a beat before the next cell opens, and
+    // coasts to a stop over the frames after — timing it from the flag alone
+    // would blink at the player all game.
+    if (nowhereToGo && speed <= layout.width * 0.15) {
+      nowhereToGoFor += dt;
+    } else {
+      nowhereToGoFor = 0;
+    }
     _updateAnimationState(dt, previousVelocity, layout);
   }
 
@@ -284,6 +315,8 @@ class Dog {
   /// toward the exit, which reads as "flows into whatever just opened".
   void _recomputeRoute(HexGrid grid, Set<HexCoord> blocked) {
     waitingForPatrol = false;
+    nowhereToGo = false;
+    gazeTarget = null;
     // Her own cell is never excluded. Standing in the light is a thing that
     // happens to her; treating it as impassable would leave the flood with no
     // source at all and freeze her exactly when she most needs to move.
@@ -356,10 +389,47 @@ class Dog {
           target = fresh;
         }
       }
+
+      // Still herself: she is standing on the best ground her pocket has, and
+      // every other cell of it is ground she has already covered. Holding her
+      // here is the right answer — the way on has to be *opened* — but it is
+      // also the moment she stops moving entirely, with the hunger bar as the
+      // only thing on screen still doing anything. Say so, and give her
+      // something to look at, or a correct decision reads as a hung game.
+      if (target == cell) {
+        nowhereToGo = true;
+        gazeTarget = _wallWorthOpening(depths, grid);
+      }
     }
 
     steerTarget = target;
     _route = _walkBack(depths, target, grid);
+  }
+
+  /// The wall she is waiting on: of everything solid that a tap could open
+  /// along the edge of her pocket, the one standing closest to the food.
+  ///
+  /// Measured on the anchor-aware field, so a tile with rivets behind it is
+  /// correctly worth less than one with road behind it, and rivets themselves
+  /// — which no tap can touch — are never named. Null when the pocket is
+  /// ringed entirely by ground a tap cannot answer: that is not a wait, and
+  /// pointing her at a rivet would promise a way through that is not there.
+  HexCoord? _wallWorthOpening(Map<HexCoord, int> depths, HexGrid grid) {
+    HexCoord? best;
+    var bestDistance = 1 << 30;
+    for (final c in depths.keys) {
+      for (final n in c.neighbours) {
+        if (depths.containsKey(n) || !grid.isClearable(n)) {
+          continue;
+        }
+        final d = grid.distanceToExit(n);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = n;
+        }
+      }
+    }
+    return best;
   }
 
   /// Highest scoring cell in the flood that [accept] allows, or her own cell
@@ -634,6 +704,21 @@ class Dog {
     }
   }
 
+  /// Ease [facing] toward [heading] at [rate], taking the short way round.
+  /// Returns the turn applied, which is what drives the lean and the ear flop.
+  double _turnToward(double heading, double rate, double dt) {
+    var delta = heading - facing;
+    while (delta > math.pi) {
+      delta -= 2 * math.pi;
+    }
+    while (delta < -math.pi) {
+      delta += 2 * math.pi;
+    }
+    final turn = delta * (rate * dt).clamp(0.0, 1.0);
+    facing += turn;
+    return turn;
+  }
+
   void _updateAnimationState(
     double dt,
     Offset previousVelocity,
@@ -642,19 +727,21 @@ class Dog {
     final currentSpeed = speed;
 
     if (currentSpeed > layout.width * 0.15) {
-      final heading = math.atan2(velocity.dy, velocity.dx);
-      var delta = heading - facing;
-      while (delta > math.pi) {
-        delta -= 2 * math.pi;
-      }
-      while (delta < -math.pi) {
-        delta += 2 * math.pi;
-      }
-      final turn = delta * (10.0 * dt).clamp(0.0, 1.0);
-      facing += turn;
+      final turn = _turnToward(math.atan2(velocity.dy, velocity.dx), 10.0, dt);
       turnRate += (turn / math.max(dt, 1e-4) - turnRate) * 0.25;
     } else {
       turnRate *= 0.9;
+      // Waiting is not the same as being switched off. She turns to face the
+      // wall she needs gone, slowly enough to read as looking rather than
+      // steering, which is the difference between a dog with a problem and a
+      // dog that has stopped working. Nothing here moves her.
+      final gaze = gazeTarget;
+      if (gaze != null) {
+        final away = layout.toPixel(gaze) - position;
+        if (away.distance > 1e-3) {
+          _turnToward(math.atan2(away.dy, away.dx), 2.2, dt);
+        }
+      }
     }
 
     // Tie the gait to distance covered so the trot never runs on the spot.
