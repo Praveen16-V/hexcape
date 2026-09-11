@@ -98,4 +98,44 @@ void main() {
       );
     });
   });
+
+  group('Store listing', () {
+    test('the privacy policy is a real page, not a markdown file', () {
+      // Play reviewers click this link. A .md served by GitHub Pages without
+      // Jekyll front matter arrives as raw text, which reads as a broken site
+      // and has failed listing review for other people before.
+      final policy = File('docs/privacy-policy.html');
+      expect(policy.existsSync(), isTrue);
+      final html = policy.readAsStringSync();
+      expect(html, contains('<!doctype html>'));
+      // The claims the Data safety form is filled in against. If the app ever
+      // grows analytics or an account, this test should fail and force both the
+      // page and the form to be revisited together.
+      expect(html.toLowerCase(), contains('does not collect'));
+    });
+
+    test('the policy carries a real contact address', () {
+      // The template ships a placeholder on purpose: publishing it would put
+      // "CONTACT_EMAIL_HERE" on a public page linked from the store listing.
+      final html = File('docs/privacy-policy.html').readAsStringSync();
+      expect(
+        html,
+        isNot(contains('CONTACT_EMAIL_HERE')),
+        reason:
+            'pick the address that should be public on the Play listing and '
+            'put it in docs/privacy-policy.html before uploading a build',
+      );
+    });
+
+    test('the listed product id is the one the app asks Play for', () {
+      // These live in two places by necessity — one in Dart, one pasted into
+      // the console via the listing doc — and a mismatch is silent: the paywall
+      // simply reports that billing is unavailable, on every device, forever.
+      final id = RegExp(r"kFullGameId = '([^']+)'")
+          .firstMatch(File('lib/game/store.dart').readAsStringSync())
+          ?.group(1);
+      expect(id, isNotNull, reason: 'kFullGameId is no longer where it was');
+      expect(File('docs/store-listing.md').readAsStringSync(), contains(id!));
+    });
+  });
 }
