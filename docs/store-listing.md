@@ -98,8 +98,8 @@ device you own.
 
 | Asset | Spec | Status |
 |---|---|---|
-| App icon | 512 × 512 PNG, 32-bit, no alpha | Render from `assets/icon/icon.png` |
-| Feature graphic | 1024 × 500 PNG/JPG, no alpha | **Needs designing** |
+| App icon | 512 × 512, 32-bit PNG | **Done** — `assets/icon/icon.png` is already exactly this: 512×512 RGBA, fully opaque. Upload as-is. |
+| Feature graphic | 1024 × 500 JPEG or 24-bit PNG, **no alpha** | **Needs designing** |
 | Phone screenshots | 2–8, portrait, 16:9 to 9:16, min 320px | **Needs capturing** |
 | 7" tablet screenshots | Optional | Skip for v1 |
 | 10" tablet screenshots | Optional | Skip for v1 |
