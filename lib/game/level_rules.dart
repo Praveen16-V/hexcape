@@ -1845,7 +1845,14 @@ class Campaign {
 /// difficulty curve's way. Signatures land on combination and breather levels;
 /// the challenge peaks are all [LevelSignature.gauntlet], which zeroes every
 /// entry here and is where the band's own numbers are felt undiluted.
-extension on LevelSignature {
+/// The board a signature asks for, as deltas against the band's own curve.
+///
+/// Named, and so visible outside this file, because the suppression half of a
+/// signature is load-bearing and worth a test: a spring level carrying the
+/// band's full wall density is a gauntlet that happens to have springs, since
+/// momentum has nowhere to land. Measuring that between two levels folds in
+/// pace relief and the band's climb; these are the numbers themselves.
+extension SignatureShape on LevelSignature {
   double get anchorDelta => switch (this) {
     LevelSignature.openTrail => -0.05,
     LevelSignature.heavyGround => -0.03,
