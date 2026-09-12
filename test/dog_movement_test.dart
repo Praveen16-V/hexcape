@@ -118,6 +118,139 @@ void main() {
       expect(dog.enclosedFor, 0, reason: 'the opening position must not kill');
     });
 
+    test('a pocket whose best cell is a dead end does not make her shiver', () {
+      // The stutter, in its smallest form. The food is north; a one-cell stub
+      // runs north and stops, and there is fresh ground south of her.
+      //
+      // Standing in the stub, nothing is closer to the food, so she turns to
+      // investigate the fresh ground. One step south, the stub is the closest
+      // thing again, so goal-seeking turns her back north. Arriving, nothing
+      // is closer. Each cell argues the opposite of its neighbour, and she
+      // buzzes on the boundary between them — on screen, a dog who cannot make
+      // up her mind, with the direction arrow strobing between two tiles.
+      final grid = _field(
+        cleared: const [
+          HexCoord.zero,
+          HexCoord(0, -1),
+          HexCoord(0, 1),
+          HexCoord(0, 2),
+        ],
+      );
+      final dog = Dog(
+        position: _layout.toPixel(HexCoord.zero),
+        cell: HexCoord.zero,
+      );
+
+      const dt = 1 / 60;
+      final changedAt = <double>[];
+      final chosen = <HexCoord?>[];
+      var fastestReversal = double.infinity;
+      var elapsed = 0.0;
+      while (elapsed < 8) {
+        elapsed += dt;
+        dog.update(
+          dt: dt,
+          grid: grid,
+          layout: _layout,
+          tuning: TuningConfig(),
+          fieldVersion: 1,
+          regrowthActive: false,
+        );
+        final target = dog.steerTarget;
+        if (chosen.isEmpty || chosen.last != target) {
+          // A reversal is her going back to the choice before last: the shape
+          // of a loop rather than of a journey.
+          if (chosen.length >= 2 && chosen[chosen.length - 2] == target) {
+            final gap = elapsed - changedAt.last;
+            if (gap < fastestReversal) {
+              fastestReversal = gap;
+            }
+          }
+          chosen.add(target);
+          changedAt.add(elapsed);
+        }
+      }
+
+      expect(
+        fastestReversal,
+        greaterThan(0.5),
+        reason: 'she reversed her mind mid-stride, which reads as a stutter',
+      );
+      // Two pieces of fresh ground, so at most a couple of round trips before
+      // there is nothing left to look at.
+      expect(
+        chosen.length,
+        lessThan(12),
+        reason: 'she changed her mind ${chosen.length} times in eight seconds',
+      );
+      expect(
+        dog.nowhereToGo,
+        isTrue,
+        reason: 'having looked everywhere, she should be waiting, not pacing',
+      );
+    });
+
+    test('an investigation yields to ground that actually beats it', () {
+      // The commitment must not become stubbornness: the moment the player
+      // opens something closer to the food than the best the pocket held, she
+      // turns on the spot.
+      final grid = _field(
+        cleared: const [
+          HexCoord.zero,
+          HexCoord(0, -1),
+          HexCoord(0, 1),
+          HexCoord(0, 2),
+        ],
+      );
+      final dog = Dog(
+        position: _layout.toPixel(HexCoord.zero),
+        cell: HexCoord.zero,
+      );
+
+      const dt = 1 / 60;
+      var version = 1;
+      // Run on until she has actually committed to walking away from the food.
+      var committed = false;
+      for (var i = 0; i < 60 * 8 && !committed; i++) {
+        dog.update(
+          dt: dt,
+          grid: grid,
+          layout: _layout,
+          tuning: TuningConfig(),
+          fieldVersion: version,
+          regrowthActive: false,
+        );
+        final target = dog.steerTarget;
+        committed =
+            target != null &&
+            grid.distanceToExit(target) > grid.distanceToExit(dog.cell);
+      }
+      expect(
+        committed,
+        isTrue,
+        reason: 'this test needs her walking away from the food to mean it',
+      );
+
+      // The player carves north, past the dead end.
+      grid.at(const HexCoord(0, -2))!.clear(0);
+      version++;
+      for (var i = 0; i < 60; i++) {
+        dog.update(
+          dt: dt,
+          grid: grid,
+          layout: _layout,
+          tuning: TuningConfig(),
+          fieldVersion: version,
+          regrowthActive: false,
+        );
+      }
+      expect(
+        grid.distanceToExit(dog.steerTarget!),
+        lessThan(grid.distanceToExit(HexCoord.zero)),
+        reason: 'a tap that makes progress must turn her round at once',
+      );
+    });
+
     test('holds its last facing while stationary', () {
       final grid = _field(cleared: const [HexCoord.zero]);
       final dog = Dog(

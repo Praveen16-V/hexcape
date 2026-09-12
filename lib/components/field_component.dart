@@ -1274,7 +1274,7 @@ class FieldComponent extends Component {
     }
     final centre = layout.toPixel(target);
     if (game.tutorial?.current?.target == TutorialTarget.goalBone) {
-      _renderGoalHand(canvas, centre, layout);
+      _renderGoalBeacon(canvas, centre, layout);
       return;
     }
     final pulse = game.tuning.reducedMotion
@@ -1307,63 +1307,61 @@ class FieldComponent extends Component {
     );
   }
 
-  /// A compact pointing-hand silhouette for the first thing level one teaches:
-  /// the glowing bone is the destination, not a pickup or decoration.
+  /// The marker for the first thing level one teaches: the glowing bone is
+  /// where she is going, not something to tap.
   ///
-  /// The wrist sits toward the dog, which is also toward the board interior on
-  /// the opening layout. This keeps the hand on-screen even when the goal is
-  /// near an edge, while its fingertip stops outside the bone so the target is
-  /// never covered.
-  void _renderGoalHand(Canvas canvas, Offset centre, HexLayout layout) {
-    var inward = game.dog.position - centre;
-    if (inward.distanceSquared < 0.001) {
-      inward = const Offset(0, 1);
-    } else {
-      inward /= inward.distance;
+  /// It used to be a pointing hand laid over the bone, and that was the wrong
+  /// sentence in two ways. A hand with a fingertip on a tile is the universal
+  /// drawing for *press here* — but this is the one tutorial beat whose target
+  /// must never be tapped, and tapping the goal is not even a legal move. And
+  /// it sat on top of the bone, hiding the thing the line is naming.
+  ///
+  /// So: a beacon instead of a finger. Rings travel outward from the tile, in
+  /// the grid's own hex geometry, the way a signal is drawn on a map — the
+  /// nothing-covered, points-at-itself shape of *a place*. Every other
+  /// tutorial beat keeps the tap marker, so the two now read as the two
+  /// different instructions they always were.
+  void _renderGoalBeacon(Canvas canvas, Offset centre, HexLayout layout) {
+    void ring(double radius, double alpha) {
+      if (alpha <= 0.01) {
+        return;
+      }
+      _stroke
+        ..color = Palette.goalBone.withValues(alpha: alpha)
+        ..strokeWidth = math.max(1.3, layout.size * 0.055);
+      canvas.drawPath(
+        HexLayout.pathFromCorners(HexLayout.cornersAt(centre, radius)),
+        _stroke,
+      );
     }
-    final bob = game.tuning.reducedMotion
-        ? 0.0
-        : math.sin(game.elapsed * 4.0) * 0.08;
-    final tip = centre + inward * layout.size * (0.58 + bob);
-    final size = layout.size * 0.72;
 
-    // A crisp ring connects the hand to the already-glowing goal without
-    // hiding the bone itself.
+    if (game.tuning.reducedMotion) {
+      // Still air says the same thing with two fixed rings. A beacon that has
+      // to travel to be understood is one a player who turned motion off
+      // cannot read at all.
+      ring(layout.size * 1.45, 0.5);
+      ring(layout.size * 1.95, 0.28);
+    } else {
+      const rings = 3;
+      final phase = (game.elapsed * 0.5) % 1.0;
+      for (var i = 0; i < rings; i++) {
+        final t = (phase + i / rings) % 1.0;
+        // Up quickly, out slowly, so a ring is never born or killed on screen.
+        final fade = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+        ring(layout.size * (1.0 + t * 1.45), 0.75 * fade);
+      }
+    }
+
+    // A steady ring hugging the bone itself — not the tile edge, which is
+    // where the tap marker draws. Whatever the travelling rings are doing, the
+    // goal is circled.
     _stroke
-      ..color = Palette.goalBone.withValues(alpha: 0.92)
-      ..strokeWidth = math.max(1.8, layout.size * 0.09);
-    canvas.drawCircle(centre, layout.size * 0.53, _stroke);
-
-    final hand = Path()
-      ..moveTo(-size * 0.13, size * 0.13)
-      ..quadraticBezierTo(-size * 0.13, 0, 0, 0)
-      ..quadraticBezierTo(size * 0.13, 0, size * 0.13, size * 0.13)
-      ..lineTo(size * 0.13, size * 0.63)
-      ..lineTo(size * 0.28, size * 0.45)
-      ..quadraticBezierTo(size * 0.38, size * 0.34, size * 0.49, size * 0.44)
-      ..lineTo(size * 0.73, size * 0.70)
-      ..quadraticBezierTo(size * 0.87, size * 0.86, size * 0.75, size * 1.05)
-      ..lineTo(size * 0.50, size * 1.38)
-      ..lineTo(-size * 0.43, size * 1.38)
-      ..quadraticBezierTo(-size * 0.66, size * 1.20, -size * 0.62, size * 0.92)
-      ..lineTo(-size * 0.56, size * 0.61)
-      ..quadraticBezierTo(-size * 0.53, size * 0.47, -size * 0.40, size * 0.48)
-      ..quadraticBezierTo(-size * 0.29, size * 0.49, -size * 0.27, size * 0.63)
-      ..lineTo(-size * 0.23, size * 0.82)
-      ..lineTo(-size * 0.13, size * 0.13)
-      ..close();
-
-    canvas.save();
-    canvas.translate(tip.dx, tip.dy);
-    canvas.rotate(math.atan2(inward.dy, inward.dx) - math.pi / 2);
-    _stroke
-      ..color = Palette.background.withValues(alpha: 0.96)
-      ..strokeWidth = math.max(2.2, layout.size * 0.13)
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(hand, _stroke);
-    _fill.color = Palette.goalBone;
-    canvas.drawPath(hand, _fill);
-    canvas.restore();
+      ..color = Palette.goalBone.withValues(alpha: 0.9)
+      ..strokeWidth = math.max(1.6, layout.size * 0.07);
+    canvas.drawPath(
+      HexLayout.pathFromCorners(HexLayout.cornersAt(centre, layout.size * 0.8)),
+      _stroke,
+    );
   }
 
   /// Treats and powerups (§6.2).

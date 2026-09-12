@@ -167,6 +167,16 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                           const SizedBox(width: 6),
                           _ZoomButton(
                             zoom: game.boardCamera.zoom,
+                            // Lit while the level-four card is naming it, so
+                            // the sentence and the button are one gesture.
+                            nudge:
+                                game.tutorialHighlight !=
+                                    TutorialHighlight.zoomControl
+                                ? 0
+                                : game.tuning.reducedMotion
+                                ? 1
+                                : (math.sin(_ticker.value * math.pi * 2) + 1) /
+                                      2,
                             onPressed: () {
                               game.cycleZoom();
                               setState(() {});
@@ -601,26 +611,89 @@ class _InspectorCard extends StatelessWidget {
 ///
 /// It changes nothing about the rules. Reach is measured in hex widths, so the
 /// set of tiles a tap can clear is identical at every step.
+/// Magnify the board, in one tap, at any time.
+///
+/// It carries its own factor under the glass. A bare magnifier is a control a
+/// player has to *try* to find out what it does and what state it is in; the
+/// number turns it into a readout they can check at a glance — and it is the
+/// same number the board is drawn at, so it also explains the board.
 class _ZoomButton extends StatelessWidget {
-  const _ZoomButton({required this.zoom, required this.onPressed});
+  const _ZoomButton({
+    required this.zoom,
+    required this.onPressed,
+    this.nudge = 0,
+  });
 
   final double zoom;
+
+  /// 0 normally; breathing between 0 and 1 while the game is pointing this
+  /// control out to a player who has never used it.
+  final double nudge;
+
   final VoidCallback onPressed;
+
+  /// '1x', '1.6x', '2.2x' — trailing zeroes are noise on a control this small.
+  String get _label {
+    final text = zoom.toStringAsFixed(1);
+    return '${text.endsWith('.0') ? text.substring(0, text.length - 2) : text}x';
+  }
 
   @override
   Widget build(BuildContext context) {
     final fit = zoom <= BoardCamera.minZoom;
-    return IconButton(
-      onPressed: onPressed,
-      visualDensity: VisualDensity.standard,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      icon: Icon(
-        fit ? Icons.zoom_in_rounded : Icons.zoom_out_map_rounded,
-        size: 22,
+    final colour = fit ? Palette.hudDim : Palette.hudText;
+    return Semantics(
+      button: true,
+      label: 'Board zoom $_label, tap to magnify',
+      child: Tooltip(
+        message: fit ? 'Zoom in (now $_label)' : 'Zoom ($_label)',
+        child: InkResponse(
+          onTap: onPressed,
+          radius: 26,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              // The offer, made visible: while the hint line names this
+              // control, the control answers to it.
+              color: Palette.goalGlow.withValues(alpha: 0.16 * nudge),
+              border: nudge > 0
+                  ? Border.all(
+                      color: Palette.goalGlow.withValues(
+                        alpha: 0.45 + 0.55 * nudge,
+                      ),
+                      width: 1.5,
+                    )
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  fit ? Icons.zoom_in_rounded : Icons.zoom_out_map_rounded,
+                  size: 20,
+                  color: nudge > 0
+                      ? Color.lerp(colour, Palette.goalGlow, nudge)
+                      : colour,
+                ),
+                Text(
+                  _label,
+                  style: TextStyle(
+                    color: nudge > 0
+                        ? Color.lerp(colour, Palette.goalGlow, nudge)
+                        : colour,
+                    fontSize: 8.5,
+                    height: 1.1,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      color: fit ? Palette.hudDim : Palette.hudText,
-      tooltip: fit ? 'Zoom in' : 'Zoom (${zoom.toStringAsFixed(1)}x)',
     );
   }
 }

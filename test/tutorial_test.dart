@@ -31,13 +31,26 @@ const _layout = HexLayout(size: 22, origin: Offset(400, 400));
   );
 }
 
+/// Every level the game has a script for, read off [Tutorial.forLevel] itself
+/// so the sweeps below cannot quietly stop covering one.
+final _scripted = [
+  for (var n = 1; n <= 30; n++)
+    if (Tutorial.forLevel(n) != null) n,
+];
+
 void main() {
   group('Tutorial scripts', () {
-    test('exist for exactly the tutorial band', () {
+    test('exist for the guided band, plus level four'
+        's one card', () {
       for (var n = 1; n <= Campaign.tutorialBand; n++) {
         expect(Tutorial.forLevel(n), isNotNull, reason: 'level $n');
       }
-      expect(Tutorial.forLevel(Campaign.tutorialBand + 1), isNull);
+      // Level four is not in the band — the band is a difficulty shape and
+      // four is a real level. It carries one card all the same, about the
+      // magnifier, which is the only thing the guided levels never mention
+      // and the only control a player is not led to by tapping the board.
+      expect(Tutorial.forLevel(Campaign.tutorialBand + 1)!.steps, hasLength(1));
+      expect(_scripted, [1, 2, 3, 4]);
       expect(Tutorial.forLevel(30), isNull);
     });
 
@@ -146,7 +159,7 @@ void main() {
       // Targets are named by rule rather than coordinate because the boards are
       // generated. A rule that finds nothing would leave a step pointing at
       // nowhere — or worse, gating on nothing.
-      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+      for (final n in _scripted) {
         final ctx = _levelFor(n);
         final script = Tutorial.forLevel(n)!;
         var guard = 0;
@@ -344,7 +357,7 @@ void main() {
       // stops the run — so the regrowth never happened and the clock never
       // moved, and the one thing each line asked for was the one thing it made
       // impossible. Only an explanation may freeze the game.
-      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+      for (final n in _scripted) {
         for (final step in Tutorial.forLevel(n)!.steps) {
           final watching = step.prompt.toLowerCase().contains('watch');
           if (watching) {
@@ -362,7 +375,7 @@ void main() {
       // An action step whose target the board does not guarantee is reachable
       // has to give up eventually, or it sits there unsatisfiable while the
       // field closes in around the player it is talking to.
-      for (var n = 1; n <= Campaign.tutorialBand; n++) {
+      for (final n in _scripted) {
         for (final step in Tutorial.forLevel(n)!.steps) {
           if (step.advance == TutorialAdvance.onReach) {
             expect(

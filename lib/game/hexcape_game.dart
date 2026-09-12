@@ -431,6 +431,17 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   bool get tutorialReading =>
       tutorial?.current?.advance == TutorialAdvance.onContinue;
 
+  /// The HUD control the running lesson is pointing at, for the HUD to pulse.
+  ///
+  /// The twin of [tutorialTarget] for the one thing that is not on the board.
+  TutorialHighlight get tutorialHighlight {
+    final script = tutorial;
+    if (script == null || script.isDone) {
+      return TutorialHighlight.none;
+    }
+    return script.current?.highlight ?? TutorialHighlight.none;
+  }
+
   /// The cell the tutorial is pointing at, for the renderer.
   ///
   /// Written every frame the script is live, but re-resolved only when the beat

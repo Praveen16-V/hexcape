@@ -104,6 +104,26 @@ class Dog {
   /// opening" fallback from walking her back and forth over old ground.
   final Set<HexCoord> _visited = {};
 
+  /// Fresh ground she has set out to investigate, and the best distance to the
+  /// food her pocket offered when she set out.
+  ///
+  /// A walk back over old ground is the one decision that her *own arrival*
+  /// can reverse, and that is what made her stutter. Standing on the best cell
+  /// her pocket has, nothing is closer, so she turns to explore; one step back
+  /// the cell she just left is closer again, so goal-seeking turns her round;
+  /// arriving there, nothing is closer. Each cell gives the opposite answer
+  /// and she shivers in the throat between them sixty times a second, which on
+  /// screen is a dog that cannot make up her mind.
+  ///
+  /// So an investigation is *committed to*. It survives her crossing back over
+  /// the ground she came from, and is abandoned only when it is reached, when
+  /// it stops being reachable, or when the field genuinely improves on it —
+  /// something opening strictly closer to the food than the best her pocket
+  /// held when she turned round. Every tap that makes progress still turns her
+  /// on the spot; only a tap that offers her nothing new leaves her walking.
+  HexCoord? _detour;
+  int _detourBest = 1 << 30;
+
   /// The cells she has stood in, in order, deduped at the point of change.
   /// This is what a WHISTLE walks back along: her own trail, never a
   /// direction the player points.
@@ -436,6 +456,8 @@ class Dog {
 
     HexCoord target;
     if (depths.containsKey(grid.exit)) {
+      // The food outranks everything, including a walk she had committed to.
+      _detour = null;
       target = grid.exit;
     } else {
       // Progress toward the food dominates; depth only breaks ties, nudging
@@ -467,6 +489,23 @@ class Dog {
       target =
           _bestOf(depths, grid, (c) => grid.distanceToExit(c) < here) ?? cell;
 
+      // An investigation already under way outranks anything the pocket was
+      // already offering when she set out. See [_detour]: without this, the
+      // cell she stepped back out of is closer to the food than the one she is
+      // walking to, so goal-seeking spins her round on the boundary and she
+      // never gets anywhere.
+      final committed = _detour;
+      if (committed != null) {
+        final reachable = depths.containsKey(committed) && committed != cell;
+        final improved =
+            target != cell && grid.distanceToExit(target) < _detourBest;
+        if (!reachable || improved) {
+          _detour = null;
+        } else {
+          target = committed;
+        }
+      }
+
       // If nothing on offer beats standing still, take the best opening she has
       // not already walked.
       //
@@ -487,6 +526,10 @@ class Dog {
         );
         if (fresh != null) {
           target = fresh;
+          // Nothing in the pocket was closer than where she stands, so `here`
+          // is the best it has: the bar the world must beat to call her back.
+          _detour = fresh;
+          _detourBest = here;
         }
       }
 

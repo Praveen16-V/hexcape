@@ -6,6 +6,7 @@ import 'package:hexcape/game/board_camera.dart';
 import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/tuning.dart';
 import 'package:hexcape/hex/hex_coord.dart';
+import 'package:hexcape/game/tutorial.dart';
 import 'package:hexcape/systems/input_system.dart';
 
 /// The smallest phone the game supports, where the fit is worst and the camera
@@ -329,6 +330,57 @@ void main() {
         greaterThan(40),
         reason: 'a hex should reach roughly a touch target across',
       );
+    });
+  });
+
+  group('The player is told the board can be magnified', () {
+    test('level four hands the lesson a card and points at the control', () {
+      final script = Tutorial.forLevel(4)!;
+      expect(script.steps, hasLength(1));
+      final step = script.current!;
+      expect(step.highlight, TutorialHighlight.zoomControl);
+      expect(
+        step.advance,
+        TutorialAdvance.onContinue,
+        reason: 'a card about a HUD control must not race the board',
+      );
+      expect(step.prompt.toLowerCase(), contains('magnif'));
+    });
+
+    test('the game exposes the highlight only while that beat is up', () {
+      final game = makeGame(level: 4)..tutorial = Tutorial.forLevel(4);
+      expect(game.tutorialHighlight, TutorialHighlight.zoomControl);
+      game.tutorial!.continueLesson();
+      expect(game.tutorial!.isDone, isTrue);
+      expect(game.tutorialHighlight, TutorialHighlight.none);
+    });
+
+    test('no other level points at the zoom control', () {
+      for (var n = 1; n <= 30; n++) {
+        final script = Tutorial.forLevel(n);
+        if (script == null || n == 4) {
+          continue;
+        }
+        for (final step in script.steps) {
+          expect(step.highlight, TutorialHighlight.none, reason: 'level $n');
+        }
+      }
+    });
+
+    test("the card does not cost level four its own fog line", () {
+      // The fog banner is set as the level starts and ages on the clock. An
+      // explanation freezes the run, so the card has to be free: dismissed,
+      // the fog line must still be there with its full time left.
+      final game = makeGame(level: 4);
+      game.tutorial = Tutorial.forLevel(4);
+      game.banner = 'You see only what she is near. Carve to look around';
+      game.bannerFor = 6;
+      expect(game.tutorialReading, isTrue);
+      for (var i = 0; i < 60 * 3; i++) {
+        game.update(1 / 60);
+      }
+      expect(game.bannerFor, 6, reason: 'the card aged the banner behind it');
+      expect(game.banner, isNotNull);
     });
   });
 

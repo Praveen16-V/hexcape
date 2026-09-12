@@ -39,6 +39,20 @@ enum TutorialTarget {
   none,
 }
 
+/// A control on the HUD a step is talking about.
+///
+/// Separate from [TutorialTarget], which names a cell on the board. Everything
+/// the guided levels teach is done by tapping the field, with one exception:
+/// the board can be magnified, and the control for that lives in the header
+/// where a player watching the dog never looks. A beat that says so has to be
+/// able to point at it.
+enum TutorialHighlight {
+  none,
+
+  /// The magnifier in the HUD header.
+  zoomControl,
+}
+
 /// What ends a step.
 ///
 /// Only [onContinue] freezes the run, and that is the whole reason the other
@@ -76,11 +90,16 @@ class TutorialStep {
     this.gate = false,
     this.seconds = 3.0,
     this.releaseAfter,
+    this.highlight = TutorialHighlight.none,
   });
 
   final String prompt;
   final TutorialTarget target;
   final TutorialAdvance advance;
+
+  /// A HUD control this step is about, pulsed while the beat is up. Most steps
+  /// point at the board instead, with [target].
+  final TutorialHighlight highlight;
 
   /// How long a [TutorialAdvance.onWatch] beat holds the line up for. Ignored
   /// by every other kind.
@@ -568,6 +587,30 @@ class Tutorial {
         target: TutorialTarget.nearestPickup,
         advance: TutorialAdvance.onReach,
         releaseAfter: 30,
+      ),
+    ]),
+    // One card, about the control nobody finds on their own.
+    //
+    // Level four is the first level of the real game — the first with fog, and
+    // the first whose board is drawn small enough to be worth magnifying. The
+    // zoom control has been in the header since level one, and a header icon
+    // on a screen the player is deliberately not looking at is a feature they
+    // own rather than one they have.
+    //
+    // It sits *outside* the tutorial band on purpose. The band is a difficulty
+    // shape — it decides how boards are generated — and this is not a rule of
+    // the game but a comfort about reading it, so it earns a card and changes
+    // nothing else. One beat, then the level is theirs.
+    //
+    // Level four's own fog banner is not lost to it: an explanation freezes the
+    // run, and a frozen run does not age the banner, so the fog line plays in
+    // full the moment the card is dismissed.
+    4 => Tutorial(const [
+      TutorialStep(
+        prompt:
+            'Tap the magnifier at the top to magnify the board—her reach and '
+            'the rules stay exactly the same.',
+        highlight: TutorialHighlight.zoomControl,
       ),
     ]),
     _ => null,
