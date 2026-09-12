@@ -96,7 +96,7 @@ enum Difficulty {
   /// itself: the run remains completable, but only if the route is read
   /// essentially perfectly, which is the whole promise of the mode.
   double budgetFloorFor(int level) => switch (this) {
-    Difficulty.normal => 1.06,
+    Difficulty.normal => 1.075,
     Difficulty.hard when level <= 20 => 1.0,
     Difficulty.hard when level <= 40 => 1.07,
     Difficulty.hard when level <= 80 => 1.01,

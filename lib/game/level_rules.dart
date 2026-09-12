@@ -708,7 +708,23 @@ class Campaign {
   /// boards rather than one board at two prices. It also lands two spare taps
   /// on Hard where the old board left one, which on the last free level is the
   /// difference between a tight finish and a coin toss.
-  static const _authoredSeedOverrides = {11: 11441, 20: 26895};
+  /// Level forty was the third, and it failed in a way the numbers could not
+  /// show. Its cheapest route ran *through* a patrol lane: a quarter of the
+  /// route was swept on Normal with four lit cells in a row, and on Hard
+  /// nearly half of it was, with no second way round at all. She will not walk
+  /// into the light, so that route is a queue; being caught in it costs three
+  /// seconds of a twenty-six second clock and a shove back down the corridor.
+  /// Two patrols at the band's fastest sweep made the finale a board you
+  /// waited out rather than solved, and no amount of tap allowance answers
+  /// that — the resource it was spending was the clock.
+  ///
+  /// The replacement keeps everything that made it the band's peak — par
+  /// twenty-five, the same densities, the same two patrols — and moves the
+  /// route out from under them: nothing on the cheapest way through is ever
+  /// lit, in either mode, and both modes keep a second way round within three
+  /// taps of the first. The patrols still own ground worth crossing; they no
+  /// longer own the only way past.
+  static const _authoredSeedOverrides = {11: 11441, 20: 26895, 40: 101599};
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
@@ -1976,6 +1992,15 @@ extension on LevelPace {
     LevelPace.practice => 0.11,
     LevelPace.combination => 0.035,
     LevelPace.breather => 0.15,
+    // A peak used to be the one beat with *no* allowance at all, and that is
+    // what made it a cliff rather than a summit. The band's climb already
+    // arrives at a peak carrying every new hazard it introduced — level forty
+    // pays level twenty's budget while carrying four more hazard families and
+    // two patrols — so charging the full interpolated rate on top of that load
+    // taxed the same pressure twice. A token allowance, well under the
+    // practice beat's, keeps a peak the hardest level of its band while
+    // leaving room for the taps the fog guarantees are wasted.
+    LevelPace.challenge => 0.03,
     _ => 0,
   };
 
@@ -1984,6 +2009,11 @@ extension on LevelPace {
     LevelPace.practice => 0.11,
     LevelPace.combination => 0.035,
     LevelPace.breather => 0.15,
+    // The clock moves with the budget, and for a sharper reason: a peak is
+    // where the patrols are, and a patrol spends her time rather than her
+    // taps. She will not walk into the light, so the seconds a peak actually
+    // costs are longer than its cell count says.
+    LevelPace.challenge => 0.03,
     _ => 0,
   };
 

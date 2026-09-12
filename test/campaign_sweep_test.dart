@@ -76,6 +76,39 @@ void main() {
     );
 
     test(
+      'a challenge peak is not the one beat with no allowance',
+      () {
+        // What the cliff at forty actually was. A peak used to be the only
+        // pace given no relief at all, so it paid the band's full interpolated
+        // rate while carrying every hazard the band had introduced along the
+        // way -- level forty pays level twenty's budget with four more hazard
+        // families and two patrols on the board. The peak is meant to be the
+        // hardest level of its band, not the only one with no room for the
+        // taps the fog guarantees are wasted.
+        //
+        // Three spare rather than the global two: a peak is where the patrols
+        // are, and a tap spent finding out where the light sweeps is a tap
+        // spent on nothing.
+        for (var n = Campaign.foundationEnd; n <= Campaign.length; n++) {
+          final rules = Campaign.rulesFor(n);
+          if (rules.pace != LevelPace.challenge) {
+            continue;
+          }
+          final level = LevelGenerator.generate(specFor(rules));
+          final budget = (level.par * rules.budgetMultiplier).ceil();
+          expect(
+            budget - level.par,
+            greaterThanOrEqualTo(3),
+            reason:
+                'peak $n gives ${budget - level.par} spare taps over par '
+                '${level.par}',
+          );
+        }
+      },
+      timeout: const Timeout(Duration(minutes: 4)),
+    );
+
+    test(
       'post-20 Normal keeps the promised tap room in every band',
       () {
         const targets = [
