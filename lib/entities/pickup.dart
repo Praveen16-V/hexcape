@@ -270,19 +270,19 @@ enum PickupKind {
   /// Pickup copy for charges. A newly collected tool stays safely put away so
   /// an ordinary carving tap can never spend it by surprise.
   String get readyHint => switch (this) {
-    PickupKind.blast => 'BLAST ready — tap it above to arm',
-    PickupKind.dig => 'DIG ready — tap it above to arm',
-    PickupKind.stake => 'STAKE ready — tap it above to arm',
-    PickupKind.heel => 'HEEL ready — tap it above to arm',
-    PickupKind.trowel => 'TROWEL ready — tap it above to arm',
-    PickupKind.maul => 'MAUL ready — tap it above to arm',
-    PickupKind.echo => 'ECHO ready — tap it above to arm',
-    PickupKind.rewind => 'REWIND ready — tap it above to arm',
-    PickupKind.mole => 'MOLE ready — tap it above to arm',
-    PickupKind.harvest => 'HARVEST ready — tap it above to arm',
-    PickupKind.whistle => 'WHISTLE ready — tap it above to arm',
-    PickupKind.seed => 'SEED ready — tap it above to arm',
-    PickupKind.beacon => 'BEACON ready — tap it above to arm',
+    PickupKind.blast => 'BLAST ready — tap it beside the board to arm',
+    PickupKind.dig => 'DIG ready — tap it beside the board to arm',
+    PickupKind.stake => 'STAKE ready — tap it beside the board to arm',
+    PickupKind.heel => 'HEEL ready — tap it beside the board to arm',
+    PickupKind.trowel => 'TROWEL ready — tap it beside the board to arm',
+    PickupKind.maul => 'MAUL ready — tap it beside the board to arm',
+    PickupKind.echo => 'ECHO ready — tap it beside the board to arm',
+    PickupKind.rewind => 'REWIND ready — tap it beside the board to arm',
+    PickupKind.mole => 'MOLE ready — tap it beside the board to arm',
+    PickupKind.harvest => 'HARVEST ready — tap it beside the board to arm',
+    PickupKind.whistle => 'WHISTLE ready — tap it beside the board to arm',
+    PickupKind.seed => 'SEED ready — tap it beside the board to arm',
+    PickupKind.beacon => 'BEACON ready — tap it beside the board to arm',
     _ => '',
   };
 }
@@ -309,6 +309,15 @@ class ActiveEffects {
   final Map<PickupKind, double> _total = {};
   final Map<PickupKind, int> _charges = {};
   final Set<PickupKind> _passives = {};
+
+  /// Charges collected and not yet armed even once.
+  ///
+  /// A tool she is carrying for the first time has to announce itself on the
+  /// HUD — the button pulses while a kind is in here — because the pickup
+  /// happens in the field, where the player is looking, and the button it
+  /// turns into is somewhere else entirely. Arming it is proof the player
+  /// found the button, so that is what clears the pulse.
+  final Set<PickupKind> _fresh = {};
   PickupKind? _selectedCharge;
 
   static const radiusMultiplier = 1.6;
@@ -365,6 +374,7 @@ class ActiveEffects {
     }
     if (kind.isCharge) {
       _charges[kind] = (_charges[kind] ?? 0) + 1;
+      _fresh.add(kind);
       return;
     }
     _remaining[kind] = kind.duration;
@@ -388,6 +398,7 @@ class ActiveEffects {
     _total.clear();
     _charges.clear();
     _passives.clear();
+    _fresh.clear();
     _selectedCharge = null;
   }
 
@@ -408,6 +419,10 @@ class ActiveEffects {
 
   int chargesOf(PickupKind kind) => _charges[kind] ?? 0;
 
+  /// Whether this kind has been picked up but never armed, so the HUD should
+  /// still be waving at the player about it.
+  bool isFresh(PickupKind kind) => _fresh.contains(kind);
+
   bool has(PickupKind kind) => chargesOf(kind) > 0;
 
   /// The tool the player has deliberately armed. Collecting a charge never
@@ -425,6 +440,10 @@ class ActiveEffects {
       return false;
     }
     _selectedCharge = kind;
+    // Armed once is known: the button has been found, so it stops asking to
+    // be. A later pickup of the same kind marks it fresh again, because that
+    // is news too.
+    _fresh.remove(kind);
     return true;
   }
 
@@ -437,6 +456,7 @@ class ActiveEffects {
     }
     if (held == 1) {
       _charges.remove(kind);
+      _fresh.remove(kind);
       if (_selectedCharge == kind) {
         _selectedCharge = null;
       }

@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../components/glyphs.dart';
 import '../game/board_camera.dart';
 import '../game/hexcape_game.dart';
 import '../game/tutorial.dart';
@@ -183,25 +186,29 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                         seconds: game.hunger.remaining,
                       ),
                     ],
-                    if (game.powerups.heldCharges.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      _Charges(
-                        held: game.powerups.heldCharges,
-                        selected: game.powerups.selectedCharge,
-                        onToggle: game.toggleCharge,
-                        onInspect: game.inspectPickup,
-                      ),
-                    ],
-                    if (game.powerups.heldPassives.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _Passives(
-                        held: game.powerups.heldPassives,
-                        onInspect: game.inspectPickup,
-                      ),
-                    ],
                   ],
                 ),
-                const Spacer(),
+                // The tools she is carrying float in the gap beside the board
+                // rather than sitting in the header. In the header they were
+                // part of the measured block the board is framed *inside*, so
+                // collecting a blast re-framed the whole map a little smaller
+                // — the board flinched at the exact moment the player's eye
+                // was on it. Here they take flexible space, which the insets
+                // do not count, so picking one up costs the map nothing.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _ChargeRail(
+                      held: game.powerups.heldCharges,
+                      passives: game.powerups.heldPassives,
+                      selected: game.powerups.selectedCharge,
+                      isFresh: game.powerups.isFresh,
+                      pulse: game.tuning.reducedMotion ? 0 : _ticker.value,
+                      onToggle: game.toggleCharge,
+                      onInspect: game.inspectPickup,
+                    ),
+                  ),
+                ),
                 // The card takes the hint's slot rather than stacking above it.
                 // Below the board because covering the tile the player is
                 // touching is the one place the answer must not go — and in
@@ -642,22 +649,46 @@ class _PauseButton extends StatelessWidget {
   }
 }
 
-/// Charges in hand.
+/// The tools she is carrying, floating beside the board.
 ///
 /// Unlike the timed powerups — which show themselves as a ring closing round
 /// her, where the player is already looking — a charge has nothing to show. It
 /// sits there until it is spent, so it needs a place on the HUD or the player
 /// forgets they have it.
-class _Charges extends StatelessWidget {
-  const _Charges({
+///
+/// Three things had to be true of that place. It must not be part of the
+/// measured header, or arriving would shrink the board. It must be *found*
+/// without reading the hint line, so a newly collected tool pulses until it
+/// has been armed once. And it must say what it holds in the same language the
+/// board used — the same glyph that was lying in the grass a second ago, not a
+/// word for it.
+///
+/// Laid out as a vertical wrap rather than a column: boards are far taller
+/// than they are wide, so the spare room on screen is at the sides, and a wrap
+/// starts a second stack inward instead of overflowing when a run is carrying
+/// an unusual number of tools.
+class _ChargeRail extends StatelessWidget {
+  const _ChargeRail({
     required this.held,
+    required this.passives,
     required this.selected,
+    required this.isFresh,
+    required this.pulse,
     required this.onToggle,
     required this.onInspect,
   });
 
   final List<({PickupKind kind, int count})> held;
+  final List<PickupKind> passives;
   final PickupKind? selected;
+
+  /// Whether this kind has been collected and never armed.
+  final bool Function(PickupKind) isFresh;
+
+  /// The HUD's shared one-second phase, or zero when the player has asked for
+  /// less motion. Everything that breathes here breathes together.
+  final double pulse;
+
   final ValueChanged<PickupKind> onToggle;
 
   /// Hold one to be told what it does. The tooltip stays the *action* — arm or
@@ -667,64 +698,228 @@ class _Charges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (held.isEmpty && passives.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Wrap(
+      direction: Axis.vertical,
       spacing: 8,
       runSpacing: 8,
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.end,
       children: [
         for (final entry in held)
-          Builder(
-            builder: (context) {
-              final armed = selected == entry.kind;
-              final colour = Palette.forPickup(entry.kind);
-              return Semantics(
-                button: true,
-                selected: armed,
-                label: '${entry.kind.label}, ${entry.count} held',
-                child: Tooltip(
-                  message: '${armed ? 'Disarm' : 'Arm'} ${entry.kind.label}',
-                  child: OutlinedButton(
-                    onPressed: () => onToggle(entry.kind),
-                    onLongPress: () => onInspect(entry.kind),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(44, 44),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      foregroundColor: colour,
-                      backgroundColor: colour.withValues(
-                        alpha: armed ? 0.3 : 0.12,
+          _ChargeButton(
+            kind: entry.kind,
+            count: entry.count,
+            armed: selected == entry.kind,
+            fresh: isFresh(entry.kind),
+            pulse: pulse,
+            onToggle: () => onToggle(entry.kind),
+            onInspect: () => onInspect(entry.kind),
+          ),
+        for (final kind in passives)
+          _PassiveChip(kind: kind, onInspect: () => onInspect(kind)),
+      ],
+    );
+  }
+}
+
+/// One tool in hand: glyph, count, and its own state.
+///
+/// Fixed width on purpose. It floats over the board, so it may not grow with
+/// the text scale the way a header chip can — the words inside shrink to fit
+/// instead, and the full label is carried by the tooltip and by semantics,
+/// where a screen reader reads it out in full.
+class _ChargeButton extends StatelessWidget {
+  const _ChargeButton({
+    required this.kind,
+    required this.count,
+    required this.armed,
+    required this.fresh,
+    required this.pulse,
+    required this.onToggle,
+    required this.onInspect,
+  });
+
+  final PickupKind kind;
+  final int count;
+  final bool armed;
+  final bool fresh;
+  final double pulse;
+  final VoidCallback onToggle;
+  final VoidCallback onInspect;
+
+  static const _size = 56.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = Palette.forPickup(kind);
+    // One breath a second, shared by both states. Armed glows because the next
+    // tap on the board is about to mean something else; fresh glows because
+    // the player has not looked over here yet.
+    final breath = (math.sin(pulse * math.pi * 2) + 1) / 2;
+    final glow = armed
+        ? 0.45 + 0.35 * breath
+        : fresh
+        ? 0.30 + 0.45 * breath
+        : 0.0;
+    return Semantics(
+      button: true,
+      selected: armed,
+      label: armed
+          ? '${kind.label} armed, $count held'
+          : fresh
+          ? '${kind.label} collected, $count held, not armed yet'
+          : '${kind.label}, $count held',
+      child: Tooltip(
+        message: '${armed ? 'Disarm' : 'Arm'} ${kind.label}',
+        child: GestureDetector(
+          onTap: onToggle,
+          onLongPress: onInspect,
+          child: Container(
+            width: _size,
+            constraints: const BoxConstraints(minHeight: _size),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                const Color(0xE60E1422),
+                colour.withValues(alpha: 0.34),
+                armed ? 1.0 : 0.18,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colour.withValues(
+                  alpha: armed
+                      ? 1.0
+                      : fresh
+                      ? (0.55 + 0.45 * breath)
+                      : 0.5,
+                ),
+                width: armed ? 2 : 1,
+              ),
+              boxShadow: [
+                if (glow > 0)
+                  BoxShadow(
+                    color: colour.withValues(alpha: glow * 0.55),
+                    blurRadius: 14 + 6 * breath,
+                    spreadRadius: armed ? 1.5 : 0.5,
+                  ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  height: 26,
+                  width: 26,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // The same drawing the pickup had on the board, so the
+                      // button is recognisably the thing she just ran over.
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GlyphPainter(kind: kind, colour: colour),
+                        ),
                       ),
-                      side: BorderSide(
-                        color: colour.withValues(alpha: armed ? 1 : 0.55),
-                        width: armed ? 2 : 1,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (armed) ...[
-                          const Icon(Icons.check_rounded, size: 15),
-                          const SizedBox(width: 4),
-                        ],
-                        Text(
-                          entry.count > 1
-                              ? '${entry.kind.label} x${entry.count}'
-                              : entry.kind.label,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.1,
+                      if (count > 1)
+                        Positioned(
+                          right: -6,
+                          bottom: -4,
+                          child: _CountBadge(count: count, colour: colour),
+                        ),
+                      if (armed)
+                        Positioned(
+                          left: -7,
+                          top: -5,
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            size: 13,
+                            color: colour,
                           ),
                         ),
-                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 3),
+                SizedBox(
+                  width: _size - 10,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      kind.label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: colour.withValues(alpha: armed ? 1 : 0.85),
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                   ),
                 ),
-              );
-            },
+                // The two states a player must never have to read the hint
+                // line to tell apart: a tool just collected and not yet found,
+                // and a tool that has taken over the next tap. A tool merely
+                // sitting in hand says nothing — a resting button with a word
+                // under it is just noise on top of the board.
+                if (fresh || armed) ...[
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    width: _size - 10,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        armed ? 'TAP TILE' : 'NEW',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: armed
+                              ? colour
+                              : colour.withValues(alpha: 0.5 + 0.5 * breath),
+                          fontSize: 7.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-      ],
+        ),
+      ),
+    );
+  }
+}
+
+/// How many of a tool are in hand, when it is more than one.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count, required this.colour});
+
+  final int count;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
+      decoration: BoxDecoration(
+        color: const Color(0xF20E1422),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: colour.withValues(alpha: 0.8), width: 1),
+      ),
+      child: Text(
+        'x$count',
+        style: TextStyle(
+          color: colour,
+          fontSize: 8,
+          height: 1.1,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
@@ -735,59 +930,76 @@ class _Charges extends StatelessWidget {
 /// announcements, not controls. They exist because everything else in the HUD
 /// is either a clock or a decision; a waystone, a heart, should be *findable*
 /// on the screen, or a player after a week's gap will forget they carry it.
-class _Passives extends StatelessWidget {
-  const _Passives({required this.held, required this.onInspect});
+/// They ride the same rail as the charges, one size down, because they answer
+/// the same question more quietly: what am I carrying?
+class _PassiveChip extends StatelessWidget {
+  const _PassiveChip({required this.kind, required this.onInspect});
 
-  final List<PickupKind> held;
-  final ValueChanged<PickupKind> onInspect;
+  final PickupKind kind;
+  final VoidCallback onInspect;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final kind in held)
-          Builder(
-            builder: (context) {
-              final colour = Palette.forPickup(kind);
-              return Semantics(
-                label: '${kind.label}, in effect',
-                child: Tooltip(
-                  message: kind.label,
-                  child: GestureDetector(
-                    onLongPress: () => onInspect(kind),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colour.withValues(alpha: 0.10),
-                        border: Border.all(
-                          color: colour.withValues(alpha: 0.45),
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        kind.label,
-                        style: TextStyle(
-                          color: colour,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
+    final colour = Palette.forPickup(kind);
+    return Semantics(
+      label: '${kind.label}, in effect',
+      child: Tooltip(
+        message: kind.label,
+        child: GestureDetector(
+          onTap: onInspect,
+          onLongPress: onInspect,
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xCC0E1422),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: colour.withValues(alpha: 0.5),
+                width: 1,
+              ),
+            ),
+            child: CustomPaint(
+              painter: _GlyphPainter(kind: kind, colour: colour),
+            ),
           ),
-      ],
+        ),
+      ),
     );
   }
+}
+
+/// Draws a pickup with the game's own drawing code, never a lookalike, so the
+/// HUD and the board can never drift apart.
+class _GlyphPainter extends CustomPainter {
+  const _GlyphPainter({required this.kind, required this.colour});
+
+  final PickupKind kind;
+  final Color colour;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fill = Paint()
+      ..style = PaintingStyle.fill
+      ..color = colour;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..color = colour;
+    drawPickupGlyph(
+      canvas,
+      kind,
+      centre: Offset(size.width / 2, size.height / 2),
+      size: size.shortestSide * 0.30,
+      fill: fill,
+      stroke: stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) =>
+      old.kind != kind || old.colour != colour;
 }
 
 /// The tap chain, as pips rather than a number.
@@ -1106,8 +1318,11 @@ class TutorialCard extends StatelessWidget {
                     // The watching beats are the ones that need the player to
                     // do nothing at all, which is exactly the instruction a
                     // player will not follow unless it is given.
-                    TutorialAdvance.onWatch ||
-                    TutorialAdvance.onRegrow => 'Keep an eye on the board.',
+                    TutorialAdvance.onWatch => 'Keep an eye on the board.',
+                    TutorialAdvance.onRegrow =>
+                      step.target == TutorialTarget.recentlyOpened
+                          ? 'Watch the marked tile on the board.'
+                          : 'Keep an eye on the board.',
                     TutorialAdvance.onContinue => '',
                   },
                   style: const TextStyle(color: Palette.hudText, fontSize: 12),

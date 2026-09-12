@@ -5,6 +5,8 @@ import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/level_rules.dart';
 import 'package:hexcape/game/progress.dart';
 import 'package:hexcape/game/tuning.dart';
+import 'package:hexcape/l10n/strings.dart';
+import 'package:hexcape/theme/palette.dart';
 import 'package:hexcape/ui/level_detail.dart';
 import 'package:hexcape/ui/result_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,15 +15,20 @@ HexcapeGame gameAt(int level) => HexcapeGame(tuning: TuningConfig())
   ..onGameResize(Vector2(390, 844))
   ..startLevel(level: level);
 
-Widget resultFor(HexcapeGame game, {MediaQueryData? media}) {
+Widget resultFor(
+  HexcapeGame game, {
+  MediaQueryData? media,
+  bool owned = true,
+  VoidCallback? onUnlock,
+}) {
   final screen = Scaffold(
     body: ResultOverlay(
       game: game,
-      owned: true,
+      owned: owned,
       dailyStreak: 0,
       onMap: () {},
       onHome: () {},
-      onUnlock: () {},
+      onUnlock: onUnlock ?? () {},
     ),
   );
   return MaterialApp(
@@ -29,9 +36,87 @@ Widget resultFor(HexcapeGame game, {MediaQueryData? media}) {
   );
 }
 
+Finder resultButton(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(FilledButton));
+
+Color? buttonColour(WidgetTester tester, String label) => tester
+    .widget<FilledButton>(resultButton(label))
+    .style
+    ?.backgroundColor
+    ?.resolve({});
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('a campaign win makes progression primary', (tester) async {
+    final game = gameAt(12)..phase = GamePhase.won;
+    await tester.pumpWidget(resultFor(game));
+    await tester.pumpAndSettle();
+
+    expect(find.text(Strings.levelComplete), findsOneWidget);
+    expect(find.text('Level 12 complete.'), findsOneWidget);
+    expect(resultButton(Strings.nextLevel), findsOneWidget);
+    expect(resultButton(Strings.retry), findsOneWidget);
+    expect(buttonColour(tester, Strings.nextLevel), Palette.dogBody);
+    expect(buttonColour(tester, Strings.retry), Palette.plainTop);
+
+    await tester.tap(find.text(Strings.nextLevel));
+    await tester.pump();
+    expect(game.levelNumber, 13);
+  });
+
+  testWidgets('campaign milestone wins keep onward action primary', (
+    tester,
+  ) async {
+    var unlocks = 0;
+    final free = gameAt(20)..phase = GamePhase.won;
+    await tester.pumpWidget(
+      resultFor(free, owned: false, onUnlock: () => unlocks++),
+    );
+    await tester.pumpAndSettle();
+    expect(resultButton(Strings.seeWhatIsNext), findsOneWidget);
+    expect(buttonColour(tester, Strings.seeWhatIsNext), Palette.dogBody);
+    expect(buttonColour(tester, Strings.retry), Palette.plainTop);
+    await tester.tap(find.text(Strings.seeWhatIsNext));
+    expect(unlocks, 1);
+
+    final finale = gameAt(Campaign.length)..phase = GamePhase.won;
+    await tester.pumpWidget(resultFor(finale));
+    await tester.pumpAndSettle();
+    expect(resultButton(Strings.enterEndless), findsOneWidget);
+    expect(buttonColour(tester, Strings.enterEndless), Palette.dogBody);
+    expect(buttonColour(tester, Strings.retry), Palette.plainTop);
+    await tester.tap(find.text(Strings.enterEndless));
+    await tester.pump();
+    expect(finale.levelNumber, Campaign.length + 1);
+  });
+
+  testWidgets('ordinary campaign losses offer one honest recovery action', (
+    tester,
+  ) async {
+    final cases = [
+      (GamePhase.crushed, false),
+      (GamePhase.starved, false),
+      (GamePhase.softLocked, false),
+      (GamePhase.softLocked, true),
+    ];
+    for (final (phase, budgetLock) in cases) {
+      final game = gameAt(12)
+        ..phase = phase
+        ..lockedByBudget = budgetLock;
+      await tester.pumpWidget(resultFor(game));
+      await tester.pumpAndSettle();
+
+      expect(resultButton(Strings.retry), findsOneWidget);
+      expect(buttonColour(tester, Strings.retry), Palette.dogBody);
+      expect(find.byType(FilledButton), findsOneWidget);
+      expect(find.text('New level'), findsNothing);
+      expect(find.text('New board'), findsNothing);
+      expect(find.text('Main Menu'), findsOneWidget);
+      expect(find.text(Strings.backToMap), findsOneWidget);
+    }
+  });
 
   testWidgets('Zen completion is practice and cannot advance a locked level', (
     tester,

@@ -6,6 +6,7 @@ import 'package:flame/components.dart';
 import '../entities/guard.dart';
 import '../entities/pickup.dart';
 import '../game/hexcape_game.dart';
+import '../game/tutorial.dart';
 import '../hex/hex_cell.dart';
 import '../hex/hex_coord.dart';
 import 'glyphs.dart';
@@ -71,11 +72,14 @@ class FieldComponent extends Component {
     _renderLight(canvas, layout);
     _renderHint(canvas, layout);
 
-    _renderTutorialTarget(canvas, layout);
     _renderPickups(canvas, layout);
     _renderLamps(canvas, layout);
     _renderTapRing(canvas, layout);
     _renderGoal(canvas, layout);
+    // Tutorial marks are presentation, not terrain. Drawing them last keeps
+    // the goal hand above the bone and prevents lamps or the tap ring from
+    // obscuring the instruction.
+    _renderTutorialTarget(canvas, layout);
     if (game.tuning.showTruePath) {
       _renderTruePath(canvas, layout);
     }
@@ -1228,15 +1232,29 @@ class FieldComponent extends Component {
     final centre = game.dog.position;
     final radius = game.effectiveTapRadius;
     const segments = 34;
+    var colour = game.tapRingFlash > 0
+        ? Color.lerp(Palette.tapRing, Palette.tapRingActive, game.tapRingFlash)!
+        : Palette.tapRing;
+    var width = 1.3;
+    // An armed tool repaints the boundary in its own colour. The HUD button
+    // says the tap has changed meaning, but the player is looking *here* — at
+    // the ring that says what a tap may touch — so this is where the change
+    // has to be visible, without a line of text anywhere in it.
+    final armed = game.powerups.selectedCharge;
+    if (armed != null) {
+      final breath = game.tuning.reducedMotion
+          ? 0.5
+          : 0.5 + 0.5 * math.sin(game.elapsed * 4.0);
+      colour = Color.lerp(
+        colour,
+        Palette.forPickup(armed),
+        0.55 + 0.45 * breath,
+      )!;
+      width = 1.8 + 0.7 * breath;
+    }
     _stroke
-      ..color = game.tapRingFlash > 0
-          ? Color.lerp(
-              Palette.tapRing,
-              Palette.tapRingActive,
-              game.tapRingFlash,
-            )!
-          : Palette.tapRing
-      ..strokeWidth = 1.3;
+      ..color = colour
+      ..strokeWidth = width;
 
     final sweep = (math.pi * 2) / segments;
     final rect = Rect.fromCircle(center: centre, radius: radius);
@@ -1255,6 +1273,10 @@ class FieldComponent extends Component {
       return;
     }
     final centre = layout.toPixel(target);
+    if (game.tutorial?.current?.target == TutorialTarget.goalBone) {
+      _renderGoalHand(canvas, centre, layout);
+      return;
+    }
     final pulse = game.tuning.reducedMotion
         ? 0.5
         : 0.5 + 0.5 * math.sin(game.elapsed * 4.5);
@@ -1283,6 +1305,65 @@ class FieldComponent extends Component {
         ..close(),
       _fill,
     );
+  }
+
+  /// A compact pointing-hand silhouette for the first thing level one teaches:
+  /// the glowing bone is the destination, not a pickup or decoration.
+  ///
+  /// The wrist sits toward the dog, which is also toward the board interior on
+  /// the opening layout. This keeps the hand on-screen even when the goal is
+  /// near an edge, while its fingertip stops outside the bone so the target is
+  /// never covered.
+  void _renderGoalHand(Canvas canvas, Offset centre, HexLayout layout) {
+    var inward = game.dog.position - centre;
+    if (inward.distanceSquared < 0.001) {
+      inward = const Offset(0, 1);
+    } else {
+      inward /= inward.distance;
+    }
+    final bob = game.tuning.reducedMotion
+        ? 0.0
+        : math.sin(game.elapsed * 4.0) * 0.08;
+    final tip = centre + inward * layout.size * (0.58 + bob);
+    final size = layout.size * 0.72;
+
+    // A crisp ring connects the hand to the already-glowing goal without
+    // hiding the bone itself.
+    _stroke
+      ..color = Palette.goalBone.withValues(alpha: 0.92)
+      ..strokeWidth = math.max(1.8, layout.size * 0.09);
+    canvas.drawCircle(centre, layout.size * 0.53, _stroke);
+
+    final hand = Path()
+      ..moveTo(-size * 0.13, size * 0.13)
+      ..quadraticBezierTo(-size * 0.13, 0, 0, 0)
+      ..quadraticBezierTo(size * 0.13, 0, size * 0.13, size * 0.13)
+      ..lineTo(size * 0.13, size * 0.63)
+      ..lineTo(size * 0.28, size * 0.45)
+      ..quadraticBezierTo(size * 0.38, size * 0.34, size * 0.49, size * 0.44)
+      ..lineTo(size * 0.73, size * 0.70)
+      ..quadraticBezierTo(size * 0.87, size * 0.86, size * 0.75, size * 1.05)
+      ..lineTo(size * 0.50, size * 1.38)
+      ..lineTo(-size * 0.43, size * 1.38)
+      ..quadraticBezierTo(-size * 0.66, size * 1.20, -size * 0.62, size * 0.92)
+      ..lineTo(-size * 0.56, size * 0.61)
+      ..quadraticBezierTo(-size * 0.53, size * 0.47, -size * 0.40, size * 0.48)
+      ..quadraticBezierTo(-size * 0.29, size * 0.49, -size * 0.27, size * 0.63)
+      ..lineTo(-size * 0.23, size * 0.82)
+      ..lineTo(-size * 0.13, size * 0.13)
+      ..close();
+
+    canvas.save();
+    canvas.translate(tip.dx, tip.dy);
+    canvas.rotate(math.atan2(inward.dy, inward.dx) - math.pi / 2);
+    _stroke
+      ..color = Palette.background.withValues(alpha: 0.96)
+      ..strokeWidth = math.max(2.2, layout.size * 0.13)
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(hand, _stroke);
+    _fill.color = Palette.goalBone;
+    canvas.drawPath(hand, _fill);
+    canvas.restore();
   }
 
   /// Treats and powerups (§6.2).

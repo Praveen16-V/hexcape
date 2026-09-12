@@ -143,14 +143,19 @@ void main() {
         level <= Campaign.length;
         level++
       ) {
+        if (level == Campaign.foundationEnd + 1) {
+          // Stage 20 remains the sharp free-campaign finale. The paid trail
+          // deliberately resets for Patrol's introduction, then its own
+          // challenge waves climb from stage 31 onward.
+          budget = 99;
+        }
         final r = Campaign.rulesFor(level);
         if (r.pace == LevelPace.breather) {
           breathers++;
           final previous = Campaign.rulesFor(level - 1);
-          // Not required to be a challenge: with fifty-three gates to teach,
-          // four of the eight breathers follow a practice or combination beat
-          // because every post-challenge slot is taken. What must hold is that
-          // the breather eases what came before it, which is the rest of this.
+          // Not required to follow a challenge: the six authored breathers sit
+          // wherever the introduction calendar leaves a clean rest. What must
+          // hold is that each eases what came before it.
           expect(
             previous.pace,
             isNot(LevelPace.breather),
@@ -178,9 +183,8 @@ void main() {
         );
         budget = r.budgetMultiplier;
       }
-      // A floor, not a target: the campaign carries eight, and the rebuild
-      // spent the slots a ninth and tenth would have used on mechanic gates.
-      // This is here so that deleting every breather still fails something.
+      // A floor, not a target. The exact post-20 schedule is pinned in the
+      // pacing suite; this keeps wholesale removal visible here too.
       expect(breathers, greaterThanOrEqualTo(6));
     });
 

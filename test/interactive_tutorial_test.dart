@@ -28,15 +28,14 @@ void main() {
       ..onGameResize(Vector2(390, 844))
       ..startLevel(level: 1);
     final script = game.tutorial!;
-    for (var i = 0; i < 2; i++) {
-      final target = script.targetCell(game.grid, game.dog, game.pickups)!;
-      for (var frame = 0; frame < 240 && script.stepNumber == i + 1; frame++) {
-        game.onTapDown(BoardTap(game, game.layout.toPixel(target)));
-        if (script.stepNumber == i + 1) game.update(1 / 60);
-      }
-      expect(script.stepNumber, i + 2);
-    }
+    game.update(0);
     expect(game.tutorialReading, isTrue);
+    expect(script.current!.target, TutorialTarget.goalBone);
+    expect(game.tutorialTarget, game.grid.exit);
+    expect(
+      script.targetCell(game.grid, game.dog, game.pickups),
+      game.grid.exit,
+    );
     final elapsed = game.elapsed;
     final position = game.dog.position;
     final taps = game.taps;
@@ -53,9 +52,25 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();
-    expect(script.stepNumber, 4);
+    expect(script.stepNumber, 2);
     expect(game.tutorialReading, isFalse);
-    await tester.tap(find.text('Skip'));
+    expect(game.tutorialTarget, isNot(game.grid.exit));
+
+    for (final expectedStep in [2, 3, 4]) {
+      final target = script.targetCell(game.grid, game.dog, game.pickups)!;
+      for (
+        var frame = 0;
+        frame < 240 && script.stepNumber == expectedStep;
+        frame++
+      ) {
+        game.onTapDown(BoardTap(game, game.layout.toPixel(target)));
+        if (script.stepNumber == expectedStep) game.update(1 / 60);
+      }
+      expect(script.stepNumber, expectedStep + 1);
+    }
+    expect(game.tutorialReading, isTrue);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.text("Let's play"));
     await tester.pump();
     expect(script.isDone, isTrue);
     expect(find.text('Skip'), findsNothing);
@@ -74,12 +89,13 @@ void main() {
       ..onGameResize(Vector2(390, 844))
       ..startLevel(level: 1);
     final script = game.tutorial!;
+    script.continueLesson();
     final marked = script.targetCell(game.grid, game.dog, game.pickups)!;
-    for (var frame = 0; frame < 240 && script.stepNumber == 1; frame++) {
+    for (var frame = 0; frame < 240 && script.stepNumber == 2; frame++) {
       game.onTapDown(BoardTap(game, game.layout.toPixel(marked)));
       game.update(1 / 60);
     }
-    expect(script.stepNumber, 2, reason: 'the tap answers the first beat');
+    expect(script.stepNumber, 3, reason: 'the tap answers the first action');
 
     // A tapped tile buys a frame of hit-stop, so give the beat that follows a
     // few frames to put its own mark up before anything is read off it.
@@ -101,6 +117,36 @@ void main() {
       isNot(wasAt),
       reason: 'she was walking the whole time, which is the point',
     );
+  });
+
+  testWidgets('level two waits for the marked tile to grow back', (
+    tester,
+  ) async {
+    final game = HexcapeGame(tuning: TuningConfig())
+      ..onGameResize(Vector2(390, 844))
+      ..startLevel(level: 2);
+    final script = game.tutorial!;
+    final opened = script.targetCell(game.grid, game.dog, game.pickups)!;
+    for (var frame = 0; frame < 240 && script.stepNumber == 1; frame++) {
+      game.onTapDown(BoardTap(game, game.layout.toPixel(opened)));
+      game.update(1 / 60);
+    }
+    expect(script.stepNumber, 2);
+    expect(script.current!.target, TutorialTarget.recentlyOpened);
+    expect(
+      script.targetCell(game.grid, game.dog, game.pickups),
+      opened,
+      reason: 'the live demonstration must mark the tile just opened',
+    );
+
+    script.noteRegrowth(const [HexCoord(99, 99)]);
+    script.update(0, game.grid, game.dog, game.pickups);
+    expect(script.stepNumber, 2, reason: 'unrelated regrowth ended the lesson');
+
+    script.noteRegrowth([opened]);
+    script.update(0, game.grid, game.dog, game.pickups);
+    expect(script.stepNumber, 3);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('Tutorial fits a narrow phone with large text', (tester) async {
@@ -168,7 +214,7 @@ void main() {
 
     // And it ends on the event it is describing, not on a guess at the clock.
     expect(script.stepNumber, 2);
-    script.noteRegrowth();
+    script.noteRegrowth([target]);
     game.update(1 / 60);
     expect(script.stepNumber, 3);
   });

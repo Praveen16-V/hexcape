@@ -190,7 +190,7 @@ class LevelRules {
 
   /// A one-line banner for the level a mechanic first appears on.
   ///
-  /// The tutorial is five levels and gated, and it stays that way — but springs
+  /// The tutorial is three levels and gated, and it stays that way — but springs
   /// and patrols arrive long after it has ended, and a mechanic that turns up
   /// at level 21 with no introduction is indistinguishable from a bug. One
   /// sentence at the top of the board is the smallest honest answer.
@@ -362,11 +362,11 @@ class Campaign {
   ///
   /// Vigil keeps its identity: sentries still *peak* there, two at a time with
   /// the warded signature on top. It simply stops being the first sighting.
-  static const sentriesFrom = 51;
+  static const sentriesFrom = 50;
 
   /// HEEL, two levels later — the same meet-it-then-answer-it beat that STAKE
   /// follows cracked ground with.
-  static const heelFrom = sentriesFrom + 2;
+  static const heelFrom = 54;
 
   /// Slopes, opening the Collapse band.
   ///
@@ -377,7 +377,7 @@ class Campaign {
   /// fault density alone. That was already thin when cracked ground arrived at
   /// 61 and it is untenable now that it arrives at [faultsFrom]. These two
   /// bands need an axis of their own, and these are it.
-  static const slopesFrom = 63;
+  static const slopesFrom = 62;
 
   /// Sunken ground, opening Vigil's own climb.
   ///
@@ -389,7 +389,7 @@ class Campaign {
   /// where *she* goes; sunken ground changes where *you may carve from*. Two
   /// new questions about position back to back is one question the player never
   /// separates into two.
-  static const sunkenFrom = 83;
+  static const sunkenFrom = 84;
 
   /// DIG, which is the answer to riveted ground.
   ///
@@ -418,14 +418,14 @@ class Campaign {
   /// regrowth only ever eats the corridor behind — so having it arrive this
   /// late meant sixty levels in which carving far ahead was strictly optimal
   /// and nothing contested it.
-  static const faultsFrom = 29;
+  static const faultsFrom = 26;
 
   /// STAKE, two levels after the pressure it answers.
   ///
   /// Meet the crack, practise it, *then* be handed the tool that pins ground
   /// open. Arriving with the mechanic would let a player neutralise it before
   /// they had understood what it does to them.
-  static const stakeFrom = faultsFrom + 2;
+  static const stakeFrom = 28;
 
   /// Patrols open the Pressure band. They apply *timing*, which nothing before
   /// them does, so they get a band boundary to themselves rather than being
@@ -449,32 +449,32 @@ class Campaign {
   static const foxfireFrom = 18;
 
   /// Thatch, ice, alarm: Pressure's new textures after patrols land.
-  static const thatchFrom = 33;
-  static const iceFrom = 36;
-  static const alarmFrom = 38;
+  static const thatchFrom = 29;
+  static const iceFrom = 33;
+  static const alarmFrom = 37;
 
   /// Hardpan and the heart: the tap tax deepens, and closure gets a voice.
-  static const hardpanFrom = 44;
-  static const overgrowthFrom = 47;
+  static const hardpanFrom = 43;
+  static const overgrowthFrom = 46;
 
   /// Eddy and scaffold: position gets its two new questions.
-  static const eddyFrom = 54;
+  static const eddyFrom = 55;
   static const scaffoldFrom = 58;
 
   /// Magnet and the new lights: Collapse's climb rides on them.
   static const magnetFrom = 66;
-  static const spinnerFrom = 69;
+  static const spinnerFrom = 68;
   static const blinkerFrom = 72;
-  static const beaconFrom = 73;
-  static const gateFrom = 75;
-  static const runnerFrom = 78;
+  static const beaconFrom = 74;
+  static const gateFrom = 77;
+  static const runnerFrom = 81;
 
   /// Vigil's own arrivals: the lock you can see both halves of, the ground
   /// that bites, the light that closes what it sweeps.
   static const mirrorFrom = 86;
-  static const thornFrom = 89;
-  static const wardenFrom = 92;
-  static const gloomFrom = 93;
+  static const thornFrom = 90;
+  static const wardenFrom = 93;
+  static const gloomFrom = 95;
   static const tremorFrom = 97;
 
   // Powerup pool gates (banner-only arrivals — a new *tool* is its own
@@ -482,23 +482,23 @@ class Campaign {
   static const rationFrom = 14;
   static const lanternFrom = 17;
   static const pairworkFrom = 19;
-  static const slowbeatFrom = 24;
-  static const cloakFrom = 27;
-  static const trowelFrom = 35;
-  static const harvestFrom = 37;
-  static const whistleFrom = 40;
-  static const maulFrom = 43;
-  static const rewindFrom = 46;
+  static const slowbeatFrom = 23;
+  static const cloakFrom = 24;
+  static const trowelFrom = 32;
+  static const harvestFrom = 35;
+  static const whistleFrom = 39;
+  static const maulFrom = 42;
+  static const rewindFrom = 45;
   static const surepawsFrom = 49;
   static const wardownFrom = 52;
-  static const echoFrom = 56;
-  static const seedFrom = 59;
-  static const moleFrom = 64;
-  static const waystoneFrom = 70;
-  static const beaconDropFrom = 76;
-  static const nightEyesFrom = 79;
-  static const pouchFrom = 87;
-  static const ironpawFrom = 90;
+  static const echoFrom = 57;
+  static const seedFrom = 61;
+  static const moleFrom = 65;
+  static const waystoneFrom = 71;
+  static const beaconDropFrom = 79;
+  static const nightEyesFrom = 83;
+  static const pouchFrom = 89;
+  static const ironpawFrom = 92;
   static const keepsakeFrom = 99;
 
   /// Enough springs on a board to be met rather than merely present.
@@ -649,10 +649,10 @@ class Campaign {
     'Final Vigil',
   ];
 
-  static const _openTrailLevels = {6, 13, 19, 25, 31, 37, 47, 53, 59};
+  static const _openTrailLevels = {6, 13, 19, 25, 37, 47, 59};
   static const _closingTrailLevels = {7, 17, 23};
   static const _heavyGroundLevels = {11, 26, 65, 74};
-  static const _springLineLevels = {9, 10, 14, 48, 64};
+  static const _springLineLevels = {9, 10, 14, 48};
   static const _nightWatchLevels = {21, 22, 32, 38};
   static const _supplyRunLevels = {16, 28, 34, 44, 50, 56};
   static const _breachLevels = {41, 42, 54};
@@ -678,7 +678,7 @@ class Campaign {
   /// does. Vigil still doubles the lights.
   static const _wardedLevels = {
     51, 57, //
-    81, 82, 85, 88, 91, 94, 97,
+    81, 82, 85, 91, 94, 97,
   };
 
   /// Hand-selected replacements for generated boards that failed their level's
@@ -868,7 +868,7 @@ class Campaign {
   }
 
   // -------------------------------------------------------------------------
-  // Five guided levels. Small boards, so a lesson is over in half a minute.
+  // Three guided levels. Small boards, so a lesson is over in half a minute.
   // -------------------------------------------------------------------------
 
   static LevelRules _tutorial(int n, {int? seed}) {
@@ -976,48 +976,48 @@ class Campaign {
   static const _pressure = (
     columns: (11, 12),
     rows: (23, 25),
-    anchor: (0.27, 0.33),
-    heavy: (0.21, 0.26),
-    spring: (0.06, 0.08),
+    anchor: (0.24, 0.30),
+    heavy: (0.18, 0.23),
+    spring: (0.055, 0.075),
     // Cracked ground arrives here now, at [faultsFrom]. The floor covers the
     // introduction itself; from there the curve climbs on its own, which is
     // what keeps consecutive boards from being the same board.
-    fault: (0.0, 0.085),
+    fault: (0.0, 0.075),
     slope: (0.0, 0.0),
     sunken: (0.0, 0.0),
     guards: (1, 2),
-    guardSpeed: (0.85, 0.95),
+    guardSpeed: (0.80, 0.90),
     sentries: (0, 0),
     treats: (3, 4),
     powerups: (2, 3),
     treatSeconds: (4.5, 3.5),
     treatTaps: (2, 2),
-    regrow: (5.4, 4.6),
-    budget: (1.24, 1.12),
-    hunger: (1.08, 0.98),
+    regrow: (5.8, 4.9),
+    budget: (1.32, 1.24),
+    hunger: (1.15, 1.04),
   );
 
   static const _mastery = (
     columns: (12, 12),
     rows: (25, 27),
-    anchor: (0.33, 0.38),
-    heavy: (0.26, 0.30),
-    spring: (0.08, 0.10),
-    fault: (0.085, 0.12),
+    anchor: (0.30, 0.35),
+    heavy: (0.23, 0.275),
+    spring: (0.075, 0.095),
+    fault: (0.075, 0.13),
     slope: (0.0, 0.0),
     sunken: (0.0, 0.0),
     guards: (2, 3),
-    guardSpeed: (0.95, 1.10),
-    // Warded light from level fifty-one. One at a time here; Vigil is where
+    guardSpeed: (0.90, 1.02),
+    // Warded light from level fifty. One at a time here; Vigil is where
     // they double.
     sentries: (0, 1),
     treats: (4, 4),
     powerups: (3, 3),
     treatSeconds: (3.5, 2.8),
     treatTaps: (2, 2),
-    regrow: (4.6, 3.8),
-    budget: (1.12, 1.06),
-    hunger: (0.98, 0.85),
+    regrow: (4.92, 4.1),
+    budget: (1.27, 1.162),
+    hunger: (1.085, 0.9225),
   );
 
   /// Collapse (61-80). Cracked ground.
@@ -1036,21 +1036,21 @@ class Campaign {
   static const _collapse = (
     columns: (12, 12),
     rows: (27, 27),
-    anchor: (0.38, 0.40),
-    heavy: (0.30, 0.31),
-    spring: (0.10, 0.10),
+    anchor: (0.35, 0.39),
+    heavy: (0.28, 0.305),
+    spring: (0.095, 0.10),
     // Read against the *remaining plain* cells, not the whole board — anchors,
     // heavies and springs have already taken theirs by the time faults are
     // placed, so these numbers buy roughly half what their face value suggests.
     // At (0.03, 0.09) the band averaged two cracks a board, which is not a
     // gradient, and this band has no other one.
-    fault: (0.12, 0.19),
+    fault: (0.13, 0.19),
     // The band's new axis, and the first thing in it that is not a density it
     // already had.
     slope: (0.04, 0.11),
     sunken: (0.0, 0.0),
     guards: (3, 3),
-    guardSpeed: (1.10, 1.10),
+    guardSpeed: (1.02, 1.10),
     sentries: (1, 1),
     treats: (4, 4),
     powerups: (3, 3),
@@ -1060,9 +1060,9 @@ class Campaign {
     // was written to catch, and which it caught here.
     treatSeconds: (2.8, 2.6),
     treatTaps: (2, 2),
-    regrow: (3.8, 3.8),
-    budget: (1.06, 1.06),
-    hunger: (0.85, 0.85),
+    regrow: (4.1, 3.9),
+    budget: (1.14, 1.10),
+    hunger: (0.92, 0.89),
   );
 
   /// Vigil (81-100). Warded lights.
@@ -1074,8 +1074,8 @@ class Campaign {
   static const _vigil = (
     columns: (12, 12),
     rows: (27, 29),
-    anchor: (0.40, 0.42),
-    heavy: (0.31, 0.32),
+    anchor: (0.39, 0.42),
+    heavy: (0.305, 0.32),
     spring: (0.10, 0.10),
     fault: (0.19, 0.23),
     slope: (0.11, 0.14),
@@ -1087,9 +1087,9 @@ class Campaign {
     powerups: (3, 3),
     treatSeconds: (2.6, 2.5),
     treatTaps: (2, 2),
-    regrow: (3.8, 3.8),
-    budget: (1.06, 1.06),
-    hunger: (0.85, 0.85),
+    regrow: (3.9, 3.8),
+    budget: (1.10, 1.06),
+    hunger: (0.91, 0.85),
   );
 
   /// The rebuilt families' curves, kept out of the band tables on purpose.
@@ -1199,11 +1199,18 @@ class Campaign {
       _ => 0.0,
     };
     final extras = _extrasFor(level);
+    final budgetFloor =
+        difficulty == Difficulty.hard &&
+            level > collapseEnd &&
+            level <= length &&
+            pace != LevelPace.challenge
+        ? 1.01
+        : difficulty.budgetFloorFor(level);
 
     /// How heavily the board lies under this mode. One on Normal: nothing in
     /// the authored bands changes. Multiplied at the *end* of every obstacle
     /// density expression so the seeded draws' order is untouched by it.
-    final os = difficulty.obstacleDensityScale;
+    final os = difficulty.obstacleDensityScaleFor(level);
     // Heavy Ground normally trades some rivets for more two-hit tiles so its
     // subject stays readable. Level 11 is also a full challenge peak, though,
     // and applying that relief made it easier than level 8 while still leaving
@@ -1251,7 +1258,7 @@ class Campaign {
       // Only there, though, and only for the practice beat after it. The floor
       // used to apply at every level past the gate, which was invisible while
       // the gate sat at 61 and the band curve started just under it — but with
-      // cracked ground arriving at 29 it pinned the density to one number for
+      // cracked ground arriving at 26 it pinned the density to one number for
       // nearly thirty levels, and a mechanic that is present at exactly the
       // same strength for thirty levels running is wallpaper.
       // Floored at the introduction and the practice beat after it, exactly as
@@ -1311,13 +1318,13 @@ class Campaign {
         1,
         _lerpInt(band.treats, t) +
             signature.extraTreats +
-            difficulty.supplyDelta,
+            difficulty.supplyDeltaFor(level),
       ),
       powerups: math.max(
         1,
         _lerpInt(band.powerups, t) +
             signature.extraPowerups +
-            difficulty.powerupDelta,
+            difficulty.powerupDeltaFor(level),
       ),
       offeredPowerups: _powerupsFor(signature, level),
       powerupRotation: level,
@@ -1325,7 +1332,7 @@ class Campaign {
       treatSeconds: _lerp(band.treatSeconds, t),
       treatTaps: math.max(
         1,
-        _lerpInt(band.treatTaps, t) + difficulty.treatTapDelta,
+        _lerpInt(band.treatTaps, t) + difficulty.treatTapDeltaFor(level),
       ),
       regrowth: true,
       regrowDelay: math.max(
@@ -1339,12 +1346,11 @@ class Campaign {
       budget: true,
       // Floored per mode, not per campaign: Normal holds the fairness limit
       // `campaign_sweep_test` enforces (two spare taps at every point), while
-      // Hard's floor is par itself — which is what brutal means here; the run
-      // stays completable, it just stops paying for mistakes. The floor is
-      // the difference between "very tough" and "arithmetically impossible",
-      // and only the first of those is a difficulty.
+      // Hard keeps discovery room through stage 80 and permits par-only
+      // budgets only on late challenge peaks. The floor is the difference
+      // between "very tough" and "arithmetically impossible".
       budgetMultiplier: math.max(
-        difficulty.budgetFloor,
+        budgetFloor,
         baseBudget + pace.budgetRelief + difficulty.budgetRelief(level),
       ),
       hunger: true,
@@ -1430,15 +1436,12 @@ class Campaign {
         level == foxfireFrom ||
         level == guardsFrom ||
         level == faultsFrom ||
-        level == stakeFrom ||
         level == thatchFrom ||
         level == iceFrom ||
         level == alarmFrom ||
-        level == digFrom ||
         level == hardpanFrom ||
         level == overgrowthFrom ||
         level == sentriesFrom ||
-        level == heelFrom ||
         level == eddyFrom ||
         level == scaffoldFrom ||
         level == slopesFrom ||
@@ -1452,6 +1455,7 @@ class Campaign {
         level == mirrorFrom ||
         level == thornFrom ||
         level == wardenFrom ||
+        level == gloomFrom ||
         level == tremorFrom) {
       return LevelPace.introduction;
     }
@@ -1472,7 +1476,6 @@ class Campaign {
         level == thatchFrom + 1 ||
         level == iceFrom + 1 ||
         level == alarmFrom + 1 ||
-        level == digFrom + 1 ||
         level == hardpanFrom + 1 ||
         level == overgrowthFrom + 1 ||
         level == sentriesFrom + 1 ||
@@ -1489,6 +1492,7 @@ class Campaign {
         level == mirrorFrom + 1 ||
         level == thornFrom + 1 ||
         level == wardenFrom + 1 ||
+        level == gloomFrom + 1 ||
         level == tremorFrom + 1) {
       return LevelPace.practice;
     }
@@ -1510,18 +1514,14 @@ class Campaign {
     // letter. They are removed rather than relocated, because with fifty-three
     // gates to teach there are exactly two free slots left after a challenge
     // (61 and 81) and nowhere to put them.
-    const breathers = {
-      25, 28, 50, 56, //
-      62, 68, //
-      96, 99,
-    };
+    const breathers = {25, 36, 48, 61, 70, 89};
     if (breathers.contains(level)) return LevelPace.breather;
     const challenges = {
       8, 11, 14, 17, // Foundation
-      24, 26, 27, 32, // Pressure (34/37/39 sit on thatch/ice/alarm practice)
-      43, 46, 49, 57, // Mastery (55 sits on a practice beat)
-      65, 71, 77, // Collapse (68 is a breather, 74 a practice beat)
-      85, 88, 91, 95, // Vigil
+      31, 40, // Pressure
+      53, 60, // Mastery
+      64, 76, 80, // Collapse
+      88, 100, // Vigil
     };
     if (challenges.contains(level)) return LevelPace.challenge;
     return LevelPace.combination;
@@ -1541,7 +1541,7 @@ class Campaign {
   }) {
     final beyond = level - length;
     final t = 1 - math.pow(0.97, beyond).toDouble();
-    final os = difficulty.obstacleDensityScale;
+    final os = difficulty.obstacleDensityScaleFor(level);
     return LevelRules(
       level: level,
       seed: seed ?? seedFor(level),
@@ -1595,8 +1595,8 @@ class Campaign {
           1.10 + 0.15 * t + difficulty.guardSpeedDelta(level),
         ),
       ),
-      treats: math.max(1, 4 + difficulty.supplyDelta),
-      powerups: math.max(1, 3 + difficulty.powerupDelta),
+      treats: math.max(1, 4 + difficulty.supplyDeltaFor(level)),
+      powerups: math.max(1, 3 + difficulty.powerupDeltaFor(level)),
       // Everything, which past level a hundred it always should have been.
       // This used to name Mastery's pool, so endless ran cracked ground at 0.22
       // and two sentries while offering neither STAKE nor HEEL — the two tools
@@ -1604,7 +1604,7 @@ class Campaign {
       offeredPowerups: poolFor(level),
       powerupRotation: level,
       treatSeconds: 1.3,
-      treatTaps: math.max(1, 1 + difficulty.treatTapDelta),
+      treatTaps: math.max(1, 1 + difficulty.treatTapDeltaFor(level)),
       regrowth: true,
       regrowDelay: math.max(
         difficulty.regrowFloor,
@@ -1616,7 +1616,7 @@ class Campaign {
       // 1.0 Hard floor leaves it — the mode's promise does not bend just
       // because the campaign ran out of levels.
       budgetMultiplier: math.max(
-        math.max(1.03, difficulty.budgetFloor),
+        math.max(1.03, difficulty.budgetFloorFor(level)),
         1.06 - 0.03 * t + difficulty.budgetRelief(level),
       ),
       hunger: true,
@@ -1683,7 +1683,7 @@ class Campaign {
   /// One sentence each, and the level that carries it is the gate that spawned
   /// it, so the two can never disagree.
   static String? introductionAt(int level) => switch (level) {
-    // Fog has arrived silently since the tutorial was five levels long — it was
+    // Fog arrived silently when the tutorial was five levels long — it was
     // simply switched on and never mentioned. It is the first thing the real
     // game does that the guided levels did not.
     fogFrom => 'You see only what she is near. Carve to look around',
@@ -1823,7 +1823,6 @@ class Campaign {
         PickupKind.blast,
         PickupKind.scent,
       ],
-      _ => pool,
     };
     // Stable, deduped, and gated: the pool is the law, the preference is the
     // seasoning. A signature may never offer what the level has not unlocked.
@@ -1992,7 +1991,7 @@ extension on LevelPace {
     LevelPace.introduction => 0.9,
     LevelPace.practice => 0.65,
     LevelPace.combination => 0.2,
-    LevelPace.breather => 0.85,
+    LevelPace.breather => 1.2,
     _ => 0,
   };
 

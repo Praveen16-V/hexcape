@@ -122,7 +122,10 @@ class _ResultOverlayState extends State<ResultOverlay>
         Strings.trialCleared,
         Strings.trialClearedHint,
       ),
-      GamePhase.won => (Strings.levelComplete, null),
+      GamePhase.won => (
+        Strings.levelComplete,
+        'Level ${game.levelNumber} complete.',
+      ),
       // In endless a loss ends the *run*, which is the thing being scored.
       // Calling it "boxed in" describes the last board and buries the number
       // the player was actually playing for.
@@ -145,6 +148,10 @@ class _ResultOverlayState extends State<ResultOverlay>
     late final VoidCallback primaryAction;
     String? secondaryLabel;
     VoidCallback? secondaryAction;
+    // Emphasis and position are separate: the row always puts the "go back and
+    // play this again" action on the left and the "move forward" one on the
+    // right, whichever of the two is the emphasised button.
+    bool primaryOnRight = false;
     if (zen) {
       primaryLabel = 'Practice again';
       primaryAction = game.retry;
@@ -156,6 +163,7 @@ class _ResultOverlayState extends State<ResultOverlay>
       if (won) {
         secondaryLabel = Strings.newRun;
         secondaryAction = game.startEndlessRun;
+        primaryOnRight = true;
       }
     } else if (daily != null) {
       // Neither `nextLevel` nor `regenerate` belongs here: there is exactly one
@@ -176,6 +184,7 @@ class _ResultOverlayState extends State<ResultOverlay>
         primaryAction = widget.onUnlock;
         secondaryLabel = Strings.retry;
         secondaryAction = game.retry;
+        primaryOnRight = true;
       } else {
         primaryLabel = Strings.retry;
         primaryAction = game.retry;
@@ -183,20 +192,24 @@ class _ResultOverlayState extends State<ResultOverlay>
         secondaryAction = widget.onUnlock;
       }
     } else {
-      primaryLabel = Strings.retry;
-      primaryAction = game.retry;
-      secondaryLabel = finishedFree
-          ? Strings.seeWhatIsNext
-          : finishedCampaign
-          ? Strings.enterEndless
-          : won
-          ? Strings.nextLevel
-          : Strings.newLevel;
-      secondaryAction = finishedFree
-          ? widget.onUnlock
-          : won
-          ? game.nextLevel
-          : game.regenerate;
+      if (won) {
+        primaryLabel = finishedFree
+            ? Strings.seeWhatIsNext
+            : finishedCampaign
+            ? Strings.enterEndless
+            : Strings.nextLevel;
+        primaryAction = finishedFree ? widget.onUnlock : game.nextLevel;
+        secondaryLabel = Strings.retry;
+        secondaryAction = game.retry;
+        primaryOnRight = true;
+      } else {
+        // Authored campaign stages have fixed seeds. The old "New level"
+        // action called regenerate(), but rebuilt the same board as Retry and
+        // offered a choice that did not exist. One clear recovery action is
+        // more honest and gives Retry the full row.
+        primaryLabel = Strings.retry;
+        primaryAction = game.retry;
+      }
     }
 
     return Align(
@@ -297,6 +310,17 @@ class _ResultOverlayState extends State<ResultOverlay>
                   const SizedBox(height: 22),
                   Row(
                     children: [
+                      if (secondaryLabel != null &&
+                          secondaryAction != null &&
+                          primaryOnRight) ...[
+                        Expanded(
+                          child: _Button(
+                            label: secondaryLabel,
+                            onPressed: secondaryAction,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       Expanded(
                         child: _Button(
                           label: primaryLabel,
@@ -305,7 +329,8 @@ class _ResultOverlayState extends State<ResultOverlay>
                         ),
                       ),
                       if (secondaryLabel != null &&
-                          secondaryAction != null) ...[
+                          secondaryAction != null &&
+                          !primaryOnRight) ...[
                         const SizedBox(width: 12),
                         Expanded(
                           child: _Button(

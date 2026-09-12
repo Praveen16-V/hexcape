@@ -213,6 +213,48 @@ void main() {
       timeout: const Timeout(Duration(minutes: 4)),
     );
 
+    test('Hard grows through the authored post-20 milestones', () {
+      const factors = {21: 0.25, 40: 0.45, 60: 0.65, 80: 0.85, 100: 1.0};
+      for (final entry in factors.entries) {
+        final level = entry.key;
+        final factor = entry.value;
+        final hard = Difficulty.hard;
+        expect(
+          hard.obstacleDensityScaleFor(level),
+          closeTo(1 + 0.3 * factor, 1e-9),
+          reason: 'ground at $level',
+        );
+        expect(
+          hard.budgetRelief(level),
+          closeTo(-0.04 - 0.16 * factor, 1e-9),
+          reason: 'budget at $level',
+        );
+        expect(
+          hard.hungerRelief(level),
+          closeTo(-0.04 - 0.18 * factor, 1e-9),
+          reason: 'clock at $level',
+        );
+        expect(
+          hard.regrowRelief(level),
+          closeTo(-0.3 - 1.1 * factor, 1e-9),
+          reason: 'regrowth at $level',
+        );
+        expect(
+          hard.guardSpeedDelta(level),
+          closeTo(0.05 + 0.40 * factor, 1e-9),
+          reason: 'lights at $level',
+        );
+      }
+
+      expect(Difficulty.hard.guardDelta(21), 1);
+      expect(Difficulty.hard.guardDelta(60), 1);
+      expect(Difficulty.hard.guardDelta(80), 2);
+      expect(Difficulty.hard.supplyDeltaFor(40), 0);
+      expect(Difficulty.hard.supplyDeltaFor(60), -1);
+      expect(Difficulty.hard.powerupDeltaFor(40), 0);
+      expect(Difficulty.hard.powerupDeltaFor(60), -1);
+    });
+
     test(
       'no level is arithmetically impossible, even on Hard',
       () {
@@ -235,6 +277,19 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );
+
+    test('Hard keeps its promised discovery margin until the late peaks', () {
+      for (var n = Campaign.foundationEnd + 1; n <= Campaign.length; n++) {
+        final rules = Campaign.rulesFor(n, difficulty: Difficulty.hard);
+        final level = LevelGenerator.generate(specFor(rules));
+        final spare = (level.par * rules.budgetMultiplier).ceil() - level.par;
+        if (n <= 40) {
+          expect(spare, greaterThanOrEqualTo(2), reason: 'stage $n');
+        } else if (n <= 80 || rules.pace != LevelPace.challenge) {
+          expect(spare, greaterThanOrEqualTo(1), reason: 'stage $n');
+        }
+      }
+    });
 
     test('Hard is never easier than Normal, on any axis', () {
       for (var n = Campaign.tutorialBand + 1; n <= Campaign.length + 20; n++) {

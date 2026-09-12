@@ -1432,7 +1432,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
         // The lesson that says "watch the ground behind her" ends when the
         // ground behind her actually closes, not on a timer guessing when it
         // might.
-        tutorial?.noteRegrowth();
+        tutorial?.noteRegrowth(events.snapped);
         for (final coord in events.snapped) {
           effects.ripple(layout.toPixel(coord), layout.size);
           // REWIND's ledger. Capped rather than compounding: the field only
@@ -2109,7 +2109,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     }
     _caughtCooldown = 1.6;
     if (tuning.hungerEnabled) {
-      hunger.bite(guardBiteSeconds * difficultyForRun.biteScale);
+      hunger.bite(
+        guardBiteSeconds * difficultyForRun.biteScaleFor(levelNumber),
+      );
     }
     startleFlash = 1;
     barkFlash = 1;
@@ -2146,7 +2148,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     if (cell.type == HexType.thorn && _thornCooldown <= 0) {
       _thornCooldown = 1.2;
       if (tuning.hungerEnabled) {
-        hunger.bite(tuning.thornSeconds * difficultyForRun.biteScale);
+        hunger.bite(
+          tuning.thornSeconds * difficultyForRun.biteScaleFor(levelNumber),
+        );
       }
       startleFlash = 1;
       juice.shake(2.6);
@@ -2156,7 +2160,9 @@ class HexcapeGame extends FlameGame with TapCallbacks {
     // An alarm re-arms only once the hurry has run out — standing on the bell
     // cannot keep the lights whipped forever.
     if (cell.type == HexType.alarm && alarmFor <= 0) {
-      alarmFor = ActiveEffects.alarmSeconds * difficultyForRun.rhythmScale;
+      alarmFor =
+          ActiveEffects.alarmSeconds *
+          difficultyForRun.rhythmScaleFor(levelNumber);
       wardFlash = 1;
       juice.shake(3.4);
       sfx.play(Sound.warn, gain: 0.9);

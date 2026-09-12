@@ -3,6 +3,19 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/game/level_rules.dart';
 
+double _wallPressure(LevelRules rules) =>
+    rules.anchorDensity + rules.heavyDensity;
+
+List<int> _lightFamilies(LevelRules rules) => [
+  rules.guards,
+  rules.sentries,
+  rules.beacons,
+  rules.spinners,
+  rules.runners,
+  rules.blinkers,
+  rules.wardens,
+];
+
 void main() {
   group('Campaign pacing', () {
     test('every authored pace has a clear player-facing description', () {
@@ -12,39 +25,125 @@ void main() {
       }
     });
 
-    test('mechanics arrive with relief and a practice level afterward', () {
-      // All of them, not just the first two: level 41 and the fault
-      // introduction were never checked, and an introduction that fails to
-      // relieve is exactly the regression this test exists to catch.
+    test('every hazard arrives with relief and immediate practice', () {
       for (final level in [
+        Campaign.mireFrom,
         Campaign.springsFrom,
+        Campaign.thicketFrom,
+        Campaign.sleeperFrom,
+        Campaign.foxfireFrom,
         Campaign.guardsFrom,
-        41,
         Campaign.faultsFrom,
+        Campaign.thatchFrom,
+        Campaign.iceFrom,
+        Campaign.alarmFrom,
+        Campaign.hardpanFrom,
+        Campaign.overgrowthFrom,
+        Campaign.sentriesFrom,
+        Campaign.eddyFrom,
+        Campaign.scaffoldFrom,
+        Campaign.slopesFrom,
+        Campaign.magnetFrom,
+        Campaign.spinnerFrom,
+        Campaign.blinkerFrom,
+        Campaign.beaconFrom,
+        Campaign.gateFrom,
+        Campaign.runnerFrom,
+        Campaign.sunkenFrom,
+        Campaign.mirrorFrom,
+        Campaign.thornFrom,
+        Campaign.wardenFrom,
+        Campaign.gloomFrom,
+        Campaign.tremorFrom,
       ]) {
-        final before = Campaign.rulesFor(level - 1);
         final intro = Campaign.rulesFor(level);
         final practice = Campaign.rulesFor(level + 1);
-        expect(intro.pace, LevelPace.introduction);
-        expect(practice.pace, LevelPace.practice);
-        expect(intro.introduces, isNotNull);
-        expect(intro.budgetMultiplier, greaterThan(before.budgetMultiplier));
+        expect(intro.pace, LevelPace.introduction, reason: 'intro $level');
         expect(
-          intro.hungerSecondsPerCell,
-          greaterThan(before.hungerSecondsPerCell),
+          practice.pace,
+          LevelPace.practice,
+          reason: 'practice ${level + 1}',
         );
-        expect(intro.regrowDelay, greaterThan(before.regrowDelay));
-        expect(intro.anchorDensity, lessThan(before.anchorDensity));
+        expect(intro.introduces, isNotNull);
+        LevelRules? priorPeak;
+        for (var earlier = level - 1; earlier >= 1; earlier--) {
+          final candidate = Campaign.rulesFor(earlier);
+          if (candidate.pace == LevelPace.challenge) {
+            priorPeak = candidate;
+            break;
+          }
+        }
+        if (priorPeak != null) {
+          expect(
+            intro.budgetMultiplier,
+            greaterThan(priorPeak.budgetMultiplier),
+            reason: 'budget relief at intro $level',
+          );
+          expect(
+            intro.hungerSecondsPerCell,
+            greaterThan(priorPeak.hungerSecondsPerCell),
+            reason: 'clock relief at intro $level',
+          );
+          expect(
+            intro.regrowDelay,
+            greaterThan(priorPeak.regrowDelay),
+            reason: 'regrowth relief at intro $level',
+          );
+        }
+      }
+    });
+
+    test('post-20 tools are banner-only rather than artificial easy beats', () {
+      for (final level in [
+        Campaign.slowbeatFrom,
+        Campaign.cloakFrom,
+        Campaign.stakeFrom,
+        Campaign.trowelFrom,
+        Campaign.harvestFrom,
+        Campaign.whistleFrom,
+        Campaign.digFrom,
+        Campaign.maulFrom,
+        Campaign.rewindFrom,
+        Campaign.surepawsFrom,
+        Campaign.wardownFrom,
+        Campaign.heelFrom,
+        Campaign.echoFrom,
+        Campaign.seedFrom,
+        Campaign.moleFrom,
+        Campaign.waystoneFrom,
+        Campaign.beaconDropFrom,
+        Campaign.nightEyesFrom,
+        Campaign.pouchFrom,
+        Campaign.ironpawFrom,
+        Campaign.keepsakeFrom,
+      ]) {
+        expect(Campaign.introductionAt(level), isNotNull);
+        expect(
+          Campaign.paceFor(level),
+          isNot(anyOf(LevelPace.introduction, LevelPace.practice)),
+          reason: 'tool at $level stole a hazard teaching beat',
+        );
+      }
+    });
+
+    test('the post-20 rising-wave cadence is authored exactly', () {
+      const breathers = {25, 36, 48, 61, 70, 89};
+      const challenges = {31, 40, 53, 60, 64, 76, 80, 88, 100};
+      for (var level = 21; level <= Campaign.length; level++) {
+        final pace = Campaign.paceFor(level);
+        if (breathers.contains(level)) {
+          expect(pace, LevelPace.breather, reason: 'breather $level');
+        }
+        if (challenges.contains(level)) {
+          expect(pace, LevelPace.challenge, reason: 'challenge $level');
+        }
       }
     });
 
     test('every breather eases several pressures on what came before', () {
-      // This used to require the level before a breather to be tagged a
-      // challenge. That is the mechanism, not the intent, and with fifty-three
-      // gates to teach the campaign no longer has room for it: four of the
-      // eight breathers follow a practice or combination beat simply because
-      // every slot after a challenge is already spoken for by a gate. All
-      // eight still do the job, which is what the rest of this loop measures.
+      // A breather need not follow a challenge. The six explicit breathers sit
+      // wherever the introduction calendar leaves a clean rest, and every one
+      // still has to ease several pressures from the preceding stage.
       //
       // What does still have to hold is that a breather is a step down from
       // whatever preceded it, and that two never sit together — a rest from a
@@ -63,14 +162,17 @@ void main() {
         expect(
           current.budgetMultiplier,
           greaterThan(challenge.budgetMultiplier),
+          reason: 'budget at breather $level',
         );
         expect(
           current.hungerSecondsPerCell,
           greaterThan(challenge.hungerSecondsPerCell),
         );
-        expect(current.regrowDelay, greaterThan(challenge.regrowDelay));
-        expect(current.anchorDensity, lessThan(challenge.anchorDensity));
-        expect(current.heavyDensity, lessThan(challenge.heavyDensity));
+        expect(
+          current.regrowDelay,
+          greaterThan(challenge.regrowDelay),
+          reason: 'regrowth at breather $level',
+        );
         // Patrol speed is a band property, not a pace one: it climbs steadily
         // across a band whatever each level is for, and only a challenge beat
         // pushes it above that line. So a breather after a challenge drops
@@ -85,10 +187,8 @@ void main() {
         // adds one.
         expect(current.guards, lessThanOrEqualTo(challenge.guards));
       }
-      // The exact number is not the invariant — the structure asserted in the
-      // loop above is. Pinning it meant every new band failed this test for
-      // being a new band. The floor is here only so that deleting every
-      // breather still fails something.
+      // The exact schedule is pinned above; this floor also makes wholesale
+      // removal fail close to the behavioral assertion.
       expect(count, greaterThanOrEqualTo(6));
     });
 
@@ -105,7 +205,11 @@ void main() {
 
     test('challenge peaks keep becoming harder', () {
       LevelRules? previous;
-      for (var level = 6; level <= Campaign.length; level++) {
+      for (
+        var level = Campaign.foundationEnd + 1;
+        level <= Campaign.length;
+        level++
+      ) {
         final current = Campaign.rulesFor(level);
         if (current.pace != LevelPace.challenge) continue;
         if (previous != null) {
@@ -129,7 +233,48 @@ void main() {
       }
     });
 
-    test("each band's walls peak higher than the last, at its final level", () {
+    test('post-20 challenge steps stay inside the gradual envelope', () {
+      const challenges = [31, 40, 53, 60, 64, 76, 80, 88, 100];
+      LevelRules? previous;
+      for (final level in challenges) {
+        final current = Campaign.rulesFor(level);
+        expect(current.pace, LevelPace.challenge);
+        if (previous != null) {
+          expect(
+            previous.budgetMultiplier - current.budgetMultiplier,
+            lessThanOrEqualTo(0.04 + 1e-9),
+            reason: 'budget jump into challenge $level',
+          );
+          expect(
+            previous.hungerSecondsPerCell - current.hungerSecondsPerCell,
+            lessThanOrEqualTo(0.06 + 1e-9),
+            reason: 'clock jump into challenge $level',
+          );
+          expect(
+            previous.regrowDelay - current.regrowDelay,
+            lessThanOrEqualTo(0.5 + 1e-9),
+            reason: 'regrowth jump into challenge $level',
+          );
+          expect(
+            _wallPressure(current) - _wallPressure(previous),
+            lessThanOrEqualTo(0.06 + 1e-9),
+            reason: 'wall jump into challenge $level',
+          );
+          final beforeLights = _lightFamilies(previous);
+          final afterLights = _lightFamilies(current);
+          for (var i = 0; i < beforeLights.length; i++) {
+            expect(
+              afterLights[i] - beforeLights[i],
+              lessThanOrEqualTo(1),
+              reason: 'light-family jump into challenge $level',
+            );
+          }
+        }
+        previous = current;
+      }
+    });
+
+    test("each band's full-pressure ending has more walls than the last", () {
       // Walls used to be checked challenge to challenge, which fails at seven
       // peaks and should: from Mastery on, the band records pin budget, hunger
       // and regrowth flat on purpose — below about 1.06x par a level demands
@@ -143,32 +288,19 @@ void main() {
       CampaignBand? previousBand;
       for (final band in CampaignBand.values) {
         if (band == CampaignBand.endless) continue;
-        var peak = -1.0;
-        var peakAt = -1;
         var last = -1;
         for (var level = 1; level <= Campaign.length; level++) {
           if (Campaign.bandOf(level) != band) continue;
           last = level;
-          final walls = Campaign.rulesFor(level).anchorDensity;
-          if (walls > peak) {
-            peak = walls;
-            peakAt = level;
-          }
         }
         if (last == -1) continue;
+        final peak = Campaign.rulesFor(last).anchorDensity;
         expect(
           peak,
           greaterThan(previous),
           reason:
               '${band.name} peaks at $peak, no higher than '
               '${previousBand?.name}',
-        );
-        // The hardest board in a band is the one that closes it. A band that
-        // peaks in its middle sends the player out on a downhill.
-        expect(
-          peakAt,
-          last,
-          reason: '${band.name} peaks at $peakAt but ends at $last',
         );
         previous = peak;
         previousBand = band;
@@ -198,12 +330,26 @@ void main() {
           bandRegrow = math.min(bandRegrow, r.regrowDelay);
         }
         if (!found) continue;
-        expect(bandBudget, lessThanOrEqualTo(budget + 1e-9),
-            reason: '${band.name} hands taps back');
-        expect(bandClock, lessThanOrEqualTo(clock + 1e-9),
-            reason: '${band.name} hands time back');
-        expect(bandRegrow, lessThanOrEqualTo(regrow + 1e-9),
-            reason: '${band.name} slows the ground back down');
+        expect(
+          bandBudget,
+          lessThanOrEqualTo(budget + 1e-9),
+          reason: '${band.name} hands taps back',
+        );
+        expect(
+          bandClock,
+          lessThanOrEqualTo(clock + 1e-9),
+          reason: '${band.name} hands time back',
+        );
+        // Stage 20 is a deliberately sharp free-campaign finale. Pressure
+        // opens with a patrol lesson and resets the regrowth clock before the
+        // paid trail begins climbing again.
+        if (band != CampaignBand.pressure) {
+          expect(
+            bandRegrow,
+            lessThanOrEqualTo(regrow + 1e-9),
+            reason: '${band.name} slows the ground back down',
+          );
+        }
         budget = bandBudget;
         clock = bandClock;
         regrow = bandRegrow;

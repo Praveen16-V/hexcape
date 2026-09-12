@@ -14,6 +14,9 @@ import '../hex/hex_grid.dart';
 /// answers a question the player is not being asked. Resolution and release are
 /// both in [Tutorial.targetCell], and the two together are the whole design.
 enum TutorialTarget {
+  /// The level's goal bone.
+  goalBone,
+
   /// The next cell she needs opened, on the cheapest route to the bone.
   nextOnRoute,
 
@@ -28,6 +31,9 @@ enum TutorialTarget {
 
   /// The nearest treat or powerup.
   nearestPickup,
+
+  /// The tile opened by the immediately preceding tutorial action.
+  recentlyOpened,
 
   /// Nothing in particular; the step is just words.
   none,
@@ -92,7 +98,7 @@ class TutorialStep {
 
   /// Whether every tap but the target is refused.
   ///
-  /// This is what makes five guided levels teach more than twelve passive ones:
+  /// This is what lets three guided levels teach more than passive cards:
   /// a lesson that will not proceed until the player does the thing cannot be
   /// skimmed past. Used sparingly — gating something a player cannot find is how
   /// a tutorial becomes a trap.
@@ -114,6 +120,9 @@ class Tutorial {
   double _watched = 0;
   bool _sawRegrowth = false;
 
+  /// The action tile carried into a following demonstration beat.
+  HexCoord? _recentlyOpened;
+
   /// The tile the highlight is standing on, the lesson that put it there, and
   /// how far from her it was when it did.
   ///
@@ -131,9 +140,14 @@ class Tutorial {
   /// when the reason it stopped matching is that she just picked the thing up.
   HexCoord? _reachTarget;
 
-  /// The field just closed a cell. Called by the game so a
-  /// [TutorialAdvance.onRegrow] beat ends on the thing it is describing.
-  void noteRegrowth() => _sawRegrowth = true;
+  /// The field just closed cells. End the demonstration only when the marked
+  /// tile closes, rather than on unrelated regrowth elsewhere on the board.
+  void noteRegrowth(Iterable<HexCoord> snapped) {
+    final target = _recentlyOpened;
+    if (target != null && snapped.contains(target)) {
+      _sawRegrowth = true;
+    }
+  }
 
   int get stepNumber => (_index + 1).clamp(1, steps.length);
   int get stepCount => steps.length;
@@ -143,6 +157,8 @@ class Tutorial {
   void skip() {
     _done = true;
     _clearHold();
+    _recentlyOpened = null;
+    _reachTarget = null;
   }
 
   /// Explanations wait for acknowledgement; action steps require real play.
@@ -163,6 +179,7 @@ class Tutorial {
   void reset() {
     _index = 0;
     _clearHold();
+    _recentlyOpened = null;
     _reachTarget = null;
     _done = false;
     _watched = 0;
@@ -269,10 +286,12 @@ class Tutorial {
     return switch (target) {
       // Never marked, so never held.
       TutorialTarget.none => false,
+      TutorialTarget.goalBone => held == grid.exit,
       TutorialTarget.nextOnRoute || TutorialTarget.widenPath => open,
       TutorialTarget.nearestAnchor => cell.type == HexType.anchor,
       TutorialTarget.nearestHeavy => cell.isSolid && cell.type == HexType.heavy,
       TutorialTarget.nearestPickup => waiting,
+      TutorialTarget.recentlyOpened => cell.isPassable,
     };
   }
 
@@ -285,6 +304,7 @@ class Tutorial {
   ) {
     return switch (target) {
       TutorialTarget.none => null,
+      TutorialTarget.goalBone => grid.exit,
       TutorialTarget.nextOnRoute => _nextOnRoute(grid, dog),
       TutorialTarget.widenPath => _widenPath(grid, dog),
       TutorialTarget.nearestAnchor => _nearest(
@@ -305,6 +325,7 @@ class Tutorial {
         dog,
         pickups,
       ),
+      TutorialTarget.recentlyOpened => _recentlyOpened,
     };
   }
 
@@ -412,6 +433,7 @@ class Tutorial {
       return;
     }
     if (target == null || target == coord) {
+      _recentlyOpened = coord;
       _next();
     }
   }
@@ -460,86 +482,58 @@ class Tutorial {
     }
   }
 
-  /// The scripts. Deliberately short: two or three beats, then the level is
-  /// theirs.
+  /// The scripts. One idea per beat, then the level is theirs.
   static Tutorial? forLevel(int level) => switch (level) {
     1 => Tutorial(const [
       TutorialStep(
-        // The goal in the first words she reads, because the first lesson is a
-        // tap on a tile and a tap on a tile looks like the whole game. The bone
-        // is on the board already, glowing, so the line points at something she
-        // can see rather than at a noun she has to imagine.
-        prompt: 'Open a way to the bone: tap the glowing tile',
+        prompt: 'Get her to the bone.',
+        target: TutorialTarget.goalBone,
+      ),
+      TutorialStep(
+        prompt: 'Tap the glowing tile to open a path.',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
       ),
       TutorialStep(
-        prompt: 'Open the next tile to make a narrow path',
+        prompt: 'Open the next tile to keep her moving.',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
       ),
-      TutorialStep(prompt: 'Narrow paths keep her pace gentle'),
       TutorialStep(
-        prompt: 'Open a tile beside her to widen the path',
+        prompt: 'Open a tile beside her—more space makes her move faster.',
         target: TutorialTarget.widenPath,
         advance: TutorialAdvance.onTap,
       ),
       TutorialStep(
-        prompt: 'Widen it once more for more speed',
-        target: TutorialTarget.widenPath,
-        advance: TutorialAdvance.onTap,
-      ),
-      TutorialStep(prompt: 'More open space, more speed'),
-      // The line the whole level exists for, and the one no amount of tapping
-      // can imply. Four beats of "open this tile" teach that the board is the
-      // game; then the board is open, the card is gone, and nothing has said
-      // that clearing ground is only how she gets somewhere. **She has to
-      // arrive at the bone**, and every lesson above is a means to that.
-      //
-      // Named on the first card so she knows what she is aiming at, and again
-      // here because a goal read before the very first tap is a slogan while
-      // one read after four taps that moved her is an instruction. Being the
-      // final beat also puts it on the card whose button reads "Let's play", so
-      // the last words before the run is hers are the thing she has to do.
-      TutorialStep(
-        prompt: 'She has to reach the bone herself — keep opening a way to it',
+        prompt:
+            'Narrow paths give control; open space gives speed. Keep a route '
+            'open to the bone.',
       ),
     ]),
-    // Regrowth and the two special tiles.
-    //
-    // This was four cards in a row, every one of them frozen, and the player
-    // reached the end of it having tapped nothing at all. Worse, its opening
-    // line was "watch behind her" on a stopped board with nothing yet cleared
-    // — the one thing it asked for was the one thing it made impossible. Now
-    // the ground is opened by the player, the regrowth beat runs live until
-    // the field actually closes something, and the heavy tile is learned by
-    // spending two taps on it rather than by being told it costs two.
+    // Regrowth and the two special tiles. The first action hands its exact tile
+    // to the live regrowth demonstration that follows it.
     2 => Tutorial(const [
       TutorialStep(
-        prompt: 'Open her a way through',
+        prompt: 'Open this tile to start moving.',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
       ),
       TutorialStep(
-        prompt: 'Now watch the ground behind her — cleared tiles grow back',
+        prompt:
+            'Watch this tile grow back—don’t let the field close around her.',
+        target: TutorialTarget.recentlyOpened,
         advance: TutorialAdvance.onRegrow,
         seconds: 14,
       ),
-      TutorialStep(prompt: 'Let it close on every side and she is finished'),
       TutorialStep(
-        prompt: 'Riveted tiles never clear. Go around them',
+        prompt: 'Riveted tiles never clear. Route around them.',
         target: TutorialTarget.nearestAnchor,
       ),
-      // Deliberately a card that points rather than a tap to perform. The tap
-      // ring reaches about one cell, and nothing makes a generated board put a
-      // double-ringed tile beside her — so "break one" is a lesson the board
-      // can refuse to make possible, which is the one thing a tutorial step
-      // must never be.
       TutorialStep(
-        prompt: 'Double-ringed tiles take two taps',
+        prompt: 'Double-ringed tiles take two taps.',
         target: TutorialTarget.nearestHeavy,
       ),
     ]),
@@ -550,30 +544,31 @@ class Tutorial {
     // is how long she has left" said over a frozen bar is a caption on a still
     // photograph.
     3 => Tutorial(const [
-      TutorialStep(prompt: 'Your taps are limited now — the count is up top'),
+      TutorialStep(
+        prompt: 'Taps and time are limited—the counters are at the top.',
+      ),
       // This carve is not decoration. A watching beat can only run once the
       // run has actually started: before the player's first tap the level sits
       // in its idle phase, where the clock does not tick and the script does
       // not advance — so a clock lesson placed ahead of it would hang on a bar
       // that was never going to move.
       TutorialStep(
-        prompt: 'Spend one. Open her a way through',
+        prompt: 'Spend one tap to open her route.',
         target: TutorialTarget.nextOnRoute,
         advance: TutorialAdvance.onTap,
         gate: true,
       ),
       TutorialStep(
-        prompt: 'And she tires. Watch the bar — that is how long she has',
+        prompt: 'Watch the time bar drain while she moves.',
         advance: TutorialAdvance.onWatch,
-        seconds: 4,
+        seconds: 3,
       ),
       TutorialStep(
-        prompt: 'Walk her over this — treats pay back taps and time',
+        prompt: 'Guide her over the treat—it restores taps and time.',
         target: TutorialTarget.nearestPickup,
         advance: TutorialAdvance.onReach,
         releaseAfter: 30,
       ),
-      TutorialStep(prompt: 'They sit off your route. Worth the detour?'),
     ]),
     _ => null,
   };

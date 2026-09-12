@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Campaign identity', () {
-    test('all sixty levels have unique authored names', () {
+    test('all campaign levels have unique authored names', () {
       final names = {
         for (var level = 1; level <= Campaign.length; level++)
           Campaign.identityFor(level).title,
@@ -23,7 +23,7 @@ void main() {
       expect(Campaign.signatureFor(7), LevelSignature.closingTrail);
       expect(Campaign.signatureFor(11), LevelSignature.heavyGround);
       expect(Campaign.signatureFor(14), LevelSignature.springLine);
-      expect(Campaign.signatureFor(38), LevelSignature.nightWatch);
+      expect(Campaign.signatureFor(32), LevelSignature.nightWatch);
       expect(Campaign.signatureFor(29), LevelSignature.faultLine);
       expect(Campaign.signatureFor(51), LevelSignature.warded);
       expect(Campaign.signatureFor(34), LevelSignature.supplyRun);
@@ -36,7 +36,7 @@ void main() {
       final closing = Campaign.rulesFor(7);
       final heavy = Campaign.rulesFor(11);
       final spring = Campaign.rulesFor(14);
-      final watch = Campaign.rulesFor(38);
+      final watch = Campaign.rulesFor(32);
       final supply = Campaign.rulesFor(34);
       final breach = Campaign.rulesFor(41);
 
@@ -50,7 +50,7 @@ void main() {
         spring.springDensity,
         greaterThan(Campaign.rulesFor(13).springDensity),
       );
-      expect(watch.guards, greaterThan(Campaign.rulesFor(37).guards));
+      expect(watch.guards, greaterThan(Campaign.rulesFor(31).guards));
       expect(
         supply.treats + supply.powerups,
         greaterThan(
@@ -59,8 +59,16 @@ void main() {
       );
       expect(breach.offeredPowerups.first, PickupKind.dig);
       expect(breach.introduces, contains('DIG'));
-      expect(breach.pace, LevelPace.introduction);
-      expect(Campaign.rulesFor(42).pace, LevelPace.practice);
+      expect(breach.pace, LevelPace.combination);
+      expect(Campaign.rulesFor(42).pace, LevelPace.combination);
+      expect(
+        Campaign.rulesFor(Campaign.hardpanFrom).pace,
+        LevelPace.introduction,
+      );
+      expect(
+        Campaign.rulesFor(Campaign.hardpanFrom + 1).pace,
+        LevelPace.practice,
+      );
     });
 
     test('focused pickup pools never offer a locked mechanic early', () {

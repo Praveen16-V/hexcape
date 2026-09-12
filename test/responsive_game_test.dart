@@ -183,6 +183,125 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('collecting a tool does not re-frame the board', (tester) async {
+    // A charge used to live in the measured header, so picking one up grew the
+    // block the board is framed inside and the whole map stepped smaller --
+    // at the exact moment the player's eye was on the field. The rail floats
+    // in flexible space instead, which the insets do not count.
+    const size = Size(390, 844);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = makeGame(size);
+    game
+      ..phase = GamePhase.playing
+      ..tutorial = null
+      ..banner = null
+      ..bannerFor = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Material(
+            color: Palette.background,
+            child: Hud(game: game),
+          ),
+        ),
+      ),
+    );
+
+    Future<EdgeInsets> settle() async {
+      await tester.pump();
+      await tester.pump();
+      return game.hudInsets;
+    }
+
+    final empty = await settle();
+
+    game.powerups.grant(PickupKind.blast);
+    expect(await settle(), empty, reason: 'a collected charge moved the board');
+    expect(find.byTooltip('Arm BLAST'), findsOneWidget);
+
+    game.powerups.grant(PickupKind.keepsake);
+    expect(await settle(), empty, reason: 'a charm moved the board');
+
+    // Armed, disarmed and spent: none of it is allowed to touch the framing.
+    game.toggleCharge(PickupKind.blast);
+    expect(await settle(), empty, reason: 'arming moved the board');
+    game.toggleCharge(PickupKind.blast);
+    expect(await settle(), empty, reason: 'putting it away moved the board');
+    game.powerups.spend(PickupKind.blast);
+    expect(await settle(), empty, reason: 'spending it moved the board');
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a collected tool announces itself until it is armed', (
+    tester,
+  ) async {
+    // The whole point of the rail: a player who never reads the hint line
+    // still has to notice they are now carrying something. The button says
+    // NEW, in the tool's own colour, until arming it proves they found it.
+    const size = Size(390, 844);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = makeGame(size);
+    game
+      ..phase = GamePhase.playing
+      ..tutorial = null
+      ..banner = null
+      ..bannerFor = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Material(
+            color: Palette.background,
+            child: Hud(game: game),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('NEW'), findsNothing);
+
+    game.powerups.grant(PickupKind.blast);
+    await tester.pump();
+    expect(game.powerups.isFresh(PickupKind.blast), isTrue);
+    expect(find.text('NEW'), findsOneWidget);
+    // The label names the tool on the button itself, next to the same glyph
+    // the pickup wore on the board.
+    expect(find.text('BLAST'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Arm BLAST'));
+    await tester.pump();
+    expect(game.powerups.selectedCharge, PickupKind.blast);
+    expect(game.powerups.isFresh(PickupKind.blast), isFalse);
+    expect(find.text('NEW'), findsNothing);
+    // Armed reads as armed without a word of hint text to explain it.
+    expect(find.text('TAP TILE'), findsOneWidget);
+    expect(find.byTooltip('Disarm BLAST'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Disarm BLAST'));
+    await tester.pump();
+    expect(game.powerups.selectedCharge, isNull);
+    expect(find.text('TAP TILE'), findsNothing);
+    expect(find.text('NEW'), findsNothing, reason: 'the player has found it');
+
+    // A second one of the same tool is news again.
+    game.powerups.grant(PickupKind.blast);
+    await tester.pump();
+    expect(find.text('NEW'), findsOneWidget);
+    expect(find.text('x2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final size in sizes) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('HUD fits $size text=$scale with safe areas and charges', (

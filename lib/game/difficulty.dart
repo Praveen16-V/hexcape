@@ -17,12 +17,12 @@
 /// authored bands. It is still the reference curve — every record, save file
 /// and star in an old save is compared against it.
 ///
-/// **Hard is brutal — including its board.** Past the tutorial it is not the
-/// same field with tighter numbers: the ground itself is heavier, the lights
-/// more numerous, and the supply economy thinner. Walls, brambles, hazards and
-/// the whole rebuilt family place at 1.3×, treats and powerups drop one fewer
-/// apiece, and what a treat pays shrinks. The floors in `Campaign._band` keep
-/// the one promise hardness must not break: a board that remains completable.
+/// **Hard is the steeper parallel trail.** Stages 1–20 retain the original
+/// brutal tuning. The paid campaign then opens at one quarter of the full
+/// Normal-to-Hard gap and grows through authored milestones until stage 100 is
+/// exactly as hard as it was before the gradual-curve rebuild. This keeps Hard
+/// distinct without making the first patrol board carry the whole endgame
+/// penalty at once.
 ///
 /// **Difficulty moves the board now.** The old invariant ("one seeded board,
 /// only pressure changes") is retired from stage 4 onward: the same seed under
@@ -40,8 +40,8 @@ enum Difficulty {
   ),
   hard(
     'Hard',
-    'Brutal by design: leanest possible budgets, a punishing clock, twice the '
-        'lights at speed, deep fog, and no hints. Winnable — barely.',
+    'A steeper trail: pressure grows from the first patrol to lean budgets, '
+        'fast lights, deep fog, and no hints at the final vigil.',
   );
 
   const Difficulty(this.label, this.description);
@@ -55,6 +55,25 @@ enum Difficulty {
   /// tests pin the number so a change made either side is caught.
   static const tutorialLevels = 3;
 
+  /// How much of the full Normal-to-Hard gap applies after stage 20.
+  ///
+  /// The earlier campaign is intentionally frozen for save and authored-board
+  /// compatibility. Endless also retains the complete Hard profile.
+  double _hardFactor(int level) {
+    if (this != Difficulty.hard) return 0;
+    if (level <= 20 || level >= 100) return 1;
+
+    double segment(int from, int to, double a, double b) {
+      final t = (level - from) / (to - from);
+      return a + (b - a) * t.clamp(0.0, 1.0);
+    }
+
+    if (level <= 40) return segment(21, 40, 0.25, 0.45);
+    if (level <= 60) return segment(40, 60, 0.45, 0.65);
+    if (level <= 80) return segment(60, 80, 0.65, 0.85);
+    return segment(80, 100, 0.85, 1.0);
+  }
+
   /// Ordering for "did this run beat the record", where a clear on the harder
   /// setting is the better result.
   int get rank => index;
@@ -66,7 +85,8 @@ enum Difficulty {
   double budgetRelief(int level) => switch ((this, level > tutorialLevels)) {
     (Difficulty.normal, true) => -0.04,
     (Difficulty.normal, false) => 0,
-    (Difficulty.hard, true) => -0.20,
+    (Difficulty.hard, true) when level <= 20 => -0.20,
+    (Difficulty.hard, true) => -0.04 - 0.16 * _hardFactor(level),
     (Difficulty.hard, false) => 0,
   };
 
@@ -75,8 +95,11 @@ enum Difficulty {
   /// taps over optimal play at every point in the sweep. On Hard it is par
   /// itself: the run remains completable, but only if the route is read
   /// essentially perfectly, which is the whole promise of the mode.
-  double get budgetFloor => switch (this) {
+  double budgetFloorFor(int level) => switch (this) {
     Difficulty.normal => 1.06,
+    Difficulty.hard when level <= 20 => 1.0,
+    Difficulty.hard when level <= 40 => 1.07,
+    Difficulty.hard when level <= 80 => 1.01,
     Difficulty.hard => 1.0,
   };
 
@@ -85,7 +108,8 @@ enum Difficulty {
   double hungerRelief(int level) => switch ((this, level > tutorialLevels)) {
     (Difficulty.normal, true) => -0.04,
     (Difficulty.normal, false) => 0,
-    (Difficulty.hard, true) => -0.22,
+    (Difficulty.hard, true) when level <= 20 => -0.22,
+    (Difficulty.hard, true) => -0.04 - 0.18 * _hardFactor(level),
     (Difficulty.hard, false) => 0,
   };
 
@@ -103,7 +127,8 @@ enum Difficulty {
   double guardSpeedDelta(int level) => switch ((this, level > tutorialLevels)) {
     (Difficulty.normal, true) => 0.05,
     (Difficulty.normal, false) => 0,
-    (Difficulty.hard, true) => 0.45,
+    (Difficulty.hard, true) when level <= 20 => 0.45,
+    (Difficulty.hard, true) => 0.05 + 0.40 * _hardFactor(level),
     (Difficulty.hard, false) => 0,
   };
 
@@ -113,7 +138,8 @@ enum Difficulty {
   int guardDelta(int level) => switch ((this, level > tutorialLevels)) {
     (Difficulty.normal, true) => 0,
     (Difficulty.normal, false) => 0,
-    (Difficulty.hard, true) => 2,
+    (Difficulty.hard, true) when level <= 20 => 2,
+    (Difficulty.hard, true) => (2 * _hardFactor(level)).round(),
     (Difficulty.hard, false) => 0,
   };
 
@@ -123,7 +149,8 @@ enum Difficulty {
   double regrowRelief(int level) => switch ((this, level > tutorialLevels)) {
     (Difficulty.normal, true) => -0.3,
     (Difficulty.normal, false) => 0,
-    (Difficulty.hard, true) => -1.4,
+    (Difficulty.hard, true) when level <= 20 => -1.4,
+    (Difficulty.hard, true) => -0.3 - 1.1 * _hardFactor(level),
     (Difficulty.hard, false) => 0,
   };
 
@@ -143,60 +170,64 @@ enum Difficulty {
       switch ((this, level > tutorialLevels)) {
         (Difficulty.normal, true) => 0.92,
         (Difficulty.normal, false) => 1.0,
-        (Difficulty.hard, true) => 0.6,
+        (Difficulty.hard, true) when level <= 20 => 0.6,
+        (Difficulty.hard, true) => 0.92 - 0.32 * _hardFactor(level),
         (Difficulty.hard, false) => 1.0,
       };
 
   /// What the ground charges for standing on it: patrol bites and thorn bites
   /// alike. A number, never a board change — the difficulty invariant (one
   /// seeded board, two pressures) holds.
-  double get biteScale => switch (this) {
+  double biteScaleFor(int level) => switch (this) {
     Difficulty.normal => 1.0,
-    Difficulty.hard => 1.6,
+    Difficulty.hard when level <= 20 => 1.6,
+    Difficulty.hard => 1.0 + 0.6 * _hardFactor(level),
   };
 
   /// How long rhythm windows stay open: alarm hurries, and the effective beat
   /// of blinkers and runner pauses as it is felt through the shared light pace.
-  double get rhythmScale => switch (this) {
+  double rhythmScaleFor(int level) => switch (this) {
     Difficulty.normal => 1.0,
-    Difficulty.hard => 0.7,
+    Difficulty.hard when level <= 20 => 0.7,
+    Difficulty.hard => 1.0 - 0.3 * _hardFactor(level),
   };
 
   /// How heavily the board itself lies: the multiplier on every placed
   /// obstacle density (walls, brambles, hazards, the rebuilt family's denser
   /// ground). Normal is one — the campaign as authored. Hard's heavier ground
   /// scales placement, not prices: the route is still *there*, seeded from the
-  /// same stream; there is simply less plain room around it.
-  ///
-  /// Deliberately not level-aware: the tutorial never reaches the band logic
-  /// [Campaign.rulesFor] applies this in, so its zero-shift is structural
-  /// rather than another branch to reason about.
-  double get obstacleDensityScale => switch (this) {
+  /// same stream; there is simply less plain room around it. After stage 20 the
+  /// multiplier grows from 1.075 to 1.3.
+  double obstacleDensityScaleFor(int level) => switch (this) {
     Difficulty.normal => 1.0,
-    Difficulty.hard => 1.3,
+    Difficulty.hard when level <= 20 => 1.3,
+    Difficulty.hard => 1.0 + 0.3 * _hardFactor(level),
   };
 
   /// Treats entering the field, shifted. Hard runs hungrier: one less bone in
   /// the grass, floored by the campaign at one so the supply, however lean,
   /// exists.
-  int get supplyDelta => switch (this) {
+  int supplyDeltaFor(int level) => switch (this) {
     Difficulty.normal => 0,
-    Difficulty.hard => -1,
+    Difficulty.hard when level <= 20 => -1,
+    Difficulty.hard => _hardFactor(level) >= 0.5 ? -1 : 0,
   };
 
   /// Powerups entering the field, shifted. The tools answer is what arrives,
   /// not when — the pool gating stays the campaign's on both modes, so a Hard
   /// board is never denied the charge that answers its own tile.
-  int get powerupDelta => switch (this) {
+  int powerupDeltaFor(int level) => switch (this) {
     Difficulty.normal => 0,
-    Difficulty.hard => -1,
+    Difficulty.hard when level <= 20 => -1,
+    Difficulty.hard => _hardFactor(level) >= 0.5 ? -1 : 0,
   };
 
   /// What a treat pays in taps, shifted. Floored at one by the campaign, so a
   /// snack never becomes pure time and skips a budget the level rationed.
-  int get treatTapDelta => switch (this) {
+  int treatTapDeltaFor(int level) => switch (this) {
     Difficulty.normal => 0,
-    Difficulty.hard => -1,
+    Difficulty.hard when level <= 20 => -1,
+    Difficulty.hard => _hardFactor(level) >= 0.5 ? -1 : 0,
   };
 
   /// Whether the directional hint is withheld for the run.

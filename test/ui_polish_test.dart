@@ -159,6 +159,10 @@ void main() {
             expect(homePressed, isTrue);
           }
           if (const bool.fromEnvironment('RENDER_UI')) {
+            // Button callbacks above may dirty the boundary. Give it one frame
+            // before asking Flutter for pixels so review rendering captures a
+            // painted post-interaction surface.
+            await tester.pump();
             final boundary =
                 key.currentContext!.findRenderObject() as RenderRepaintBoundary;
             await tester.runAsync(() async {

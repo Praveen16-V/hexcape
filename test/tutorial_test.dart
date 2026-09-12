@@ -41,6 +41,107 @@ void main() {
       expect(Tutorial.forLevel(30), isNull);
     });
 
+    test('the three lessons use the exact focused 5/4/4 scripts', () {
+      final level1 = Tutorial.forLevel(1)!.steps;
+      expect(level1, hasLength(5));
+      expect(level1.map((step) => step.prompt), [
+        'Get her to the bone.',
+        'Tap the glowing tile to open a path.',
+        'Open the next tile to keep her moving.',
+        'Open a tile beside her—more space makes her move faster.',
+        'Narrow paths give control; open space gives speed. Keep a route '
+            'open to the bone.',
+      ]);
+      expect(level1.map((step) => step.target), [
+        TutorialTarget.goalBone,
+        TutorialTarget.nextOnRoute,
+        TutorialTarget.nextOnRoute,
+        TutorialTarget.widenPath,
+        TutorialTarget.none,
+      ]);
+      expect(level1.map((step) => step.advance), [
+        TutorialAdvance.onContinue,
+        TutorialAdvance.onTap,
+        TutorialAdvance.onTap,
+        TutorialAdvance.onTap,
+        TutorialAdvance.onContinue,
+      ]);
+      expect(level1.map((step) => step.gate), [
+        false,
+        true,
+        true,
+        false,
+        false,
+      ]);
+
+      final level2 = Tutorial.forLevel(2)!.steps;
+      expect(level2, hasLength(4));
+      expect(level2.map((step) => step.prompt), [
+        'Open this tile to start moving.',
+        'Watch this tile grow back—don’t let the field close around her.',
+        'Riveted tiles never clear. Route around them.',
+        'Double-ringed tiles take two taps.',
+      ]);
+      expect(level2.map((step) => step.target), [
+        TutorialTarget.nextOnRoute,
+        TutorialTarget.recentlyOpened,
+        TutorialTarget.nearestAnchor,
+        TutorialTarget.nearestHeavy,
+      ]);
+      expect(level2.map((step) => step.advance), [
+        TutorialAdvance.onTap,
+        TutorialAdvance.onRegrow,
+        TutorialAdvance.onContinue,
+        TutorialAdvance.onContinue,
+      ]);
+      expect(level2.map((step) => step.gate), [true, false, false, false]);
+      expect(level2[1].seconds, 14);
+
+      final level3 = Tutorial.forLevel(3)!.steps;
+      expect(level3, hasLength(4));
+      expect(level3.map((step) => step.prompt), [
+        'Taps and time are limited—the counters are at the top.',
+        'Spend one tap to open her route.',
+        'Watch the time bar drain while she moves.',
+        'Guide her over the treat—it restores taps and time.',
+      ]);
+      expect(level3.map((step) => step.target), [
+        TutorialTarget.none,
+        TutorialTarget.nextOnRoute,
+        TutorialTarget.none,
+        TutorialTarget.nearestPickup,
+      ]);
+      expect(level3.map((step) => step.advance), [
+        TutorialAdvance.onContinue,
+        TutorialAdvance.onTap,
+        TutorialAdvance.onWatch,
+        TutorialAdvance.onReach,
+      ]);
+      expect(level3.map((step) => step.gate), [false, true, false, false]);
+      expect(level3[2].seconds, 3);
+      expect(level3[3].releaseAfter, 30);
+    });
+
+    test('level one identifies the bone before it asks for a tap', () {
+      final ctx = _levelFor(1);
+      final script = Tutorial.forLevel(1)!;
+      expect(script.current!.advance, TutorialAdvance.onContinue);
+      expect(script.current!.target, TutorialTarget.goalBone);
+      expect(
+        script.targetCell(ctx.level.grid, ctx.dog, ctx.level.pickups),
+        ctx.level.grid.exit,
+      );
+      expect(script.isGating, isFalse);
+
+      script.continueLesson();
+      expect(script.current!.target, TutorialTarget.nextOnRoute);
+      expect(script.isGating, isTrue);
+      expect(
+        script.targetCell(ctx.level.grid, ctx.dog, ctx.level.pickups),
+        isNot(ctx.level.grid.exit),
+      );
+    });
+
     test('every step resolves a target on its own generated board', () {
       // Targets are named by rule rather than coordinate because the boards are
       // generated. A rule that finds nothing would leave a step pointing at
@@ -90,7 +191,12 @@ void main() {
                 ctx.level.pickups,
               );
             case TutorialAdvance.onRegrow:
-              script.noteRegrowth();
+              final target = script.targetCell(
+                ctx.level.grid,
+                ctx.dog,
+                ctx.level.pickups,
+              )!;
+              script.noteRegrowth([target]);
               script.update(0, ctx.level.grid, ctx.dog, ctx.level.pickups);
           }
         }
@@ -101,6 +207,7 @@ void main() {
     test('a gate refuses other taps and opens on the right one', () {
       final ctx = _levelFor(1);
       final script = Tutorial.forLevel(1)!;
+      script.continueLesson();
       expect(script.isGating, isTrue, reason: 'level 1 opens with a gate');
 
       final target = script.targetCell(
@@ -128,10 +235,7 @@ void main() {
         ctx.level.pickups,
         targetBeforeTap: target,
       );
-      expect(
-        script.current!.prompt,
-        'Open the next tile to make a narrow path',
-      );
+      expect(script.current!.prompt, 'Open the next tile to keep her moving.');
       expect(
         script.targetCell(ctx.level.grid, ctx.dog, ctx.level.pickups),
         isNot(target),
@@ -197,9 +301,12 @@ void main() {
         final ctx = _levelFor(1);
         final script = Tutorial.forLevel(1)!;
         script.update(120, ctx.level.grid, ctx.dog, ctx.level.pickups);
-        script.continueLesson();
         expect(script.stepNumber, 1);
+        script.continueLesson();
+        expect(script.stepNumber, 2);
         expect(script.isGating, isTrue);
+        script.update(120, ctx.level.grid, ctx.dog, ctx.level.pickups);
+        expect(script.stepNumber, 2, reason: 'an action waits for its tap');
         script.skip();
         expect(script.isDone, isTrue);
         expect(
@@ -267,6 +374,61 @@ void main() {
         }
       }
     });
+
+    test(
+      'level three ends when the marked treat is collected or times out',
+      () {
+        Tutorial atTreat(({GeneratedLevel level, Dog dog}) ctx) {
+          final script = Tutorial.forLevel(3)!;
+          script.continueLesson();
+          final route = script.targetCell(
+            ctx.level.grid,
+            ctx.dog,
+            ctx.level.pickups,
+          )!;
+          ctx.level.grid.at(route)!.clear(0);
+          script.onTapped(
+            route,
+            ctx.level.grid,
+            ctx.dog,
+            ctx.level.pickups,
+            targetBeforeTap: route,
+          );
+          script.update(3, ctx.level.grid, ctx.dog, ctx.level.pickups);
+          expect(script.current!.target, TutorialTarget.nearestPickup);
+          return script;
+        }
+
+        final collected = _levelFor(3);
+        final collectedScript = atTreat(collected);
+        final treat = collectedScript.targetCell(
+          collected.level.grid,
+          collected.dog,
+          collected.level.pickups,
+        )!;
+        collected.level.pickups
+                .firstWhere((pickup) => pickup.coord == treat)
+                .collected =
+            true;
+        collectedScript.update(
+          0,
+          collected.level.grid,
+          collected.dog,
+          collected.level.pickups,
+        );
+        expect(collectedScript.isDone, isTrue);
+
+        final timedOut = _levelFor(3);
+        final timedOutScript = atTreat(timedOut);
+        timedOutScript.update(
+          30,
+          timedOut.level.grid,
+          timedOut.dog,
+          timedOut.level.pickups,
+        );
+        expect(timedOutScript.isDone, isTrue);
+      },
+    );
   });
 
   group('Treat value', () {

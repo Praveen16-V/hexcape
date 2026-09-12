@@ -76,13 +76,49 @@ void main() {
     );
 
     test(
+      'post-20 Normal keeps the promised tap room in every band',
+      () {
+        const targets = [
+          (from: 21, to: 40, minimumSpare: 4, minimumRoom: 0.65),
+          (from: 41, to: 60, minimumSpare: 3, minimumRoom: 0.55),
+          (from: 61, to: 80, minimumSpare: 2, minimumRoom: 0.45),
+          (from: 81, to: 100, minimumSpare: 2, minimumRoom: 0.40),
+        ];
+
+        for (final target in targets) {
+          var par = 0;
+          var room = 0;
+          for (var n = target.from; n <= target.to; n++) {
+            final rules = Campaign.rulesFor(n);
+            final level = LevelGenerator.generate(specFor(rules));
+            final budget = (level.par * rules.budgetMultiplier).ceil();
+            final spare = budget - level.par;
+            expect(
+              spare,
+              greaterThanOrEqualTo(target.minimumSpare),
+              reason: 'Normal stage $n has only $spare discovery taps',
+            );
+            par += level.par;
+            room += spare + rules.treats * rules.treatTaps;
+          }
+          expect(
+            room / par,
+            greaterThanOrEqualTo(target.minimumRoom),
+            reason: 'Normal stages ${target.from}-${target.to}',
+          );
+        }
+      },
+      timeout: const Timeout(Duration(minutes: 4)),
+    );
+
+    test(
       'challenge peaks climb even though individual levels breathe',
       () {
         // Compare like with like. Practice and breather levels deliberately ease
         // pressure; the full-pressure challenge peaks must still keep climbing.
         var budget = double.infinity;
         var clock = double.infinity;
-        for (var n = 1; n <= Campaign.length; n++) {
+        for (var n = Campaign.foundationEnd + 1; n <= Campaign.length; n++) {
           final rules = Campaign.rulesFor(n);
           if (rules.pace != LevelPace.challenge) {
             continue;

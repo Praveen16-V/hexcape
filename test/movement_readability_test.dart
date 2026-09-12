@@ -147,18 +147,16 @@ void main() {
       final narrowDog = dogFor(layout);
       step(narrowDog, grid);
       final narrowSpeed = narrowDog.speed;
-      for (var i = 0; i < 2; i++) {
-        final target = lesson.targetCell(grid, dog, const [])!;
-        expect(target.distanceTo(dog.cell), 1);
-        lesson.onTapped(target, grid, dog, const [], targetBeforeTap: target);
-        expect(
-          lesson.isDone,
-          isFalse,
-          reason: 'a tap without opening is not widening',
-        );
-        grid.at(target)!.clear(0);
-        lesson.onTapped(target, grid, dog, const [], targetBeforeTap: target);
-      }
+      final target = lesson.targetCell(grid, dog, const [])!;
+      expect(target.distanceTo(dog.cell), 1);
+      lesson.onTapped(target, grid, dog, const [], targetBeforeTap: target);
+      expect(
+        lesson.isDone,
+        isFalse,
+        reason: 'a tap without opening is not widening',
+      );
+      grid.at(target)!.clear(0);
+      lesson.onTapped(target, grid, dog, const [], targetBeforeTap: target);
       expect(lesson.isDone, isTrue);
       expect(grid.opennessAround(dog.cell), greaterThan(narrow));
       step(dog, grid);

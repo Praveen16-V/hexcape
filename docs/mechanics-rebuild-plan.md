@@ -190,18 +190,17 @@ springFrom/guardsFrom/faultFrom receive).
 |------|--------|-----------------|----------------|
 | Tutorial | 1–3 | RIVET, BRAMBLE (L2) | TREAT (L3) |
 | Foundation | 4–20 | FOG (4, banner), MIRE (5), SPRING (9), THICKET (12), SLEEPER (15), FOXFIRE (18) | SPRINT (6), SCENT (8), RATION (14), LANTERN (17), PAIRWORK (19); FREEZE & REACH already taught in tutorial pool |
-| Pressure | 21–40 | PATROL (21), CRACKLINE (29), THATCH (33), DRIFT ICE (36), ALARM BELL (39) | BLAST (22), SLOWBEAT (24), CLOAK (27), STAKE (31), TROWEL (35), HARVEST (37) |
-| Mastery | 41–60 | DIG-answer boards start with RIVETS-dense (41), HARDPAN (44), OVERGROWTH HEART (47), SENTRY (51), EDDY (54), SCAFFOLD (58) | DIG (41), MAUL (43), REWIND (46), SUREPAWS (49), WARDOWN (52), HEEL (53), ECHO (56), SEED (59) |
-| Collapse | 61–80 | ARROWHEAD (63), MAGNET BLOOM (66), SPINNER (69), BLINKER (72), GATE + SWITCH (75), RUNNER (78) | MOLE (64), WAYSTONE (70), BEACON (76), NIGHT EYES (79) |
-| Vigil | 81–100 | SUNKEN (83), MIRROR LOCK (86), THORNPAD (89), WARDEN (92), GLOOM BAND (93), TREMOR VENT (97) | POUCH (87), IRONPAW HEART (90), KEEPSAKE (99) |
+| Pressure | 21–40 | PATROL (21), CRACKLINE (26), THATCH (29), DRIFT ICE (33), ALARM BELL (37) | SLOWBEAT (23), CLOAK (24), STAKE (28), TROWEL (32), HARVEST (35), WHISTLE (39) |
+| Mastery | 41–60 | HARDPAN (43), OVERGROWTH HEART (46), SENTRY (50), EDDY (55), SCAFFOLD (58) | DIG (41), MAUL (42), REWIND (45), SUREPAWS (49), WARDOWN (52), HEEL (54), ECHO (57) |
+| Collapse | 61–80 | ARROWHEAD (62), MAGNET BLOOM (66), SPINNER (68), BLINKER (72), BEACON (74), GATE + SWITCH (77) | SEED (61), MOLE (65), WAYSTONE (71), BEACON DROP (79) |
+| Vigil | 81–100 | RUNNER (81), SUNKEN (84), MIRROR LOCK (86), THORNPAD (90), WARDEN (93), GLOOM BAND (95), TREMOR VENT (97) | NIGHT EYES (83), POUCH (89), IRONPAW HEART (92), KEEPSAKE (99) |
 | Endless | 101+ | Everything active; densities/timers asymptote to floors as today | Full pool |
 
 Design notes baked into the schedule:
 
-- **Meet it → practise it → then get the answer it two levels later** is kept
-  wherever a tool directly answers a hazard (CRACKLINE 29 → STAKE 31,
-  SENTRY 51 → WARDOWN 52 → HEEL 53, HARDPAN-adjacent MAUL at 43, GATE 75 →
-  MOLE-side relief at 76 via BEACON… exact pairs get tuned with playtests).
+- **Meet it → practise it → then get the answer** is kept wherever a tool
+  directly answers a hazard (CRACKLINE 26–27 → STAKE 28, SENTRY 50–51 →
+  WARDOWN 52, and GATE 77–78 → BEACON DROP 79).
 - **Never two new ideas on one level.** Introduction levels always run
   eased numbers (`LevelPace.introduction` relief), and the floor-density rule
   (an introduced mechanic must actually *appear* on its banner level) is kept.
@@ -248,16 +247,17 @@ Designed pairings (each becomes a signature with its own level identity):
 
 ## 5. Difficulty integration
 
-**Two modes.** The tutorial (levels 1–3) is identical on both. From stage 4,
-Normal carries a light adventurer's tax and Hard is brutal — and the board
-itself now moves with the mode, not just its pressures.
+**Two modes.** The tutorial (levels 1–3) is identical on both. Stages 4–20
+retain their shipped tuning. From stage 21, Hard applies 25% of the full gap,
+then reaches 45%, 65%, 85%, and 100% at stages 40, 60, 80, and 100. The table
+shows the full stage-100 endpoints.
 
 | Knob | Normal | Hard |
 |---|---|---|
 | Obstacle densities (all families, placed) | ×1.0 (authored curve) | ×1.3 |
 | Treats / powerups in the field | as authored | −1 each (floored ≥1) |
 | Taps a treat pays | as authored | −1 (floored ≥1) |
-| Tap budget relief | −0.04× par | −0.20× par (floor 1.06 / **1.00** par) |
+| Tap budget relief | −0.04× par | −0.20× par (graduated floors preserve 2 spare taps through 40 and 1 through 80) |
 | Hunger clock / cell | −0.04 s | −0.22 s (floor 0.85 / 0.72 s) |
 | Light counts (all kinds, guard RNG stream) | — | +2 (floored ≥1 per taught mechanic) |
 | Light speed | +0.05 | +0.45 (ceiling widens by the same step) |

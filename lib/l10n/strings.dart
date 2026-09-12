@@ -32,7 +32,6 @@ class Strings {
   static const reference = 'How it works';
   static const leaveLevel = 'Leave level';
   static const retry = 'Retry';
-  static const newLevel = 'New level';
   static const nextLevel = 'Next level';
   static const level = 'LEVEL';
   static const endless = 'ENDLESS';

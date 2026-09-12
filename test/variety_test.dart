@@ -168,10 +168,10 @@ void main() {
       // pulls the others down, which is what makes a level read as being about
       // one thing.
       final fault = Campaign.rulesFor(68);
-      final spring = Campaign.rulesFor(64);
+      final spring = Campaign.rulesFor(48);
       final heavy = Campaign.rulesFor(65);
       expect(Campaign.signatureFor(68), LevelSignature.faultLine);
-      expect(Campaign.signatureFor(64), LevelSignature.springLine);
+      expect(Campaign.signatureFor(48), LevelSignature.springLine);
       expect(Campaign.signatureFor(65), LevelSignature.heavyGround);
 
       expect(fault.faultDensity, greaterThan(spring.faultDensity));
