@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../entities/guard.dart';
+import '../gen/pathfinder.dart';
 import '../hex/hex_coord.dart';
 import '../hex/hex_grid.dart';
 
@@ -29,6 +30,33 @@ class GuardSystem {
 
   /// Keeps two lights from overlapping into one impassable smear.
   static const minSeparation = 4;
+
+  /// How many cells of the board's own route a light that blocks her may hold
+  /// *in a row*.
+  ///
+  /// One or two lit cells on the way through is the mechanic working: she
+  /// stops, the lamp passes, she goes. There is a dark side to wait on and a
+  /// dark side to arrive at, and the cost is a few seconds of a clock the
+  /// level budgeted for.
+  ///
+  /// A longer stretch is a different thing wearing the same clothes. With no
+  /// dark gap inside it there is nothing to time — the route is simply a queue,
+  /// and the only ways through it are to wait out a full sweep or to walk in
+  /// and be bitten, three seconds and a shove at a time. Level forty was the
+  /// board that made this legible: a quarter of its route swept on Normal and
+  /// nearly half on Hard, four and five cells unbroken, against a twenty-six
+  /// second clock.
+  ///
+  /// Deliberately a cap on the *run* rather than on the share. A light that
+  /// touches five separate cells of a long route is five timing decisions,
+  /// which is a good level; one that holds five in a row is none.
+  static const maxRouteRun = 2;
+
+  /// Only lights that block *her* are held to it. A warding light refuses taps
+  /// rather than her body — she walks through a sentry's beam untouched — so
+  /// it can never turn the route into a queue, and pricing it as though it
+  /// could would spend the board's room on the wrong mechanic.
+  static bool _guardsRoute(Guard guard) => guard.blocksDog;
 
   /// Speeds relative to the patrol base, per kind. A runner's dash is meant
   /// to be *fast but telegraphed*; a warden is slow precisely so its wake
@@ -86,6 +114,12 @@ class GuardSystem {
     final anchorsOf = <HexCoord>[];
     var attempts = 0;
     final maxAttempts = math.max(60, wanted.length * 25);
+    // Route cells already held by a blocking light, so the cap below is read
+    // against every lamp on the board rather than one at a time: two lanes
+    // crossing the route beside each other make the same wall as one lane
+    // lying along it.
+    final heldOnRoute = <HexCoord>{};
+    final route = _routeToProtect(grid);
 
     for (final kind in wanted) {
       var placed = false;
@@ -101,12 +135,63 @@ class GuardSystem {
         if (guard == null) {
           continue;
         }
+        if (_guardsRoute(guard)) {
+          final held = {...heldOnRoute, ..._sweptFootprint(guard)};
+          if (_longestRunOn(route, held) > maxRouteRun) {
+            continue;
+          }
+          heldOnRoute.addAll(_sweptFootprint(guard));
+        }
         anchorsOf.add(head);
         guards.add(guard);
         placed = true;
       }
     }
     return guards;
+  }
+
+  /// The line a light may not lie along: the cheapest way through the board.
+  ///
+  /// Deliberately **not** [HexGrid.truePath]. That is the corridor the carver
+  /// happened to walk to guarantee the level is solvable — a random walk, and
+  /// not the line anybody plays. The route a player converges on once the fog
+  /// has been paid for is the cheapest one, counting a two-hit tile as two,
+  /// and protecting the other line only looks like protection.
+  static List<HexCoord> _routeToProtect(HexGrid grid) =>
+      Pathfinder.cheapestPath(
+        grid.start,
+        grid.exit,
+        grid.isTraversableInPrinciple,
+        (c) => grid.cells[c]?.type.hitsRequired ?? (1 << 20),
+      ) ??
+      grid.truePath;
+
+  /// Every cell this light rules at some point in its sweep.
+  ///
+  /// Read off the route it walks rather than by running its clock: a lamp is
+  /// lit within [Guard.litRadius] of wherever it stands, so the union over the
+  /// walk is the whole ground it will ever hold — and it is the same answer at
+  /// every speed, which is what keeps a board's lights from depending on how
+  /// fast the band happens to walk them.
+  static Set<HexCoord> _sweptFootprint(Guard guard) => {
+    for (final cell in guard.patrol) ...cell.disc(guard.litRadius),
+  };
+
+  /// The longest unbroken stretch of [route] inside [held].
+  static int _longestRunOn(List<HexCoord> route, Set<HexCoord> held) {
+    var run = 0;
+    var worst = 0;
+    for (final cell in route) {
+      if (held.contains(cell)) {
+        run++;
+        if (run > worst) {
+          worst = run;
+        }
+      } else {
+        run = 0;
+      }
+    }
+    return worst;
   }
 
   /// The route for one light of [kind] headed at [head], or null when the

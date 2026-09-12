@@ -13,6 +13,17 @@ import '../hex/hex_coord.dart';
 import 'reference_sheet.dart';
 import '../theme/palette.dart';
 
+/// The size of every square control in the HUD's top-right corner, and the gap
+/// between them.
+///
+/// Shared with [DebugPanel], which floats in the same row from a separate
+/// overlay and therefore cannot inherit the alignment — it has to be told.
+/// Forty-eight is the touch target the rest of the app uses; the old debug
+/// button was forty, which was both under the minimum and visibly out of line
+/// with the two beside it.
+const double _controlSize = 48;
+const double _controlGap = 2;
+
 /// Taps, par and the clock, plus the one-idea-at-a-time onboarding line.
 ///
 /// Kept plain and fast per §12.2 — over-styling a utility surface only adds
@@ -77,13 +88,16 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Reserve room on the right for the floating debug button, but
-                    // only when there is one. Holding the gap open for a button
-                    // players never see cost the HUD 40 logical pixels of every
-                    // screen.
+                    // Reserve room on the right for the floating debug
+                    // button, but only when there is one. Holding the gap open
+                    // for a button players never see cost the HUD a control's
+                    // width of every screen. Exactly one control plus the gap,
+                    // so the three of them sit as one evenly spaced row.
                     Padding(
                       padding: EdgeInsets.only(
-                        right: game.tuning.developerTools ? 40 : 0,
+                        right: game.tuning.developerTools
+                            ? _controlSize + _controlGap
+                            : 0,
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +198,7 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                           ),
                           // The way off a level that is not winning or losing
                           // it.
-                          const SizedBox(width: 2),
+                          const SizedBox(width: _controlGap),
                           _PauseButton(onPressed: game.pauseRun),
                         ],
                       ),
@@ -642,6 +656,9 @@ class _ZoomButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final fit = zoom <= BoardCamera.minZoom;
     final colour = fit ? Palette.hudDim : Palette.hudText;
+    final lit = nudge > 0
+        ? Color.lerp(colour, Palette.goalGlow, nudge)
+        : colour;
     return Semantics(
       button: true,
       label: 'Board zoom $_label, tap to magnify',
@@ -651,7 +668,8 @@ class _ZoomButton extends StatelessWidget {
           onTap: onPressed,
           radius: 26,
           child: Container(
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            width: _controlSize,
+            height: _controlSize,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -667,29 +685,18 @@ class _ZoomButton extends StatelessWidget {
                     )
                   : null,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  fit ? Icons.zoom_in_rounded : Icons.zoom_out_map_rounded,
-                  size: 20,
-                  color: nudge > 0
-                      ? Color.lerp(colour, Palette.goalGlow, nudge)
-                      : colour,
-                ),
-                Text(
-                  _label,
-                  style: TextStyle(
-                    color: nudge > 0
-                        ? Color.lerp(colour, Palette.goalGlow, nudge)
-                        : colour,
-                    fontSize: 8.5,
-                    height: 1.1,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ],
+            // One glyph, centred, exactly like the two beside it. The factor
+            // used to be printed under it, and that is what broke the row:
+            // the icon and its caption centred as a block, so the magnifier
+            // floated above the pause bars and the whole corner read as three
+            // controls on three different lines. The state it was spelling out
+            // is already carried by the icon — a magnifier at fit, the spread
+            // arrows once magnified — with the exact step in the tooltip and
+            // read out in full by a screen reader.
+            child: Icon(
+              fit ? Icons.zoom_in_rounded : Icons.zoom_out_map_rounded,
+              size: 22,
+              color: lit,
             ),
           ),
         ),
@@ -714,7 +721,10 @@ class _PauseButton extends StatelessWidget {
       onPressed: onPressed,
       visualDensity: VisualDensity.standard,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      constraints: const BoxConstraints(
+        minWidth: _controlSize,
+        minHeight: _controlSize,
+      ),
       icon: const Icon(Icons.pause_rounded, size: 22),
       color: Palette.hudDim,
       tooltip: 'Pause game',

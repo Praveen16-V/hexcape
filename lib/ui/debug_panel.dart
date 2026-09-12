@@ -9,6 +9,12 @@ import '../theme/palette.dart';
 /// needing a real device — tap radius, drift speed, momentum, regrowth rate.
 /// Shipping the sliders means they get dialled in by feel in one sitting
 /// instead of one constant at a time.
+/// The HUD's top-right geometry, so a control floating in its own overlay can
+/// line up with the ones that are not.
+const double hudEdge = 20;
+const double hudControlTop = 12;
+const double hudControlSize = 48;
+
 class DebugPanel extends StatefulWidget {
   const DebugPanel({required this.game, super.key});
 
@@ -29,7 +35,11 @@ class _DebugPanelState extends State<DebugPanel> {
       child: Align(
         alignment: Alignment.topRight,
         child: Padding(
-          padding: const EdgeInsets.only(top: 6, right: 8),
+          // The HUD's own top-right inset, to the pixel. This button floats in
+          // a separate overlay and so inherits none of the HUD's layout: left
+          // to its own margins it sat six pixels high and eight pixels further
+          // out than the pause button it appears to stand beside.
+          padding: const EdgeInsets.only(top: hudControlTop, right: hudEdge),
           child: AnimatedSize(
             duration: const Duration(milliseconds: 180),
             alignment: Alignment.topRight,
@@ -43,7 +53,13 @@ class _DebugPanelState extends State<DebugPanel> {
   Widget _collapsedButton() {
     return IconButton(
       onPressed: () => setState(() => _open = true),
-      icon: const Icon(Icons.tune_rounded, size: 20),
+      visualDensity: VisualDensity.standard,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(
+        minWidth: hudControlSize,
+        minHeight: hudControlSize,
+      ),
+      icon: const Icon(Icons.settings_rounded, size: 22),
       color: Palette.hudDim,
       tooltip: Strings.debug,
     );

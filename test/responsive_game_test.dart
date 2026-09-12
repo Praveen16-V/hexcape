@@ -16,6 +16,8 @@ import 'package:hexcape/hex/hex_coord.dart';
 import 'package:hexcape/systems/input_system.dart';
 import 'package:hexcape/systems/reveal_system.dart';
 import 'package:hexcape/theme/palette.dart';
+import 'package:hexcape/l10n/strings.dart';
+import 'package:hexcape/ui/debug_panel.dart';
 import 'package:hexcape/ui/hud.dart';
 
 const sizes = [
@@ -298,6 +300,64 @@ void main() {
     await tester.pump();
     expect(find.text('NEW'), findsOneWidget);
     expect(find.text('x2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the top-right controls sit in one row', (tester) async {
+    // Zoom, pause and the developer panel read as a row of three, but only two
+    // of them are in the HUD: the panel floats in its own overlay and inherits
+    // none of the HUD's layout. Left to its own margins it was forty pixels
+    // square against their forty-eight, six pixels higher, and eight pixels
+    // further out than the HUD's own right edge.
+    const size = Size(390, 844);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = makeGame(size)
+      ..phase = GamePhase.playing
+      ..tutorial = null;
+    game.tuning.developerTools = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Material(
+            color: Palette.background,
+            child: Stack(
+              children: [
+                Positioned.fill(child: Hud(game: game)),
+                Positioned.fill(child: DebugPanel(game: game)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final rects = [
+      for (final tooltip in ['Zoom in (now 1x)', 'Pause game', Strings.debug])
+        tester.getRect(find.byTooltip(tooltip)),
+    ];
+
+    for (final rect in rects) {
+      expect(rect.width, greaterThanOrEqualTo(48), reason: 'touch target');
+      expect(rect.height, greaterThanOrEqualTo(48), reason: 'touch target');
+      expect(rect.top, rects.first.top, reason: 'a control out of line');
+      expect(rect.height, rects.first.height, reason: 'a control off-size');
+    }
+    // Left to right, in order, without overlapping and without a hole.
+    for (var i = 1; i < rects.length; i++) {
+      final gap = rects[i].left - rects[i - 1].right;
+      expect(gap, greaterThanOrEqualTo(0), reason: 'controls overlap');
+      expect(gap, lessThanOrEqualTo(8), reason: 'a control drifted away');
+    }
+    // And the row ends on the HUD's own right margin rather than past it.
+    expect(rects.last.right, closeTo(size.width - 20, 0.01));
 
     await tester.pumpWidget(const SizedBox());
   });

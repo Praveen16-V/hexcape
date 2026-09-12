@@ -238,6 +238,70 @@ void main() {
       }
     });
 
+    test('no light lies along the way through', () {
+      // She refuses lit ground, so a lamp that holds a stretch of the cheapest
+      // route holds the route. One or two cells is the mechanic working: wait
+      // for the lamp to pass, then cross. A longer run has no dark gap in it
+      // to wait on — the route becomes a queue, paid for in a hunger clock
+      // the level budgeted for walking rather than standing.
+      //
+      // The cap is on *blocking* lights only. A sentry wards taps rather than
+      // her body; she walks through its beam, so it can never make a queue.
+      var worst = 0;
+      var boardsWithPatrols = 0;
+      for (var seed = 0; seed < 40; seed++) {
+        final level = LevelGenerator.generate(
+          LevelSpec(
+            seed: seed,
+            columns: 12,
+            rows: 25,
+            anchorDensity: 0.3,
+            heavyDensity: 0.22,
+            guards: 3,
+            sentries: 1,
+          ),
+        );
+        final blocking = level.guards.where((g) => g.blocksDog).toList();
+        if (blocking.isEmpty) continue;
+        boardsWithPatrols++;
+        final route = Pathfinder.cheapestPath(
+          level.grid.start,
+          level.grid.exit,
+          level.grid.isTraversableInPrinciple,
+          (c) => level.grid.at(c)!.type.hitsRequired,
+        );
+        if (route == null) continue;
+        // The whole ground those lamps ever hold, which is what the placement
+        // rule is written against — not a snapshot of one moment.
+        final held = <HexCoord>{
+          for (final guard in blocking)
+            for (final cell in guard.patrol) ...cell.disc(guard.litRadius),
+        };
+        var run = 0;
+        for (final cell in route) {
+          run = held.contains(cell) ? run + 1 : 0;
+          if (run > worst) worst = run;
+          expect(
+            run,
+            lessThanOrEqualTo(GuardSystem.maxRouteRun),
+            reason: 'seed $seed: $run route cells in a row under a lamp',
+          );
+        }
+      }
+      expect(
+        boardsWithPatrols,
+        greaterThan(30),
+        reason: 'the rule must not be satisfied by placing no patrols at all',
+      );
+      expect(
+        worst,
+        greaterThan(0),
+        reason:
+            'a patrol that can never touch the route is scenery; the point is '
+            'that it may hold a cell or two, not that it is kept away',
+      );
+    });
+
     test('a patrol is a sweep, not a knot', () {
       // An unbiased random walk on a hex grid coils into a two-cell blob, which
       // is a guard standing still with extra steps.
