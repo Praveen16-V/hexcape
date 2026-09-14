@@ -501,6 +501,35 @@ class Campaign {
   static const ironpawFrom = 92;
   static const keepsakeFrom = 99;
 
+  /// The silhouettes that cut the field to a corridor rather than trimming
+  /// its edges, and the extra treat they are owed.
+  ///
+  /// A level's allowance is priced almost entirely as a *ratio* of par — the
+  /// budget is a multiplier, the clock is seconds per cell — but the treats
+  /// are a flat count, so they are the one part of the allowance that does not
+  /// scale with the length of the route. That is invisible while the boards
+  /// are all roughly the same size, and these two are not: across levels 21
+  /// to 100 the key and the crescent average 160 cells against the campaign's
+  /// 230, and their routes come out at par 32 and 30 against an average of 27.
+  /// A longer route on a smaller board, paid the same flat eight taps of
+  /// treat, lands them at 51% and 49% room to waste where every other outline
+  /// sits between 53% and 63%.
+  ///
+  /// Level 49 is where that finally bit. It draws the key on a plain
+  /// combination beat — no pace relief, and by design none, because the level
+  /// is a tool arrival — so it came out at 48% room, tighter than its own
+  /// band's challenge peak and a twenty-five point drop from the level before
+  /// it. The two neighbouring key boards, 46 and 55, hid the same shortfall
+  /// behind an introduction's relief.
+  ///
+  /// So the allowance follows the outline rather than the level: one treat,
+  /// which is worth two taps and a few seconds, and lands these two back on
+  /// the curve every other shape is already on.
+  static const _narrowShapes = {FieldShape.key, FieldShape.crescent};
+
+  static int _narrowShapeTreats(FieldShape shape) =>
+      _narrowShapes.contains(shape) ? 1 : 0;
+
   /// Enough springs on a board to be met rather than merely present.
   static const _springIntroDensity = 0.03;
 
@@ -1193,6 +1222,7 @@ class Campaign {
     final t = span <= 1 ? 0.0 : index / (span - 1);
     final pace = paceFor(level);
     final signature = signatureFor(level);
+    final boardSeed = seed ?? seedFor(level);
     final baseAnchor = _lerp(band.anchor, t);
     final baseHeavy = _lerp(band.heavy, t);
     final baseSpring = _lerp(band.spring, t);
@@ -1237,7 +1267,7 @@ class Campaign {
         : pace.allow(signature.anchorDelta);
     return LevelRules(
       level: level,
-      seed: seed ?? seedFor(level),
+      seed: boardSeed,
       columns: _lerpInt(band.columns, t),
       rows: _lerpInt(band.rows, t),
       // A signature may only take walls away on a relieved beat, never add
@@ -1334,6 +1364,9 @@ class Campaign {
         1,
         _lerpInt(band.treats, t) +
             signature.extraTreats +
+            _narrowShapeTreats(
+              shapeFor(level, boardSeed, tutorialBand: tutorialBand),
+            ) +
             difficulty.supplyDeltaFor(level),
       ),
       powerups: math.max(
@@ -2050,7 +2083,21 @@ extension on LevelPace {
   };
 
   int get guardRelief => switch (this) {
-    LevelPace.practice || LevelPace.breather => 1,
+    // An introduction takes more relief than the practice beat that follows
+    // it on every other axis — budget 0.16 against 0.11, the clock the same,
+    // regrowth 0.9 against 0.65, walls, and a lower obstacle multiplier — and
+    // patrol count was the one place it took *less*. Not less than a peak:
+    // less than the level after it. That asymmetry had no argument behind it,
+    // and level 50 is where it cost the most. The level whose whole job is to
+    // introduce warded light — the game's second timing mechanic, and the
+    // first that applies its timing to *your taps* rather than to her body —
+    // was also the busiest sweeping board the campaign had built: two patrols
+    // and the new sentry, three lit routes moving at once, on the largest
+    // board of its band. "Meet one new hazard" cannot mean meeting it behind
+    // two of the old one.
+    LevelPace.introduction ||
+    LevelPace.practice ||
+    LevelPace.breather => 1,
     _ => 0,
   };
 

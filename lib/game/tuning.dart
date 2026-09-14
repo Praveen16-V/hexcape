@@ -157,13 +157,16 @@ class TuningConfig extends ChangeNotifier {
   /// that quietly punishes bigger levels.
   ///
   /// Cut from 1.2 after watching real runs finish in 13-21 seconds against a
-  /// 24-26 second bar: the clock was never the thing that ended a run. At 1.05
+  /// 24-26 second bar: the clock was never the thing that ended a run. At 1.06
   /// a long run comes down to the wire, which is the point of having one.
   ///
   /// Not lower: at 1.0 the bar clears the fastest possible run by only 12%,
   /// and the fairness gate in playthrough_test rejects it. A clock that can rob
-  /// someone playing well is not pressure, it is a coin toss.
-  double hungerSecondsPerCell = 1.05;
+  /// someone playing well is not pressure, it is a coin toss. The last
+  /// hundredth is the slowest of the twenty-five measured runs, not slack —
+  /// 1.05 cleared it by 1.16x and the gate wants 1.15x, so any honest change
+  /// to how she walks can put it under.
+  double hungerSecondsPerCell = 1.06;
 
   /// What a treat pays back. The taps matter as much as the seconds: the fog
   /// guarantees some are spent finding walls, so a tight budget needs a way to

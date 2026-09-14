@@ -190,16 +190,26 @@ void main() {
       );
     });
 
-    test('an investigation yields to ground that actually beats it', () {
-      // The commitment must not become stubbornness: the moment the player
-      // opens something closer to the food than the best the pocket held, she
-      // turns on the spot.
+    test('a side branch she declined does not fetch her back, cell by cell', () {
+      // The bug this guards: she walks a corridor north to its head, finds
+      // nothing closer to the food, and sets off to investigate a branch she
+      // walked straight past three cells ago. Arriving one cell into it, the
+      // corridor head is closer to the food again, so she turns round and
+      // walks all the way back — and there she finds the *second* cell of the
+      // branch just as unvisited as the first was, and sets off again.
+      //
+      // One round trip of the whole board per cell of side branch, forever,
+      // with nothing the player did to cause any of it. With the field closing
+      // in behind her, one of those crossings is where she gets sealed in.
       final grid = _field(
         cleared: const [
-          HexCoord.zero,
+          HexCoord(0, 0),
           HexCoord(0, -1),
-          HexCoord(0, 1),
-          HexCoord(0, 2),
+          HexCoord(0, -2),
+          HexCoord(0, -3),
+          HexCoord(1, -1),
+          HexCoord(2, -1),
+          HexCoord(3, -1),
         ],
       );
       final dog = Dog(
@@ -208,23 +218,90 @@ void main() {
       );
 
       const dt = 1 / 60;
-      var version = 1;
-      // Run on until she has actually committed to walking away from the food.
-      var committed = false;
-      for (var i = 0; i < 60 * 8 && !committed; i++) {
+      var crossings = 0;
+      var wasAtHead = false;
+      for (var i = 0; i < 60 * 20; i++) {
         dog.update(
           dt: dt,
           grid: grid,
           layout: _layout,
           tuning: TuningConfig(),
-          fieldVersion: version,
+          fieldVersion: 1,
           regrowthActive: false,
         );
-        final target = dog.steerTarget;
-        committed =
-            target != null &&
-            grid.distanceToExit(target) > grid.distanceToExit(dog.cell);
+        final atHead = dog.cell == const HexCoord(0, -3);
+        if (atHead && !wasAtHead) {
+          crossings++;
+        }
+        wasAtHead = atHead;
       }
+
+      expect(
+        crossings,
+        1,
+        reason: 'she walked the corridor $crossings times over unchanged ground',
+      );
+      expect(
+        dog.cell,
+        const HexCoord(0, -3),
+        reason: 'she should be waiting on the best ground her pocket has',
+      );
+      expect(
+        dog.nowhereToGo,
+        isTrue,
+        reason: 'the branch is ground she already declined, not a reason to move',
+      );
+    });
+
+    test('an investigation yields to ground that actually beats it', () {
+      // The commitment must not become stubbornness: the moment the player
+      // opens something closer to the food than the best the pocket held, she
+      // turns on the spot.
+      final grid = _field(cleared: const [HexCoord.zero, HexCoord(0, -1)]);
+      final dog = Dog(
+        position: _layout.toPixel(HexCoord.zero),
+        cell: HexCoord.zero,
+      );
+
+      const dt = 1 / 60;
+      var version = 1;
+      void run(double seconds, {bool Function()? until}) {
+        for (var i = 0; i < 60 * seconds; i++) {
+          dog.update(
+            dt: dt,
+            grid: grid,
+            layout: _layout,
+            tuning: TuningConfig(),
+            fieldVersion: version,
+            regrowthActive: false,
+          );
+          if (until != null && until()) {
+            return;
+          }
+        }
+      }
+
+      // Let her walk to the head of the corridor and run out of road.
+      run(4);
+
+      // The player carves south, away from the food. Ground that has just
+      // appeared is the only thing that starts an investigation, so the tap
+      // has to come after she has settled — see [Dog]'s offered set.
+      grid.at(const HexCoord(0, 1))!.clear(0);
+      grid.at(const HexCoord(0, 2))!.clear(0);
+      version++;
+
+      var committed = false;
+      run(
+        4,
+        until: () {
+          final target = dog.steerTarget;
+          committed =
+              target != null &&
+              grid.distanceToExit(target) > grid.distanceToExit(dog.cell);
+          return committed;
+        },
+      );
       expect(
         committed,
         isTrue,

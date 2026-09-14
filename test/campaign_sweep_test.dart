@@ -1,7 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hexcape/game/difficulty.dart';
 import 'package:hexcape/game/level_rules.dart';
 import 'package:hexcape/gen/level_generator.dart';
 import 'package:hexcape/gen/pathfinder.dart';
+import 'package:hexcape/gen/silhouette.dart';
+import 'package:hexcape/hex/hex_cell.dart';
+import 'package:hexcape/hex/hex_coord.dart';
 
 import 'sim/simulated_player.dart';
 
@@ -140,6 +144,176 @@ void main() {
             reason: 'Normal stages ${target.from}-${target.to}',
           );
         }
+      },
+      timeout: const Timeout(Duration(minutes: 4)),
+    );
+
+    test(
+      'every lock has an other half the player can get to',
+      () {
+        // A closed gate is priced as a way through — two taps, its own and its
+        // switch's — and [HexGrid.isTraversableInPrinciple] agrees, so par is
+        // free to route straight across one. All of that rests on the switch
+        // being somewhere the dog can reach, and nothing used to check it:
+        // rivets and hearts go down before the locks do, and the switch was
+        // drawn from the plain-ground pool by distance alone, so one could
+        // land in a pocket the rivets had already sealed. Its gate is then
+        // shut for the run while par keeps costing a route through it.
+        //
+        // Stage 80 on Hard shipped that way and could not be finished.
+        for (var n = Campaign.gateFrom; n <= Campaign.length; n++) {
+          for (final difficulty in Difficulty.values) {
+            final rules = Campaign.rulesFor(n, difficulty: difficulty);
+            final grid = LevelGenerator.generate(specFor(rules)).grid;
+            for (final entry in grid.cells.entries) {
+              final cell = entry.value;
+              final isHalf =
+                  cell.type == HexType.switchTile ||
+                  (cell.type == HexType.mirror && cell.partner != null);
+              if (!isHalf) continue;
+              expect(
+                Pathfinder.reachable(
+                  grid.start,
+                  entry.key,
+                  grid.isTraversableInPrinciple,
+                ),
+                isTrue,
+                reason:
+                    'stage $n on ${difficulty.name} walls off the '
+                    '${cell.type.name} at ${entry.key}',
+              );
+            }
+          }
+        }
+      },
+      timeout: const Timeout(Duration(minutes: 6)),
+    );
+
+    test(
+      'par pays for a plan that actually finishes the level',
+      () {
+        // Par is what both the budget and the clock are sized from, so it has
+        // to be the cost of something a player can really do. Straight
+        // Dijkstra is not: it prices a lock at two taps for two tiles and
+        // cannot see that the second tile stands four to ten cells off the
+        // route, because a detour is not a line of tiles.
+        //
+        // This costs the two plans that exist — round every lock, or by way of
+        // one — and checks the budget covers the cheaper. Hard is allowed to
+        // spend par almost exactly on a late challenge peak, so the margin
+        // asked for here is zero: what is being caught is a budget that cannot
+        // buy *any* finish, which is a different thing from a tight one.
+        for (var n = Campaign.gateFrom; n <= Campaign.length; n++) {
+          for (final difficulty in Difficulty.values) {
+            final rules = Campaign.rulesFor(n, difficulty: difficulty);
+            final level = LevelGenerator.generate(specFor(rules));
+            final grid = level.grid;
+            final budget = (level.par * rules.budgetMultiplier).ceil();
+
+            bool lockless(HexCoord c) {
+              final cell = grid.at(c);
+              if (cell == null || cell.type.blocksTravelInPrinciple) {
+                return false;
+              }
+              return cell.type != HexType.gate && cell.type != HexType.mirror;
+            }
+
+            var cheapest = Pathfinder.cheapestCost(
+              grid.start,
+              grid.exit,
+              lockless,
+              grid.remainingCost,
+            );
+            for (final entry in grid.cells.entries) {
+              final cell = entry.value;
+              if (cell.type != HexType.switchTile &&
+                  !(cell.type == HexType.mirror && cell.partner != null)) {
+                continue;
+              }
+              final out = Pathfinder.cheapestCost(
+                grid.start,
+                entry.key,
+                grid.isTraversableInPrinciple,
+                grid.remainingCost,
+              );
+              final on = Pathfinder.cheapestCost(
+                entry.key,
+                grid.exit,
+                grid.isTraversableInPrinciple,
+                grid.remainingCost,
+              );
+              if (out == null || on == null) continue;
+              if (cheapest == null || out + on < cheapest) {
+                cheapest = out + on;
+              }
+            }
+            expect(cheapest, isNotNull, reason: 'stage $n has no plan at all');
+            expect(
+              budget,
+              greaterThanOrEqualTo(cheapest!),
+              reason:
+                  'stage $n on ${difficulty.name} budgets $budget against a '
+                  'cheapest real plan of $cheapest (par ${level.par})',
+            );
+          }
+        }
+      },
+      timeout: const Timeout(Duration(minutes: 6)),
+    );
+
+    test(
+      'a narrow silhouette is not quietly tighter than a wide one',
+      () {
+        // What made level 49 the tightest non-peak of its band. Almost all of
+        // a level's allowance is priced as a ratio of par — the budget is a
+        // multiplier, the clock is seconds per cell — so it scales with the
+        // route. The treats do not: they are a flat count, worth a flat number
+        // of taps however long the way through is.
+        //
+        // That is invisible while the boards are all about the same size, and
+        // the key and the crescent are not. They cut the field to roughly 160
+        // cells against the campaign's 230 and snake the route out to par 32
+        // and 30 against an average of 27, so the same four treats bought them
+        // about five points less room to waste than every other outline. Level
+        // 49 drew the key on a beat with no pace relief and came out at 48%,
+        // below its own band's challenge peak; its two neighbouring key boards
+        // hid the same shortfall behind an introduction's relief.
+        //
+        // Compared as averages rather than level by level, because the outline
+        // is only one of the things setting a level's room and a single board
+        // may legitimately sit anywhere.
+        var narrowRoom = 0.0;
+        var narrow = 0;
+        var wideRoom = 0.0;
+        var wide = 0;
+        for (var n = Campaign.foundationEnd + 1; n <= Campaign.length; n++) {
+          final rules = Campaign.rulesFor(n);
+          final level = LevelGenerator.generate(specFor(rules));
+          final budget = (level.par * rules.budgetMultiplier).ceil();
+          final room =
+              (budget - level.par + rules.treats * rules.treatTaps) /
+              level.par;
+          final isNarrow =
+              rules.shape == FieldShape.key ||
+              rules.shape == FieldShape.crescent;
+          if (isNarrow) {
+            narrowRoom += room;
+            narrow++;
+          } else {
+            wideRoom += room;
+            wide++;
+          }
+        }
+        expect(narrow, greaterThan(0));
+        expect(wide, greaterThan(0));
+        expect(
+          narrowRoom / narrow,
+          greaterThan(wideRoom / wide - 0.02),
+          reason:
+              'narrow boards average '
+              '${(narrowRoom / narrow * 100).toStringAsFixed(1)}% room against '
+              '${(wideRoom / wide * 100).toStringAsFixed(1)}% on wide ones',
+        );
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );

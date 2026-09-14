@@ -342,12 +342,7 @@ class LevelGenerator {
     _placeAlarms(grid, sorted, spec, rng);
     _markGloom(grid, spec, rng);
 
-    final par = Pathfinder.cheapestCost(
-      start,
-      exit,
-      grid.isTraversableInPrinciple,
-      grid.remainingCost,
-    );
+    final par = _par(grid, start, exit);
     assert(par != null, 'Anchor placement broke solvability (§4 invariant)');
 
     // Placed last: they are positioned relative to the cheapest route, which
@@ -678,13 +673,117 @@ class LevelGenerator {
     );
   }
 
+  /// What the cheapest plan that actually finishes this level costs.
+  ///
+  /// Straight Dijkstra over [HexGrid.remainingCost] is the whole answer on a
+  /// board without locks, and it is what this used to be. It is not the whole
+  /// answer with them. That cost function prices a closed gate at its own tap
+  /// plus one for its switch, and an unopened mirror at its own plus one for
+  /// its partner — the honest price of the *tiles*, and the honest price of
+  /// the *route* only when the other half happens to lie along it. It rarely
+  /// does: [_placeGates] stands a switch four to eight cells off its gate and
+  /// [_placeMirrors] a partner five to ten off its twin, deliberately, because
+  /// the detour is the puzzle. Dijkstra cannot see a detour. It prices a route
+  /// as a line of tiles, and going out to the switch and back is not one.
+  ///
+  /// Par is the number both the tap budget and the hunger clock are derived
+  /// from, so a par that is cheap by four taps is a level that is short four
+  /// taps and four cells' worth of seconds — and on a challenge peak, where
+  /// Hard is allowed to spend par almost exactly, short is unfinishable.
+  ///
+  /// So both plans are costed — the way round every lock, and the way by each
+  /// lock's other half — and par is whichever is cheaper. Costing a detour as
+  /// two searches charges any shared stretch twice, which overprices a lock
+  /// sitting close to the route; that is the safe direction, and the one
+  /// [HexGrid.remainingCost] already chose for the same reason.
+  static int? _par(HexGrid grid, HexCoord start, HexCoord exit) {
+    final direct = Pathfinder.cheapestCost(
+      start,
+      exit,
+      grid.isTraversableInPrinciple,
+      grid.remainingCost,
+    );
+
+    // The other half of every lock on the board, which is what a plan has to
+    // go by way of.
+    final halves = <HexCoord>[];
+    for (final entry in grid.cells.entries) {
+      final cell = entry.value;
+      if (cell.type == HexType.switchTile) {
+        halves.add(entry.key);
+      } else if (cell.type == HexType.mirror && cell.partner != null) {
+        halves.add(entry.key);
+      }
+    }
+    if (halves.isEmpty || direct == null) {
+      return direct;
+    }
+
+    bool lockless(HexCoord c) {
+      final cell = grid.cells[c];
+      if (cell == null || cell.type.blocksTravelInPrinciple) {
+        return false;
+      }
+      return cell.type != HexType.gate && cell.type != HexType.mirror;
+    }
+
+    var best = Pathfinder.cheapestCost(
+      start,
+      exit,
+      lockless,
+      grid.remainingCost,
+    );
+    for (final half in halves) {
+      final out = Pathfinder.cheapestCost(
+        start,
+        half,
+        grid.isTraversableInPrinciple,
+        grid.remainingCost,
+      );
+      if (out == null) {
+        continue;
+      }
+      final on = Pathfinder.cheapestCost(
+        half,
+        exit,
+        grid.isTraversableInPrinciple,
+        grid.remainingCost,
+      );
+      if (on == null) {
+        continue;
+      }
+      // `out` pays for the half itself and `on` does not, so the tile it turns
+      // on is charged once.
+      final viaLock = out + on;
+      if (best == null || viaLock < best) {
+        best = viaLock;
+      }
+    }
+
+    // Never cheaper than the optimistic search, which is a lower bound on
+    // every plan there is, and never a level with no plan at all.
+    return best == null ? direct : math.max(direct, best);
+  }
+
   /// Lockbar pairs: a gate on likely ground, its switch a walk away.
   ///
-  /// No solvability pass is needed and the reason is worth writing down: a
-  /// closed gate blocks the route *physically* but never *in principle* — the
-  /// pathfinder prices it at two taps because the switch is an ordinary tile
-  /// that always exists and always opens it. The pair can be placed anywhere
-  /// plain ground stands and the level stays answerable.
+  /// A closed gate blocks the route *physically* but never *in principle* —
+  /// the pathfinder prices it at two taps because the switch is an ordinary
+  /// tile that always opens it — so the pair needs no solvability pass of its
+  /// own. **What it does need is a switch the player can get to.**
+  ///
+  /// That was missing, and it is not a theoretical gap. Rivets and hearts go
+  /// down before this runs, and the switch is drawn from the plain-ground pool
+  /// by position alone, so nothing stopped one landing in a pocket the rivets
+  /// had already sealed off. Its gate is then shut for the whole run while
+  /// [HexGrid.remainingCost] still prices it at two taps and
+  /// [HexGrid.isTraversableInPrinciple] still calls it a way through — so par
+  /// is computed along a route that cannot be walked.
+  ///
+  /// Stage 80 on Hard shipped exactly that: par 31 through a gate whose switch
+  /// stood behind rivets, the cheapest route that actually works costing 34,
+  /// and a challenge peak's par-only budget handing the player 32. The level
+  /// could not be finished.
   static void _placeGates(
     HexGrid grid,
     List<HexCoord> sorted,
@@ -726,6 +825,15 @@ class LevelGenerator {
         continue;
       }
       final switchCell = distant[rng.nextInt(distant.length)];
+      // The switch is the whole lock: a gate whose switch cannot be walked to
+      // is a wall the pathfinder still prices as a door.
+      if (!Pathfinder.reachable(
+        grid.start,
+        switchCell,
+        grid.isTraversableInPrinciple,
+      )) {
+        continue;
+      }
       grid.cells[gate]!
         ..type = HexType.gate
         ..link = link;
@@ -779,6 +887,21 @@ class LevelGenerator {
         continue;
       }
       final b = distant[rng.nextInt(distant.length)];
+      // Both halves, for the reason [_placeGates] spells out: a pair opens
+      // only when each side has been charged, so one of them standing behind
+      // rivets locks the other shut for the run.
+      if (!Pathfinder.reachable(
+            grid.start,
+            a,
+            grid.isTraversableInPrinciple,
+          ) ||
+          !Pathfinder.reachable(
+            grid.start,
+            b,
+            grid.isTraversableInPrinciple,
+          )) {
+        continue;
+      }
       grid.cells[a]!
         ..type = HexType.mirror
         ..partner = b;

@@ -93,6 +93,38 @@ void main() {
       }
     });
 
+    test('an introduction never sweeps harder than the beat that practises it', () {
+      // The asymmetry that made level 50 a wall. An introduction takes more
+      // relief than its practice beat on every numeric axis — budget, clock,
+      // regrowth, walls, obstacle density — and patrol count was the one place
+      // it took *less*, because only practice and breather claimed a guard
+      // relief. It went unnoticed while the gates were early and the band
+      // carried one patrol anyway, and it landed hardest on the sentry
+      // introduction: level 50 met the game's first tap-refusing light behind
+      // two patrols, three lit routes moving at once on the largest board of
+      // its band, while the practice level after it had only two.
+      //
+      // Both counts, because the subject here is how much of the board is lit
+      // and moving, not patrols specifically.
+      for (var level = 4; level < Campaign.length; level++) {
+        if (Campaign.paceFor(level) != LevelPace.introduction) continue;
+        final intro = Campaign.rulesFor(level);
+        final practice = Campaign.rulesFor(level + 1);
+        expect(
+          intro.guards,
+          lessThanOrEqualTo(practice.guards),
+          reason: 'patrols at intro $level',
+        );
+        expect(
+          _lightFamilies(intro).fold<int>(0, (a, b) => a + b),
+          lessThanOrEqualTo(
+            _lightFamilies(practice).fold<int>(0, (a, b) => a + b),
+          ),
+          reason: 'lights at intro $level',
+        );
+      }
+    });
+
     test('post-20 tools are banner-only rather than artificial easy beats', () {
       for (final level in [
         Campaign.slowbeatFrom,

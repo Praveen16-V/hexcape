@@ -5,6 +5,15 @@ import '../game/progress.dart';
 import '../theme/palette.dart';
 import 'difficulty_picker.dart';
 
+/// The glyph every way into a panel of settings wears: the player's sheet, off
+/// the home bar, and the tuning panel that floats over a level.
+///
+/// They were two different icons — sliders on the home bar, a gear over the
+/// board — so one idea looked like two depending on which screen you were
+/// standing on, which is the one thing an icon may never do. Declared once so
+/// they cannot drift apart again.
+const settingsIcon = Icons.settings_rounded;
+
 /// The player's own settings, as distinct from the debug panel.
 ///
 /// The debug panel has thirty sliders for tuning a game that is still being

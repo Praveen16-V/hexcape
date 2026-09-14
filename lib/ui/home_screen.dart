@@ -10,6 +10,7 @@ import '../l10n/strings.dart';
 import '../theme/palette.dart';
 import 'home_dog.dart';
 import 'level_map.dart' show MapLayout;
+import 'settings_sheet.dart' show settingsIcon;
 
 /// The game's front door.
 ///
@@ -300,7 +301,7 @@ class _TopBar extends StatelessWidget {
           ),
           _IconButton(
             onPressed: onSettings,
-            icon: Icons.tune,
+            icon: settingsIcon,
             colour: Colors.white70,
             tooltip: 'Settings',
           ),

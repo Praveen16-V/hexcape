@@ -4,6 +4,7 @@ import '../game/hexcape_game.dart';
 import '../game/tuning.dart';
 import '../l10n/strings.dart';
 import '../theme/palette.dart';
+import 'settings_sheet.dart' show settingsIcon;
 
 /// Live tuning (§16). Every value here is one the spec lists as unresolved and
 /// needing a real device — tap radius, drift speed, momentum, regrowth rate.
@@ -59,7 +60,7 @@ class _DebugPanelState extends State<DebugPanel> {
         minWidth: hudControlSize,
         minHeight: hudControlSize,
       ),
-      icon: const Icon(Icons.settings_rounded, size: 22),
+      icon: const Icon(settingsIcon, size: 22),
       color: Palette.hudDim,
       tooltip: Strings.debug,
     );
