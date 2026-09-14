@@ -181,13 +181,21 @@ enum Difficulty {
   /// rather than through [LevelRules], which has no authored value for it. On
   /// Normal the shift arrives with the campaign proper, like everything else;
   /// in the tutorial the fog remains exactly what the script expects.
+  ///
+  /// Hard's late floor is 0.70, not 0.60. The deeper number was drawn up when
+  /// fog was one flat circle; past Mastery it stacks with thicket concealment,
+  /// sleeper disguise and the gloom band, and at 0.60 a Hard Vigil board
+  /// showed barely two rings past the dog — the route could not be *found*,
+  /// which no amount of timing pressure excuses. 0.70 is still much blinder
+  /// than Normal's 1.08, so the mode keeps its deep fog; it only stops being
+  /// asked to search what it cannot see.
   double revealMultiplierFor(int level) =>
       switch ((this, level > tutorialLevels)) {
         (Difficulty.normal, true) when _hasLateNormalRelief(level) => 1.08,
         (Difficulty.normal, true) => 0.92,
         (Difficulty.normal, false) => 1.0,
         (Difficulty.hard, true) when level <= 20 => 0.6,
-        (Difficulty.hard, true) => 0.92 - 0.32 * _hardFactor(level),
+        (Difficulty.hard, true) => 0.92 - 0.22 * _hardFactor(level),
         (Difficulty.hard, false) => 1.0,
       };
 
