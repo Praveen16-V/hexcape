@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import '../entities/guard.dart';
@@ -341,6 +342,14 @@ class LevelGenerator {
     _placeThorns(grid, sorted, spec, rng);
     _placeAlarms(grid, sorted, spec, rng);
     _markGloom(grid, spec, rng);
+
+    // Two legibility passes over the finished tile mix, before par is priced
+    // so every number downstream already accounts for them. Both are
+    // deterministic without touching `rng`: pickups below share this stream,
+    // and a pass that consumed it would reshuffle every prize on every board
+    // that carries a lock.
+    _legibilityPass(grid);
+    _pullLocksTowardRoute(grid);
 
     final par = _par(grid, start, exit);
     assert(par != null, 'Anchor placement broke solvability (§4 invariant)');
@@ -1316,6 +1325,261 @@ class LevelGenerator {
       if (r >= bandLo && r <= bandLo + 1) {
         cell.gloomed = true;
       }
+    }
+  }
+
+  /// Keeps the cheapest way through *findable*, not merely existent.
+  ///
+  /// Every family places without knowing where the route runs, which is
+  /// correct for pressure — a spring on the way through is the level asking
+  /// its question — but four families do not ask a question when they land on
+  /// it. They hide it: thicket conceals whatever stands behind it, sleeper
+  /// ground reads as plain until she is adjacent, a scaffold on the walked
+  /// line refuses the very taps that approach it, and an alarm on the cheapest
+  /// way through punishes following the route the game priced. One of each is
+  /// texture; a route paved with them is a corridor the player cannot read.
+  ///
+  /// So each is thinned to a small kept count along the route, nearest the
+  /// start first — the lesson is still met early, including on the level that
+  /// introduces scaffolds — and the rest revert to plain. Cost-neutral by
+  /// construction (every one of these costs one tap), so par, the route
+  /// itself and every number priced from them are exactly what they were.
+  static void _legibilityPass(HexGrid grid) {
+    final route = Pathfinder.cheapestPath(
+      grid.start,
+      grid.exit,
+      grid.isTraversableInPrinciple,
+      grid.remainingCost,
+    );
+    if (route == null) {
+      return;
+    }
+    final protected = _protected(grid);
+    void thin(HexType type, int keep) {
+      final onRoute = [
+        for (final c in route)
+          if (!protected.contains(c) && grid.cells[c]?.type == type) c,
+      ];
+      for (var i = keep; i < onRoute.length; i++) {
+        grid.cells[onRoute[i]]!.type = HexType.plain;
+      }
+    }
+
+    thin(HexType.thicket, 1);
+    thin(HexType.sleeper, 1);
+    thin(HexType.scaffold, 2);
+    thin(HexType.alarm, 1);
+  }
+
+  /// Pulls each lock's far half within sight of the cheapest way through.
+  ///
+  /// A gate's switch stands four to eight cells off its gate and a mirror's
+  /// partner five to ten off its twin, placed by distance from each other with
+  /// no regard for where the route runs. On an open board that is the puzzle;
+  /// under the late campaign's fog — thicket, sleepers, gloom, and Hard's
+  /// deeper sight all stacked — it is a tile that must be found before the
+  /// level can be finished, standing somewhere in two hundred cells of murk
+  /// with nothing pointing at it. The banner for gates even says "somewhere
+  /// off the route", which stopped being a hint and became a warning.
+  ///
+  /// Any switch or mirror half farther than three steps (routed around walls)
+  /// from the cheapest way through is relocated to the nearest plain cell one
+  /// or two steps off it. The puzzle survives — the switch is still a detour,
+  /// the halves still stand apart, and the banner's "somewhere off the route"
+  /// stays honest — but the detour starts from ground the player is already
+  /// walking. Gates themselves never move: a gate on the route with its
+  /// switch beside it is the lock at its most legible.
+  ///
+  /// Deterministic without consuming `rng`, for the reason the call site
+  /// gives: candidates sort by distance to the original cell, then by
+  /// coordinate, and the first wins. Anything unplaceable stays where the
+  /// placement passes proved it reachable, so this can only ever shorten a
+  /// detour, never strand a lock.
+  static void _pullLocksTowardRoute(HexGrid grid) {
+    final route = Pathfinder.cheapestPath(
+      grid.start,
+      grid.exit,
+      grid.isTraversableInPrinciple,
+      grid.remainingCost,
+    );
+    if (route == null || route.isEmpty) {
+      return;
+    }
+    // Steps from every cell to the route, routed around walls the way the dog
+    // herself steers. Anything with a finite distance here is connected to
+    // the route, hence to the start — so a relocated half is reachable by
+    // construction, with no second pass needed.
+    final dist = <HexCoord, int>{};
+    final queue = Queue<HexCoord>();
+    for (final c in route) {
+      dist[c] = 0;
+      queue.add(c);
+    }
+    while (queue.isNotEmpty) {
+      final current = queue.removeFirst();
+      final next = dist[current]! + 1;
+      for (final n in current.neighbours) {
+        if (dist.containsKey(n) || !grid.isTraversableInPrinciple(n)) {
+          continue;
+        }
+        dist[n] = next;
+        queue.add(n);
+      }
+    }
+
+    final protected = _protected(grid);
+    final switches = <HexCoord>[];
+    final mirrors = <HexCoord>[];
+    final gatesByLink = <int, HexCoord>{};
+    for (final entry in grid.cells.entries) {
+      final cell = entry.value;
+      if (cell.type == HexType.switchTile) {
+        switches.add(entry.key);
+      } else if (cell.type == HexType.mirror && cell.partner != null) {
+        mirrors.add(entry.key);
+      } else if (cell.type == HexType.gate) {
+        gatesByLink[cell.link] = entry.key;
+      }
+    }
+    if (switches.isEmpty && mirrors.isEmpty) {
+      return;
+    }
+
+    // Every lock cell on the board, so a relocation never lands on another
+    // lock — a switch stacked on a mirror half would be one tile answering
+    // two puzzles.
+    final taken = <HexCoord>{
+      ...switches,
+      ...mirrors,
+      ...gatesByLink.values,
+    };
+    final moves = <HexCoord, HexCoord>{};
+
+    List<HexCoord> candidatesFor(
+      HexCoord from, {
+      HexCoord? anchor,
+      int clearance = 0,
+    }) {
+      final out = <HexCoord>[];
+      for (final entry in grid.cells.entries) {
+        final c = entry.key;
+        if (taken.contains(c) || moves.containsValue(c)) {
+          continue;
+        }
+        if (protected.contains(c)) {
+          continue;
+        }
+        if (entry.value.type != HexType.plain) {
+          continue;
+        }
+        // Off the route but beside it: on it would trip for free and make
+        // the banner a lie, farther than two is the fog-search this undoes.
+        final d = dist[c] ?? 1 << 20;
+        if (d < 1 || d > 2) {
+          continue;
+        }
+        if (anchor != null && c.distanceTo(anchor) < clearance) {
+          continue;
+        }
+        out.add(c);
+      }
+      out.sort((a, b) {
+        final d = a.distanceTo(from).compareTo(b.distanceTo(from));
+        if (d != 0) {
+          return d;
+        }
+        if (a.r != b.r) {
+          return a.r.compareTo(b.r);
+        }
+        return a.q.compareTo(b.q);
+      });
+      return out;
+    }
+
+    // Tiered: keep the puzzle's shape where the board allows it, degrade
+    // gracefully where it does not. A switch beside its gate is trivial but
+    // finishable; a switch lost in the fog is neither.
+    List<HexCoord> tiered(HexCoord from, HexCoord? anchor, List<int> tiers) {
+      for (final clearance in tiers) {
+        final found = candidatesFor(
+          from,
+          anchor: anchor,
+          clearance: clearance,
+        );
+        if (found.isNotEmpty) {
+          return found;
+        }
+      }
+      return const [];
+    }
+
+    bool far(HexCoord c) => (dist[c] ?? 1 << 20) > 3;
+
+    for (final s in switches) {
+      if (!far(s)) {
+        continue;
+      }
+      final gate = gatesByLink[grid.cells[s]!.link];
+      final found = tiered(s, gate, const [2, 0]);
+      if (found.isEmpty) {
+        continue;
+      }
+      moves[s] = found.first;
+    }
+
+    // Mirror pairs, decided together: each half keeps its distance from where
+    // its partner *ends up*, not from where it started.
+    final pairs = <(HexCoord, HexCoord)>[];
+    final seen = <HexCoord>{};
+    for (final m in mirrors) {
+      if (seen.contains(m)) {
+        continue;
+      }
+      final partner = grid.cells[m]!.partner!;
+      seen.add(m);
+      seen.add(partner);
+      pairs.add((m, partner));
+    }
+    for (final pair in pairs) {
+      var (a, b) = pair;
+      if (far(a)) {
+        final found = tiered(a, b, const [4, 2, 0]);
+        if (found.isNotEmpty) {
+          moves[a] = found.first;
+          a = found.first;
+        }
+      }
+      if (far(b)) {
+        final found = tiered(b, a, const [4, 2, 0]);
+        if (found.isNotEmpty) {
+          moves[b] = found.first;
+        }
+      }
+    }
+
+    for (final entry in moves.entries) {
+      final oldCell = grid.cells[entry.key]!;
+      final newCell = grid.cells[entry.value]!;
+      if (oldCell.type == HexType.switchTile) {
+        newCell.type = HexType.switchTile;
+        newCell.link = oldCell.link;
+        oldCell.type = HexType.plain;
+        oldCell.link = -1;
+      } else {
+        newCell.type = HexType.mirror;
+        oldCell.type = HexType.plain;
+        oldCell.partner = null;
+        oldCell.charged = false;
+      }
+    }
+    // Rewire every pair at its final cells: a half that moved points at its
+    // partner's new ground, and a half that stayed learns where its partner
+    // went.
+    for (final pair in pairs) {
+      final finalA = moves[pair.$1] ?? pair.$1;
+      final finalB = moves[pair.$2] ?? pair.$2;
+      grid.cells[finalA]!.partner = finalB;
+      grid.cells[finalB]!.partner = finalA;
     }
   }
 

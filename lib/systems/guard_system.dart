@@ -31,8 +31,7 @@ class GuardSystem {
   /// Keeps two lights from overlapping into one impassable smear.
   static const minSeparation = 4;
 
-  /// How many cells of the board's own route a light that blocks her may hold
-  /// *in a row*.
+  /// How many cells of the board's own route any light may hold *in a row*.
   ///
   /// One or two lit cells on the way through is the mechanic working: she
   /// stops, the lamp passes, she goes. There is a dark side to wait on and a
@@ -50,13 +49,16 @@ class GuardSystem {
   /// Deliberately a cap on the *run* rather than on the share. A light that
   /// touches five separate cells of a long route is five timing decisions,
   /// which is a good level; one that holds five in a row is none.
+  ///
+  /// Every kind is held to it, blocking or warding. Warding lights used to be
+  /// exempt on the grounds that she walks through a sentry's beam untouched —
+  /// true, and beside the point. A warded stretch queues *taps* rather than
+  /// her body: the taps that would open it refuse to land, the wait is charged
+  /// to the same hunger clock, and under fog a tap that does nothing reads as
+  /// there being no route at all. With one sentry that never mattered; with
+  /// four sentries, two beacons and a blinker on a Vigil board it was the
+  /// route going dark for whole stretches at a time.
   static const maxRouteRun = 2;
-
-  /// Only lights that block *her* are held to it. A warding light refuses taps
-  /// rather than her body — she walks through a sentry's beam untouched — so
-  /// it can never turn the route into a queue, and pricing it as though it
-  /// could would spend the board's room on the wrong mechanic.
-  static bool _guardsRoute(Guard guard) => guard.blocksDog;
 
   /// Speeds relative to the patrol base, per kind. A runner's dash is meant
   /// to be *fast but telegraphed*; a warden is slow precisely so its wake
@@ -114,10 +116,12 @@ class GuardSystem {
     final anchorsOf = <HexCoord>[];
     var attempts = 0;
     final maxAttempts = math.max(60, wanted.length * 25);
-    // Route cells already held by a blocking light, so the cap below is read
-    // against every lamp on the board rather than one at a time: two lanes
-    // crossing the route beside each other make the same wall as one lane
-    // lying along it.
+    // Route cells already held by any light, so the cap below is read against
+    // every lamp on the board rather than one at a time: two lanes crossing
+    // the route beside each other make the same wall as one lane lying along
+    // it, and a blocking run beside a warding run is one unbroken stretch of
+    // ground she cannot enter and you cannot carve — the one combination this
+    // file's own header says must never happen.
     final heldOnRoute = <HexCoord>{};
     final route = _routeToProtect(grid);
 
@@ -135,13 +139,11 @@ class GuardSystem {
         if (guard == null) {
           continue;
         }
-        if (_guardsRoute(guard)) {
-          final held = {...heldOnRoute, ..._sweptFootprint(guard)};
-          if (_longestRunOn(route, held) > maxRouteRun) {
-            continue;
-          }
-          heldOnRoute.addAll(_sweptFootprint(guard));
+        final held = {...heldOnRoute, ..._sweptFootprint(guard)};
+        if (_longestRunOn(route, held) > maxRouteRun) {
+          continue;
         }
+        heldOnRoute.addAll(_sweptFootprint(guard));
         anchorsOf.add(head);
         guards.add(guard);
         placed = true;

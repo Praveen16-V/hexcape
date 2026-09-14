@@ -254,18 +254,41 @@ shows the full stage-100 endpoints.
 
 | Knob | Normal | Hard |
 |---|---|---|
-| Obstacle densities (all families, placed) | ×1.0 (authored curve) | ×1.3 |
+| Obstacle densities (all families, placed) | ×1.0 (authored curve) | ×1.3, except walls ×1.15 past stage 52 (see §5.1) |
 | Treats / powerups in the field | as authored | −1 each (floored ≥1) |
 | Taps a treat pays | as authored | −1 (floored ≥1) |
 | Tap budget relief | −0.04× par | −0.20× par (graduated floors preserve 2 spare taps through 40 and 1 through 80) |
 | Hunger clock / cell | −0.04 s | −0.22 s (floor 0.85 / 0.72 s) |
-| Light counts (all kinds, guard RNG stream) | — | +2 (floored ≥1 per taught mechanic) |
+| Light counts (patrols + sentries, guard RNG stream) | — | +2 (floored ≥1 per taught mechanic) |
+| Light counts (spinners, blinkers, beacons, runners, wardens) | as authored | as authored (see §5.1) |
 | Light speed | +0.05 | +0.45 (ceiling widens by the same step) |
 | Regrow / crackline / thatch / tremor timers | −0.3 s | −1.4 s (floor 3.2 / 2.4 s) |
 | Contact bites (thorn, patrol) | ×1.0 | ×1.6 (−4.8 s patrol sting) |
-| Reveal factor / fog | ×0.92 | ×0.60 |
+| Reveal factor / fog | ×0.92 | ×0.70 floor past stage 20 (see §5.1) |
 | Directional hint | shown | suppressed |
 | Rhythm beats (BLINKER cycle, RUNNER pause) | ×1.0 window | ×0.7 window |
+
+### 5.1 Route legibility, stage 52 onward
+
+The table above was drawn up when the board held eight families. Past
+Mastery it holds twenty, and three of its rows stopped being pressure and
+became search: at ×1.3 the walls left barely a tenth of a Hard Vigil board
+plain, the +2-per-family lights put sixteen exotic lamps on the finale, and
+at ×0.60 sight the fog showed barely two rings past the dog — with thicket,
+sleeper disguise, gloom and (on Hard) no hint stacked on top. The route was
+still *there* on every board, but finding it was no longer play.
+
+So from stage 52 — the same boundary Normal's late relief already used —
+both modes hand back a constant 0.03 walls / 0.02 brambles (constant, so the
+challenge envelope and band ordering are untouched), Hard's wall stacking
+caps at ×1.15, the five younger light families stay authored on both modes,
+and Hard's sight floors at ×0.70. Three generator guarantees hold for any
+seed on top of that: no lamp of any kind holds more than two route cells in
+a row, lock halves stand within three steps of the walked route, and the
+route itself carries at most one thicket, one sleeper, two scaffolds and one
+alarm. Stage 77 additionally trades its faultLine signature for gauntlet, so
+the gate lesson is taught on calm ground. All of it is pinned per level in
+`test/route_legibility_test.dart`.
 
 Determinism discipline, kept: the board-changing deltas (density scale, supply
 counts) are applied to already-computed campaign values — a value shift, never

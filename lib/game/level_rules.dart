@@ -683,7 +683,15 @@ class Campaign {
   static const _heavyGroundLevels = {11, 26, 65, 74};
   static const _springLineLevels = {9, 10, 14, 48};
   static const _nightWatchLevels = {21, 22, 32, 38};
-  static const _supplyRunLevels = {16, 28, 34, 44, 50, 56};
+
+  /// 83 is the late one on purpose. It arrives with OWL EYES — she sees
+  /// further for the rest of the run — on a board carrying two lockbar gates,
+  /// so the level already asks the player to *find* things: two switches
+  /// standing off the route. Extra prizes give the new sight a second thing
+  /// to spend itself on, which is what makes the tool feel answered rather
+  /// than merely handed over. It also keeps the gauntlet count at exactly
+  /// half the campaign after 77 traded faultLine for gauntlet.
+  static const _supplyRunLevels = {16, 28, 34, 44, 50, 56, 83};
   static const _breachLevels = {41, 42, 54};
 
   /// Every entry is deliberately a non-challenge level:
@@ -694,9 +702,17 @@ class Campaign {
   /// [faultsFrom] — mid-Pressure — so the signature that is *about* it reaches
   /// back that far too, taking levels that were a fourth spring board and a
   /// third heavy board. Collapse still owns the density.
+  ///
+  /// 77 used to be one of them and is pointedly not anymore. It is the level
+  /// that introduces lockbar gates — a lesson about *finding* a switch tile
+  /// somewhere off the route — and the faultLine multiplier more than doubled
+  /// its cracked ground to 0.26, the noisiest introduction in the campaign.
+  /// Teaching a lock while the ground shuts under it is two lessons wearing
+  /// one banner; the gate lesson gets calm ground, and Collapse keeps its
+  /// other four fault boards.
   static const _faultLineLevels = {
     29, 35, 45, //
-    61, 62, 68, 71, 77,
+    61, 62, 68, 71,
   };
 
   /// Every entry is a non-challenge level for the same reason the others are: a
@@ -1257,6 +1273,30 @@ class Campaign {
     /// the authored bands changes. Multiplied at the *end* of every obstacle
     /// density expression so the seeded draws' order is untouched by it.
     final os = difficulty.obstacleDensityScaleFor(level);
+    // Walls stop stacking at 1.15 past stage 52. The full 1.3 Hard scale was
+    // drawn up when the board held eight families; past Mastery it holds
+    // twenty, and 1.3 on the two wall densities left Hard's Vigil boards with
+    // barely a tenth of their ground plain. The route was still *there* — the
+    // generator guarantees that — but finding it under fog stopped being play
+    // and became search. Hard keeps the whole scale on every other family, and
+    // on walls it still keeps a heavier board than Normal at every level.
+    final osWalls = level >= Difficulty.lateCampaignReliefFrom
+        ? math.min(os, 1.15)
+        : os;
+    // The late campaign's second wall relief, on both modes. Every rebuilt
+    // family takes its tiles from the same remaining-plain pool the walls were
+    // priced against, so a Vigil anchor curve drawn for eight families reads
+    // much denser once twenty are drawing from what it left. This hands back
+    // enough plain ground for the route to be *found*, not merely to exist.
+    // Constant across 52-100 on purpose: the challenge-envelope and
+    // band-peak-ordering tests both compare levels that all carry it, so the
+    // climb they pin is unchanged, only the floor it climbs from.
+    final lateAnchorRelief = level >= Difficulty.lateCampaignReliefFrom
+        ? 0.03
+        : 0.0;
+    final lateHeavyRelief = level >= Difficulty.lateCampaignReliefFrom
+        ? 0.02
+        : 0.0;
     // Heavy Ground normally trades some rivets for more two-hit tiles so its
     // subject stays readable. Level 11 is also a full challenge peak, though,
     // and applying that relief made it easier than level 8 while still leaving
@@ -1278,11 +1318,13 @@ class Campaign {
       // than the level before is the opposite of an introduction.
       anchorDensity: math.max(
         0,
-        (baseAnchor - pace.anchorRelief + anchorSignatureDelta) * os,
+        (baseAnchor - pace.anchorRelief - lateAnchorRelief + anchorSignatureDelta) *
+            osWalls,
       ),
       heavyDensity: math.max(
         0,
-        (baseHeavy - pace.heavyRelief + pace.allow(signature.heavyDelta)) * os,
+        (baseHeavy - pace.heavyRelief - lateHeavyRelief + pace.allow(signature.heavyDelta)) *
+            osWalls,
       ),
       // Floored, not merely interpolated. The band's own curve starts at zero,
       // so the level that *announces* springs would generate one on a
@@ -1431,36 +1473,29 @@ class Campaign {
       gatePairs: extras.gatePairs,
       mirrorPairs: extras.mirrorPairs,
       gloom: extras.gloom,
+      // The exotic lights stay authored on both modes. Hard's extra lights were
+      // applied to every family, so the finale asked for sixteen exotic lamps
+      // on top of nine patrols and sentries — a board a quarter lit at any
+      // moment, on which the route could not be *found*, let alone timed.
+      // Hard doubles the working guard — patrols and sentries, above — which
+      // is what its own documentation always said it did; the five younger
+      // families are each one new idea with its own lesson, and multiplying a
+      // lesson is not teaching it harder. Endless already worked this way.
       spinners: extras.spinners <= 0
           ? 0
-          : math.max(
-              1,
-              extras.spinners + difficulty.guardDelta(level) - pace.guardRelief,
-            ),
+          : math.max(1, extras.spinners - pace.guardRelief),
       blinkers: extras.blinkers <= 0
           ? 0
-          : math.max(
-              1,
-              extras.blinkers + difficulty.guardDelta(level) - pace.guardRelief,
-            ),
+          : math.max(1, extras.blinkers - pace.guardRelief),
       beacons: extras.beacons <= 0
           ? 0
-          : math.max(
-              1,
-              extras.beacons + difficulty.guardDelta(level) - pace.guardRelief,
-            ),
+          : math.max(1, extras.beacons - pace.guardRelief),
       runners: extras.runners <= 0
           ? 0
-          : math.max(
-              1,
-              extras.runners + difficulty.guardDelta(level) - pace.guardRelief,
-            ),
+          : math.max(1, extras.runners - pace.guardRelief),
       wardens: extras.wardens <= 0
           ? 0
-          : math.max(
-              1,
-              extras.wardens + difficulty.guardDelta(level) - pace.guardRelief,
-            ),
+          : math.max(1, extras.wardens - pace.guardRelief),
       pace: pace,
     );
   }
