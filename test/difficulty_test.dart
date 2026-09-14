@@ -137,11 +137,15 @@ void main() {
       }
     });
 
-    test('Normal tightens from stage 4 — a little, and on schedule', () {
-      // The adventure shift: modest, and exactly where the user asked for it
-      // (after the tutorial trio). The unnamed default curve is Normal's, so
-      // these assertions compare numbers against themselves through the mode.
-      for (var n = Campaign.tutorialBand + 1; n <= Campaign.length; n++) {
+    test('Normal tightens early, then gives late mechanics room', () {
+      // The adventure shift is modest after the tutorial trio. Once warded
+      // light and its answer have arrived, the campaign continues climbing on
+      // authored mechanics while Normal hands back numeric breathing room.
+      for (
+        var n = Campaign.tutorialBand + 1;
+        n < Difficulty.lateCampaignReliefFrom;
+        n++
+      ) {
         final d = Difficulty.normal;
         expect(d.budgetRelief(n), -0.04, reason: 'budget shift at $n');
         expect(d.hungerRelief(n), -0.04, reason: 'clock shift at $n');
@@ -149,6 +153,27 @@ void main() {
         expect(d.guardSpeedDelta(n), 0.05, reason: 'pace shift at $n');
         expect(d.guardDelta(n), 0, reason: 'Normal never adds lights');
         expect(d.revealMultiplierFor(n), 0.92, reason: 'fog shift at $n');
+        expect(d.rhythmScaleFor(n), 1.0, reason: 'rhythm at $n');
+        expect(d.obstacleDensityScaleFor(n), 1.0, reason: 'ground at $n');
+      }
+      for (
+        var n = Difficulty.lateCampaignReliefFrom;
+        n <= Campaign.length;
+        n++
+      ) {
+        final d = Difficulty.normal;
+        expect(d.budgetRelief(n), 0.10, reason: 'budget relief at $n');
+        expect(d.hungerRelief(n), 0.18, reason: 'clock relief at $n');
+        expect(d.regrowRelief(n), 1.2, reason: 'regrowth relief at $n');
+        expect(d.guardSpeedDelta(n), 0.05, reason: 'pace shift at $n');
+        expect(d.guardDelta(n), 0, reason: 'Normal never adds lights');
+        expect(d.revealMultiplierFor(n), 1.08, reason: 'fog relief at $n');
+        expect(d.rhythmScaleFor(n), 1.15, reason: 'rhythm relief at $n');
+        expect(
+          d.obstacleDensityScaleFor(n),
+          1.0,
+          reason: 'Normal preserves the authored board at $n',
+        );
       }
       for (var n = 1; n <= Campaign.tutorialBand; n++) {
         final d = Difficulty.normal;

@@ -190,17 +190,25 @@ void main() {
       );
     });
 
-    test('a side branch she declined does not fetch her back, cell by cell', () {
-      // The bug this guards: she walks a corridor north to its head, finds
-      // nothing closer to the food, and sets off to investigate a branch she
-      // walked straight past three cells ago. Arriving one cell into it, the
-      // corridor head is closer to the food again, so she turns round and
-      // walks all the way back — and there she finds the *second* cell of the
-      // branch just as unvisited as the first was, and sets off again.
+    test('a side branch costs one walk, not one walk per cell', () {
+      // Two failures meet here, and the test has to rule out both.
       //
-      // One round trip of the whole board per cell of side branch, forever,
+      // She walks a corridor north to its head and finds nothing closer to the
+      // food. A side branch hangs off it, three cells she has never stood in.
+      //
+      // *Pacing*: she sets off for the branch, gets one cell in, and goal-seek
+      // turns her round because the corridor head is closer to the food again
+      // — and back at the head the branch's second cell is as unwalked as its
+      // first was. One traversal of the board per cell of branch, for ever,
       // with nothing the player did to cause any of it. With the field closing
       // in behind her, one of those crossings is where she gets sealed in.
+      //
+      // *Stranding*: the other way to stop the pacing is to refuse the branch
+      // outright, on the grounds that she has seen it before. That trades a
+      // dog who paces for a dog who stands on a dead end staring at stone with
+      // open road beside her, which the player cannot tell from a hang.
+      //
+      // What is actually correct is one walk down the branch and then a wait.
       final grid = _field(
         cleared: const [
           HexCoord(0, 0),
@@ -218,9 +226,9 @@ void main() {
       );
 
       const dt = 1 / 60;
-      var crossings = 0;
-      var wasAtHead = false;
-      for (var i = 0; i < 60 * 20; i++) {
+      const head = HexCoord(0, -3);
+      final path = <HexCoord>[dog.cell];
+      for (var i = 0; i < 60 * 30; i++) {
         dog.update(
           dt: dt,
           grid: grid,
@@ -229,27 +237,42 @@ void main() {
           fieldVersion: 1,
           regrowthActive: false,
         );
-        final atHead = dog.cell == const HexCoord(0, -3);
-        if (atHead && !wasAtHead) {
-          crossings++;
+        if (path.last != dog.cell) {
+          path.add(dog.cell);
         }
-        wasAtHead = atHead;
       }
 
+      // She walked the branch: open ground is not something she ignores.
+      for (final c in const [
+        HexCoord(1, -1),
+        HexCoord(2, -1),
+        HexCoord(3, -1),
+      ]) {
+        expect(
+          path,
+          contains(c),
+          reason: 'she left open ground $c unwalked and waited on a wall',
+        );
+      }
+
+      // And she walked it *once*. Arriving at the head, leaving down the
+      // branch and coming back is two; a third means she set out again for
+      // ground she had already covered.
       expect(
-        crossings,
-        1,
-        reason: 'she walked the corridor $crossings times over unchanged ground',
+        path.where((c) => c == head).length,
+        lessThanOrEqualTo(2),
+        reason: 'she kept re-crossing the board over unchanged ground',
       );
+
       expect(
         dog.cell,
-        const HexCoord(0, -3),
-        reason: 'she should be waiting on the best ground her pocket has',
+        head,
+        reason: 'she should settle on the best ground her pocket has',
       );
       expect(
         dog.nowhereToGo,
         isTrue,
-        reason: 'the branch is ground she already declined, not a reason to move',
+        reason: 'with the branch spent, the way on has to be opened',
       );
     });
 
@@ -284,9 +307,7 @@ void main() {
       // Let her walk to the head of the corridor and run out of road.
       run(4);
 
-      // The player carves south, away from the food. Ground that has just
-      // appeared is the only thing that starts an investigation, so the tap
-      // has to come after she has settled — see [Dog]'s offered set.
+      // The player carves south, away from the food.
       grid.at(const HexCoord(0, 1))!.clear(0);
       grid.at(const HexCoord(0, 2))!.clear(0);
       version++;
@@ -311,16 +332,11 @@ void main() {
       // The player carves north, past the dead end.
       grid.at(const HexCoord(0, -2))!.clear(0);
       version++;
-      for (var i = 0; i < 60; i++) {
-        dog.update(
-          dt: dt,
-          grid: grid,
-          layout: _layout,
-          tuning: TuningConfig(),
-          fieldVersion: version,
-          regrowthActive: false,
-        );
-      }
+      // Read on the very next decision, because "at once" is the claim. Given
+      // a second she would have *arrived* at the new ground and set off to
+      // walk the south branch she still has not covered, which is a different
+      // and correct thing — and sampling late would score it as a failure.
+      run(0.05);
       expect(
         grid.distanceToExit(dog.steerTarget!),
         lessThan(grid.distanceToExit(HexCoord.zero)),

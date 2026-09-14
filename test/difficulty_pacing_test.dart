@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hexcape/game/difficulty.dart';
 import 'package:hexcape/game/level_rules.dart';
 
 double _wallPressure(LevelRules rules) =>
@@ -242,6 +243,11 @@ void main() {
         level <= Campaign.length;
         level++
       ) {
+        if (level == Difficulty.lateCampaignReliefFrom) {
+          // The late Normal safety margin is a deliberate curve reset. Peaks
+          // must keep climbing on each side of it, not erase the reset.
+          previous = null;
+        }
         final current = Campaign.rulesFor(level);
         if (current.pace != LevelPace.challenge) continue;
         if (previous != null) {
@@ -339,7 +345,7 @@ void main() {
       }
     });
 
-    test('no band gives back what an earlier one had already taken', () {
+    test('bands keep tightening inside each Normal pressure curve', () {
       // The floors, as opposed to the peaks. Budget, clock and regrowth all
       // descend to a floor and then hold flat — deliberately, because below
       // about 1.06x par a level demands provably optimal play — so the rule is
@@ -349,12 +355,23 @@ void main() {
       var regrow = double.infinity;
       for (final band in CampaignBand.values) {
         if (band == CampaignBand.endless) continue;
+        if (band == CampaignBand.mastery) {
+          // Relief begins inside Mastery. Start a new comparison curve and
+          // measure this band only on the relaxed side of that boundary.
+          budget = double.infinity;
+          clock = double.infinity;
+          regrow = double.infinity;
+        }
         var bandBudget = double.infinity;
         var bandClock = double.infinity;
         var bandRegrow = double.infinity;
         var found = false;
         for (var level = 1; level <= Campaign.length; level++) {
           if (Campaign.bandOf(level) != band) continue;
+          if (band == CampaignBand.mastery &&
+              level < Difficulty.lateCampaignReliefFrom) {
+            continue;
+          }
           found = true;
           final r = Campaign.rulesFor(level);
           bandBudget = math.min(bandBudget, r.budgetMultiplier);

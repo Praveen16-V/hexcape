@@ -23,7 +23,7 @@ class Pawprint {
 /// The player never steers this directly — that is the whole point of the game.
 class Dog {
   Dog({required this.position, required this.cell}) {
-    _offered.add(cell);
+    _visited.add(cell);
   }
 
   Offset position;
@@ -100,29 +100,31 @@ class Dog {
   /// — the soft-lock check owns that ending.
   HexCoord? gazeTarget;
 
-  /// Every cell her own pocket has already offered her: the whole of each
-  /// flood-fill she has decided on, not merely the cells she stood in. Used
-  /// only to bound the "take any opening" fallback below.
+  /// Every cell she has stood in this run. Used only to stop the "take any
+  /// opening" fallback from walking her back and forth over old ground.
   ///
-  /// Standing in a cell is far too weak a record of having considered it. A
-  /// side branch she walked past, looked down and declined stays forever
-  /// unvisited, so the fallback keeps re-offering it — and because she
-  /// abandons each investigation the moment she arrives (from one cell into
-  /// the branch, the corridor head is closer to the food again, so goal-seek
-  /// turns her round), she buys exactly *one* cell of that branch per round
-  /// trip. Three cells of side branch is three full traversals of the board,
-  /// which is the "she suddenly walks all the way back" this set exists to
-  /// prevent, only slower than the frame-by-frame stutter it was written for.
+  /// **Ground she has merely *seen* does not count, and trying that was a
+  /// mistake worth recording.** Excluding everything her flood-fill had ever
+  /// offered her did kill the pendulum, and it killed rather more than that:
+  /// standing at the head of a spent corridor with an open side branch beside
+  /// her, every cell of that branch was ground she had "already answered", so
+  /// she waited on a wall instead of walking the road the player had already
+  /// built her. A dog who ignores open ground to stare at stone is a worse bug
+  /// than a dog who paces, because the player cannot tell it from a hang.
   ///
-  /// Ground that has *been in her flood* is ground she has already answered.
-  /// What the fallback is for is ground the player has just made — and a cell
-  /// that was solid a moment ago cannot have been in any flood, so newly
-  /// opened ground is always fresh by this test. That is the whole promise it
-  /// has to keep: every tap produces motion.
+  /// What actually made the pacing endless was never this set. It was that an
+  /// investigation *ended on arrival*: one cell into the branch the corridor
+  /// head is closer to the food again, so goal-seek turned her round, and back
+  /// at the head the second cell of that branch was as unwalked as the first
+  /// had been. One traversal of the board per cell of side branch. The fix for
+  /// that belongs to [_detour], which now finishes what it starts — so this
+  /// can go back to meaning the simple, honest thing it says.
   ///
   /// Cleared of anything that has closed again, so ground regrowth takes back
-  /// and the player re-opens counts as new a second time.
-  final Set<HexCoord> _offered = {};
+  /// and the player buys a second time reads as new a second time. Pruning by
+  /// passability and never by flood membership: a cell that has merely fallen
+  /// outside the lookahead is still ground she has walked.
+  final Set<HexCoord> _visited = {};
 
   /// Fresh ground she has set out to investigate, and the best distance to the
   /// food her pocket offered when she set out.
@@ -299,7 +301,7 @@ class Dog {
   }) {
     final previousCell = cell;
     cell = layout.toHex(position);
-    _offered.add(cell);
+    _visited.add(cell);
     if (trail.isEmpty || trail.last != cell) {
       trail.add(cell);
       if (trail.length > 24) {
@@ -457,13 +459,10 @@ class Dog {
     waitingForPatrol = false;
     nowhereToGo = false;
     gazeTarget = null;
-    // Ground that has closed again stops counting as answered, so regrowth
+    // Ground that has closed again stops counting as walked, so regrowth
     // taking a pocket back and the player buying it a second time reads as new
-    // ground both times. Passability, not flood membership, is the test: an
-    // open cell that has merely fallen outside the lookahead is still ground
-    // she has considered, and forgetting it there is how the pendulum gets
-    // back in through the window.
-    _offered.removeWhere((c) => !grid.isPassable(c));
+    // ground both times. See [_visited].
+    _visited.removeWhere((c) => !grid.isPassable(c));
     // Her own cell is never excluded. Standing in the light is a thing that
     // happens to her; treating it as impassable would leave the flood with no
     // source at all and freeze her exactly when she most needs to move.
@@ -522,11 +521,20 @@ class Dog {
       // walking to, so goal-seeking spins her round on the boundary and she
       // never gets anywhere.
       final committed = _detour;
+
+      /// True when she has *arrived* at what she set out to look at, as
+      /// opposed to having it closed on her or beaten by a tap. Only arrival
+      /// earns the right to look further; the other two endings are the world
+      /// telling her the investigation is over.
+      var arrived = false;
       if (committed != null) {
         final reachable = depths.containsKey(committed) && committed != cell;
         final improved =
             target != cell && grid.distanceToExit(target) < _detourBest;
-        if (!reachable || improved) {
+        if (improved) {
+          _detour = null;
+        } else if (!reachable) {
+          arrived = committed == cell;
           _detour = null;
         } else {
           target = committed;
@@ -542,24 +550,39 @@ class Dog {
       // it. That breaks the promise the whole game rests on: you do not move
       // her, you create the reason she moves. Every tap must produce motion.
       //
-      // Excluding ground her pocket has already offered her is what keeps this
-      // from becoming a pendulum. She will investigate what the tap made and,
-      // finding nothing beyond it, settle back — one round trip, not an
-      // endless one. See [_offered]: the exclusion has to be everything she
-      // has already considered, not merely everywhere she has stood, or the
-      // round trip repeats once per cell of whatever she declined.
-      if (target == cell) {
+      // Excluding ground already covered is what keeps this from becoming a
+      // pendulum — but only together with [arrived], which is what makes the
+      // round trip *one* trip.
+      //
+      // Standing where she has just arrived, the way home is closer to the
+      // food than anything ahead of her, so goal-seek wins and the walk ends
+      // one cell in. Back at the far end the next cell along is as unwalked as
+      // this one was, and she sets out again: a full crossing of the board per
+      // cell of whatever she is looking at. Letting an arrival reach for the
+      // next piece of fresh ground spends one walk on the whole branch instead
+      // of one walk on each of its cells, and it terminates for the same
+      // reason it always did — every arrival marks a cell walked, and there
+      // are finitely many.
+      if (target == cell || arrived) {
         final fresh = _bestOf(
           depths,
           grid,
-          (c) => c != cell && !_offered.contains(c),
+          (c) => c != cell && !_visited.contains(c),
         );
         if (fresh != null) {
           target = fresh;
-          // Nothing in the pocket was closer than where she stands, so `here`
-          // is the best it has: the bar the world must beat to call her back.
           _detour = fresh;
-          _detourBest = here;
+          // Kept, not re-taken, while an investigation is being continued.
+          // `here` is now the worse ground she walked *to*, and re-reading the
+          // bar off it would let anything at all beat the branch and spin her
+          // home — the exact oscillation [_detourBest] exists to rule out. The
+          // bar has to stay the pocket she left.
+          if (!arrived) {
+            // Nothing in the pocket was closer than where she stands, so
+            // `here` is the best it has: what the world must beat to call her
+            // back.
+            _detourBest = here;
+          }
         }
       }
 
@@ -577,9 +600,6 @@ class Dog {
 
     steerTarget = target;
     _route = _walkBack(depths, target, grid);
-    // Recorded after the decision, never before: the pocket is only "already
-    // offered" once she has actually chosen against it.
-    _offered.addAll(depths.keys);
   }
 
   /// The wall she is waiting on: of everything solid that a tap could open

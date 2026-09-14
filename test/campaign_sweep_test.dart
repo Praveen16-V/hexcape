@@ -326,6 +326,13 @@ void main() {
         var budget = double.infinity;
         var clock = double.infinity;
         for (var n = Campaign.foundationEnd + 1; n <= Campaign.length; n++) {
+          // Level 52 deliberately starts Normal's late-campaign safety margin.
+          // Compare peaks inside that revised curve; requiring 53 to stay below
+          // the pre-relief level-40 peak would erase the relaxation entirely.
+          if (n == Difficulty.lateCampaignReliefFrom) {
+            budget = double.infinity;
+            clock = double.infinity;
+          }
           final rules = Campaign.rulesFor(n);
           if (rules.pace != LevelPace.challenge) {
             continue;

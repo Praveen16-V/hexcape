@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hexcape/game/difficulty.dart';
 import 'package:hexcape/game/level_rules.dart';
 import 'package:hexcape/gen/level_generator.dart';
 import 'package:hexcape/gen/pathfinder.dart';
@@ -147,6 +148,11 @@ void main() {
           // Stage 20 remains the sharp free-campaign finale. The paid trail
           // deliberately resets for Patrol's introduction, then its own
           // challenge waves climb from stage 31 onward.
+          budget = 99;
+        }
+        if (level == Difficulty.lateCampaignReliefFrom) {
+          // Normal intentionally resets its numeric pressure here so the new
+          // late mechanics stay challenging without becoming exhausting.
           budget = 99;
         }
         final r = Campaign.rulesFor(level);

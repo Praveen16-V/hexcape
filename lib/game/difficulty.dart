@@ -11,11 +11,12 @@
 /// **Normal is the adventure.** Through the three tutorial stages it is a
 /// mathematical no-op — `Campaign.rulesFor(n)` and
 /// `Campaign.rulesFor(n, difficulty: normal)` produce identical rules for
-/// n ≤ [tutorialLevels], which `difficulty_test` asserts. From stage 4 onward
-/// Normal *tightens itself*, a little: the campaign proper was chosen to feel
-/// adventurous rather than padded, so a modest pressure runs on top of the
-/// authored bands. It is still the reference curve — every record, save file
-/// and star in an old save is compared against it.
+/// n ≤ [tutorialLevels], which `difficulty_test` asserts. From stage 4 it adds
+/// a modest adventurer's pressure, but from [lateCampaignReliefFrom] it changes
+/// stance: the authored bands keep introducing harder ideas while Normal hands
+/// back enough space, time and visibility to learn them. It is still the
+/// reference curve — every record, save file and star in an old save is
+/// compared against it.
 ///
 /// **Hard is the steeper parallel trail.** Stages 1–20 retain the original
 /// brutal tuning. The paid campaign then opens at one quarter of the full
@@ -55,6 +56,17 @@ enum Difficulty {
   /// tests pin the number so a change made either side is caught.
   static const tutorialLevels = 3;
 
+  /// Normal's late-campaign safety margin begins here.
+  ///
+  /// Warded light arrives at 50 and its answer arrives at 52. Past that point
+  /// the campaign keeps adding position, rhythm and lock mechanics; continuing
+  /// to tighten every numeric axis as well made the second half exhausting
+  /// rather than satisfyingly hard. Hard deliberately does not use this relief.
+  static const lateCampaignReliefFrom = 52;
+
+  bool _hasLateNormalRelief(int level) =>
+      this == Difficulty.normal && level >= lateCampaignReliefFrom;
+
   /// How much of the full Normal-to-Hard gap applies after stage 20.
   ///
   /// The earlier campaign is intentionally frozen for save and authored-board
@@ -83,6 +95,7 @@ enum Difficulty {
   /// 4 Normal carries its small adventurer's tax while Hard carries a punitive
   /// one. Floored by the caller at [budgetFloor].
   double budgetRelief(int level) => switch ((this, level > tutorialLevels)) {
+    (Difficulty.normal, true) when _hasLateNormalRelief(level) => 0.10,
     (Difficulty.normal, true) => -0.04,
     (Difficulty.normal, false) => 0,
     (Difficulty.hard, true) when level <= 20 => -0.20,
@@ -106,6 +119,7 @@ enum Difficulty {
   /// Added to the seconds-per-cell hunger clock. Floored at [hungerFloor] for
   /// the same reason the budget is floored.
   double hungerRelief(int level) => switch ((this, level > tutorialLevels)) {
+    (Difficulty.normal, true) when _hasLateNormalRelief(level) => 0.18,
     (Difficulty.normal, true) => -0.04,
     (Difficulty.normal, false) => 0,
     (Difficulty.hard, true) when level <= 20 => -0.22,
@@ -147,6 +161,7 @@ enum Difficulty {
   /// animation is fixed, so this number controls how much of the three-second
   /// body of the close she is shown.
   double regrowRelief(int level) => switch ((this, level > tutorialLevels)) {
+    (Difficulty.normal, true) when _hasLateNormalRelief(level) => 1.2,
     (Difficulty.normal, true) => -0.3,
     (Difficulty.normal, false) => 0,
     (Difficulty.hard, true) when level <= 20 => -1.4,
@@ -168,6 +183,7 @@ enum Difficulty {
   /// in the tutorial the fog remains exactly what the script expects.
   double revealMultiplierFor(int level) =>
       switch ((this, level > tutorialLevels)) {
+        (Difficulty.normal, true) when _hasLateNormalRelief(level) => 1.08,
         (Difficulty.normal, true) => 0.92,
         (Difficulty.normal, false) => 1.0,
         (Difficulty.hard, true) when level <= 20 => 0.6,
@@ -187,6 +203,7 @@ enum Difficulty {
   /// How long rhythm windows stay open: alarm hurries, and the effective beat
   /// of blinkers and runner pauses as it is felt through the shared light pace.
   double rhythmScaleFor(int level) => switch (this) {
+    Difficulty.normal when _hasLateNormalRelief(level) => 1.15,
     Difficulty.normal => 1.0,
     Difficulty.hard when level <= 20 => 0.7,
     Difficulty.hard => 1.0 - 0.3 * _hardFactor(level),
