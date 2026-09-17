@@ -769,7 +769,27 @@ class Campaign {
   /// lit, in either mode, and both modes keep a second way round within three
   /// taps of the first. The patrols still own ground worth crossing; they no
   /// longer own the only way past.
-  static const _authoredSeedOverrides = {11: 11441, 20: 26895, 40: 101599};
+  /// A campaign sweep found ten later boards where a short Hard clock was
+  /// being spent on routes that earned too little time per step. They were tighter
+  /// than the surrounding levels even when the player knew the route. Level
+  /// 57 also stranded most pickups away from its answer; 60's only cheap way
+  /// through ran under patrol light. These seeds give the same authored rules
+  /// more useful routes, accessible supplies, and a fairer time per step.
+  static const _authoredSeedOverrides = {
+    11: 11441,
+    20: 26895,
+    40: 101599,
+    57: 100010,
+    60: 100031,
+    65: 100001,
+    71: 100055,
+    76: 100004,
+    80: 100033,
+    82: 100007,
+    88: 100025,
+    93: 100011,
+    99: 100016,
+  };
 
   /// The seed for a level, from its number, by an explicit mixer.
   ///
@@ -1261,11 +1281,17 @@ class Campaign {
       _ => 0.0,
     };
     final extras = _extrasFor(level);
-    final budgetFloor =
+    // The old 88 board gave Hard zero discovery taps on top of the shortest
+    // route. Its new route is shorter, but fog and eight lights still make a
+    // strictly par-only finish too brittle. Keep one tap of room here; level
+    // 100 remains the final par-only peak.
+    final needsHardDiscoveryTap =
         difficulty == Difficulty.hard &&
-            level > collapseEnd &&
-            level <= length &&
-            pace != LevelPace.challenge
+        (level == 88 ||
+            (level > collapseEnd &&
+                level <= length &&
+                pace != LevelPace.challenge));
+    final budgetFloor = needsHardDiscoveryTap
         ? 1.01
         : difficulty.budgetFloorFor(level);
 
