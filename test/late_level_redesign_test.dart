@@ -3,6 +3,7 @@ import 'package:hexcape/game/difficulty.dart';
 import 'package:hexcape/game/level_rules.dart';
 import 'package:hexcape/gen/level_generator.dart';
 import 'package:hexcape/gen/pathfinder.dart';
+import 'package:hexcape/hex/hex_cell.dart';
 import 'package:hexcape/hex/hex_coord.dart';
 
 import 'sim/simulated_player.dart' show specFor;
@@ -44,7 +45,10 @@ void main() {
   const seeds = {
     57: 100010,
     60: 100031,
+    64: 105783,
     65: 100001,
+    66: 107619,
+    69: 102135,
     71: 100055,
     76: 100004,
     80: 100033,
@@ -114,6 +118,103 @@ void main() {
       final alternate = _alternateCost(level, route);
       expect(alternate, isNotNull, reason: difficulty.label);
       expect(alternate! - level.par, lessThanOrEqualTo(5));
+    }
+  });
+
+  test('64 stays a challenge without a long lit corridor', () {
+    for (final difficulty in Difficulty.values) {
+      final rules = Campaign.rulesFor(64, difficulty: difficulty);
+      final level = LevelGenerator.generate(specFor(rules));
+      final route = _route(level);
+      final alternate = _alternateCost(level, route);
+
+      expect(rules.identity.title, 'Standing Stone');
+      expect(rules.pace, LevelPace.challenge);
+      expect(route.length - 1, inInclusiveRange(24, 25));
+      expect(level.par, 31);
+      expect(_litRouteCells(level, route), 0, reason: difficulty.label);
+      expect(alternate, isNotNull, reason: difficulty.label);
+      expect(alternate! - level.par, lessThanOrEqualTo(5));
+    }
+  });
+
+  test('66 has useful arrows without a mandatory push into a wall', () {
+    for (final difficulty in Difficulty.values) {
+      final rules = Campaign.rulesFor(66, difficulty: difficulty);
+      final level = LevelGenerator.generate(specFor(rules));
+      final grid = level.grid;
+      final route = _route(level);
+      final arrows = grid.all.where((cell) => cell.type == HexType.slope);
+      final magnets = grid.all.where((cell) => cell.type == HexType.magnet);
+
+      expect(rules.identity.title, 'Thin Floor');
+      expect(rules.pace, LevelPace.introduction);
+      expect(arrows.length, greaterThanOrEqualTo(3));
+      expect(magnets, isNotEmpty);
+      expect(
+        magnets.any((m) => route.any((c) => c.distanceTo(m.coord) <= 2)),
+        isTrue,
+        reason: '${difficulty.label} misses the magnet introduction',
+      );
+      for (final arrow in arrows) {
+        final ahead = arrow.coord + HexCoord.directions[arrow.slopeDirection];
+        expect(
+          grid.isTraversableInPrinciple(ahead),
+          isTrue,
+          reason: '${difficulty.label} arrow ${arrow.coord} points into a wall',
+        );
+      }
+      expect(
+        route.any((c) => grid.at(c)!.type == HexType.slope),
+        isFalse,
+        reason: '${difficulty.label} must cross an arrow to finish',
+      );
+      expect(_litRouteCells(level, route), lessThanOrEqualTo(1));
+    }
+  });
+
+  test('69 practises arrows without forcing a push away from the exit', () {
+    for (final difficulty in Difficulty.values) {
+      final rules = Campaign.rulesFor(69, difficulty: difficulty);
+      final level = LevelGenerator.generate(specFor(rules));
+      final grid = level.grid;
+      final route = _route(level);
+      final arrows = grid.all.where((cell) => cell.type == HexType.slope);
+      final magnets = grid.all.where((cell) => cell.type == HexType.magnet);
+      final near = level.pickups
+          .where((p) => route.any((c) => c.distanceTo(p.coord) <= 2))
+          .length;
+
+      expect(rules.identity.title, 'Undermine');
+      expect(rules.pace, LevelPace.practice);
+      expect(route.length - 1, 23);
+      expect(arrows.length, greaterThanOrEqualTo(4));
+      expect(near, greaterThanOrEqualTo(4));
+      expect(
+        magnets.any((m) => route.any((c) => c.distanceTo(m.coord) <= 2)),
+        isTrue,
+        reason: '${difficulty.label} misses the magnet practice',
+      );
+      for (final arrow in arrows) {
+        final ahead = arrow.coord + HexCoord.directions[arrow.slopeDirection];
+        expect(
+          grid.isTraversableInPrinciple(ahead),
+          isTrue,
+          reason: '${difficulty.label} arrow ${arrow.coord} points into a wall',
+        );
+      }
+      expect(
+        route.any((c) => grid.at(c)!.type == HexType.slope),
+        isFalse,
+        reason: '${difficulty.label} must cross an arrow to finish',
+      );
+      expect(_litRouteCells(level, route), lessThanOrEqualTo(1));
+      final clockPerStep =
+          level.par * rules.hungerSecondsPerCell / (route.length - 1);
+      expect(
+        clockPerStep,
+        greaterThanOrEqualTo(difficulty == Difficulty.hard ? 1.15 : 1.3),
+      );
     }
   });
 }

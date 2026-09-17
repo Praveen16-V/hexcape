@@ -775,13 +775,26 @@ class Campaign {
   /// 57 also stranded most pickups away from its answer; 60's only cheap way
   /// through ran under patrol light. These seeds give the same authored rules
   /// more useful routes, accessible supplies, and a fairer time per step.
+  /// Level 64's original key-shaped field added a separate spike: both modes
+  /// took over thirty steps through four patrol-lit cells, with no useful way
+  /// round. Its replacement keeps the challenge rules on a shorter, forked
+  /// field whose cheapest route stays clear of the lights.
+  /// Level 66's Hard route crossed a left arrow that aimed directly into an
+  /// anchor. Its replacement keeps arrow lanes and the new magnet visible,
+  /// while leaving a clear route that never requires an arrow push.
+  /// Level 69 put three away-pointing arrows on Hard's cheapest route. Going
+  /// around them spent the whole tap margin. Its new field keeps the arrows
+  /// and magnet near play, but gives both modes a route free of forced pushes.
   static const _authoredSeedOverrides = {
     11: 11441,
     20: 26895,
     40: 101599,
     57: 100010,
     60: 100031,
+    64: 105783,
     65: 100001,
+    66: 107619,
+    69: 102135,
     71: 100055,
     76: 100004,
     80: 100033,
