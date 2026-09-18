@@ -150,9 +150,9 @@ void main() {
           // challenge waves climb from stage 31 onward.
           budget = 99;
         }
-        if (level == Difficulty.lateCampaignReliefFrom) {
-          // Normal intentionally resets its numeric pressure here so the new
-          // late mechanics stay challenging without becoming exhausting.
+        if (level == Difficulty.lateCampaignReliefFrom || level == 71) {
+          // Both Normal relief steps reset numeric pressure so new late
+          // mechanics stay readable without erasing the challenge curve.
           budget = 99;
         }
         final r = Campaign.rulesFor(level);

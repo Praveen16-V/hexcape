@@ -61,14 +61,8 @@ void main() {
       expect(breach.introduces, contains('DIG'));
       expect(breach.pace, LevelPace.combination);
       expect(Campaign.rulesFor(42).pace, LevelPace.combination);
-      expect(
-        Campaign.rulesFor(Campaign.hardpanFrom).pace,
-        LevelPace.introduction,
-      );
-      expect(
-        Campaign.rulesFor(Campaign.hardpanFrom + 1).pace,
-        LevelPace.practice,
-      );
+      expect(Campaign.rulesFor(Campaign.hardpanFrom).hardpanDensity, 0);
+      expect(Campaign.rulesFor(Campaign.hardpanFrom).introduces, isNull);
     });
 
     test('focused pickup pools never offer a locked mechanic early', () {

@@ -73,8 +73,8 @@ void main() {
       }
       expect(
         referenceFor(Campaign.length).length,
-        allReferenceEntries.length,
-        reason: 'something is never shown, even at the end of the campaign',
+        lessThan(allReferenceEntries.length),
+        reason: 'retired mechanics must stay out of the player reference',
       );
     });
 

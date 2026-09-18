@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../entities/pickup.dart';
 import '../gen/silhouette.dart';
 import 'difficulty.dart';
+import 'mechanic_roster.dart';
 
 /// The rebuilt families' per-level values, as one bag so `_band` can merge
 /// them into [LevelRules] without the fields threading through the old band
@@ -533,16 +534,6 @@ class Campaign {
   /// Enough springs on a board to be met rather than merely present.
   static const _springIntroDensity = 0.03;
 
-  /// Enough slopes on a board to be met rather than merely present.
-  ///
-  /// They are laid in runs of two or three, so this is about two lanes. Without
-  /// it the level that *announces* slopes generated exactly one tile on a
-  /// board of two hundred and fifty — the same trap springs and faults each
-  /// fell into, and for the same reason: a band curve that starts at zero puts
-  /// nothing on the board at the gate, which is the one level where the player
-  /// has been promised something.
-  static const _slopeIntroDensity = 0.05;
-
   /// Enough sunken ground to be walked into rather than stepped around.
   ///
   /// 0.10 was enough on a full board and not on the one that announces it.
@@ -779,12 +770,10 @@ class Campaign {
   /// took over thirty steps through four patrol-lit cells, with no useful way
   /// round. Its replacement keeps the challenge rules on a shorter, forked
   /// field whose cheapest route stays clear of the lights.
-  /// Level 66's Hard route crossed a left arrow that aimed directly into an
-  /// anchor. Its replacement keeps arrow lanes and the new magnet visible,
-  /// while leaving a clear route that never requires an arrow push.
-  /// Level 69 put three away-pointing arrows on Hard's cheapest route. Going
-  /// around them spent the whole tap margin. Its new field keeps the arrows
-  /// and magnet near play, but gives both modes a route free of forced pushes.
+  /// Arrows were later retired from the campaign roster. A fresh sweep of
+  /// levels 71–100 found boards that enclosed her early or ran out the Hard
+  /// clock even on a known route. Their revised seeds were checked in both
+  /// modes with direct play and a deliberate detour for a treat.
   static const _authoredSeedOverrides = {
     11: 11441,
     20: 26895,
@@ -795,13 +784,27 @@ class Campaign {
     65: 100001,
     66: 107619,
     69: 102135,
-    71: 100055,
+    71: 200299,
+    72: 200124,
+    74: 200098,
+    75: 200066,
     76: 100004,
-    80: 100033,
-    82: 100007,
-    88: 100025,
-    93: 100011,
-    99: 100016,
+    79: 200011,
+    80: 200303,
+    81: 200016,
+    82: 200176,
+    85: 200074,
+    86: 200005,
+    87: 200119,
+    88: 200102,
+    89: 200028,
+    90: 200128,
+    92: 200060,
+    93: 200237,
+    95: 200296,
+    96: 200020,
+    98: 200159,
+    99: 200312,
   };
 
   /// The seed for a level, from its number, by an explicit mixer.
@@ -1336,6 +1339,12 @@ class Campaign {
     final lateHeavyRelief = level >= Difficulty.lateCampaignReliefFrom
         ? 0.02
         : 0.0;
+    // The final thirty boards have more moving lights and less plain ground.
+    // Give both modes enough time to read them; Hard keeps denser walls, more
+    // lights and the leaner tap budget, but no longer compresses every timer
+    // at once. These values apply to the rules, so dailies and previews agree.
+    final lateReadability = level >= 71;
+    final lateHard = lateReadability && difficulty == Difficulty.hard;
     // Heavy Ground normally trades some rivets for more two-hit tiles so its
     // subject stays readable. Level 11 is also a full challenge peak, though,
     // and applying that relief made it easier than level 8 while still leaving
@@ -1357,12 +1366,18 @@ class Campaign {
       // than the level before is the opposite of an introduction.
       anchorDensity: math.max(
         0,
-        (baseAnchor - pace.anchorRelief - lateAnchorRelief + anchorSignatureDelta) *
+        (baseAnchor -
+                pace.anchorRelief -
+                lateAnchorRelief +
+                anchorSignatureDelta) *
             osWalls,
       ),
       heavyDensity: math.max(
         0,
-        (baseHeavy - pace.heavyRelief - lateHeavyRelief + pace.allow(signature.heavyDelta)) *
+        (baseHeavy -
+                pace.heavyRelief -
+                lateHeavyRelief +
+                pace.allow(signature.heavyDelta)) *
             osWalls,
       ),
       // Floored, not merely interpolated. The band's own curve starts at zero,
@@ -1390,11 +1405,7 @@ class Campaign {
       // same strength for thirty levels running is wallpaper.
       // Floored at the introduction and the practice beat after it, exactly as
       // springs and faults are, and for exactly the same reason.
-      slopeDensity: level >= slopesFrom
-          ? (level <= slopesFrom + 1
-                ? math.max(_slopeIntroDensity, _lerp(band.slope, t) * os)
-                : _lerp(band.slope, t) * pace.obstacleMultiplier * os)
-          : 0,
+      slopeDensity: 0,
       sunkenDensity: level >= sunkenFrom
           ? (level <= sunkenFrom + 1
                 ? math.max(_sunkenIntroDensity, _lerp(band.sunken, t) * os)
@@ -1417,7 +1428,8 @@ class Campaign {
               baseGuards -
                   pace.guardRelief +
                   difficulty.guardDelta(level) +
-                  (pace == LevelPace.combination ? signature.guardBonus : 0),
+                  (pace == LevelPace.combination ? signature.guardBonus : 0) -
+                  (lateHard ? 1 : 0),
             )
           : 0,
       // Ceilinged at Vigil's own fastest patrol, shifted by exactly the step
@@ -1438,7 +1450,8 @@ class Campaign {
               _lerpInt(band.sentries, t) +
                   difficulty.guardDelta(level) +
                   (pace == LevelPace.combination ? signature.sentryBonus : 0) -
-                  pace.guardRelief,
+                  pace.guardRelief -
+                  (lateHard ? 1 : 0),
             )
           : 0,
       treats: math.max(
@@ -1470,18 +1483,22 @@ class Campaign {
         baseRegrow +
             pace.regrowRelief +
             difficulty.regrowRelief(level) +
-            signature.regrowDelta,
+            signature.regrowDelta +
+            (lateReadability ? (lateHard ? 2.3 : 1.3) : 0),
       ),
       fog: true,
       budget: true,
       // Floored per mode, not per campaign: Normal holds the fairness limit
       // `campaign_sweep_test` enforces (two spare taps at every point), while
-      // Hard keeps discovery room through stage 80 and permits par-only
-      // budgets only on late challenge peaks. The floor is the difference
-      // between "very tough" and "arithmetically impossible".
+      // Hard keeps discovery room through stage 80; the final thirty levels
+      // gain a little more room in both modes so fog is a question the player
+      // can answer, even on a challenge peak.
       budgetMultiplier: math.max(
         budgetFloor,
-        baseBudget + pace.budgetRelief + difficulty.budgetRelief(level),
+        baseBudget +
+            pace.budgetRelief +
+            difficulty.budgetRelief(level) +
+            (lateReadability ? (lateHard ? 0.08 : 0.06) : 0),
       ),
       hunger: true,
       hungerSecondsPerCell: math.max(
@@ -1489,28 +1506,28 @@ class Campaign {
         baseHunger +
             pace.hungerRelief +
             hungerRelief +
-            difficulty.hungerRelief(level),
+            difficulty.hungerRelief(level) +
+            (lateReadability ? (lateHard ? 0.40 : 0.15) : 0),
       ),
       // The rebuilt families. Densities scale with the beat like every other
       // obstacle; light counts floor at one wherever they exist for the same
       // reason patrols do — a taught mechanic stays taught.
       mireDensity: extras.mireDensity * pace.obstacleMultiplier * os,
       thicketDensity: extras.thicketDensity * pace.obstacleMultiplier * os,
-      sleeperDensity: extras.sleeperDensity * pace.obstacleMultiplier * os,
-      foxfireDensity: extras.foxfireDensity * pace.obstacleMultiplier * os,
-      thatchDensity: extras.thatchDensity * pace.obstacleMultiplier * os,
-      iceDensity: extras.iceDensity * pace.obstacleMultiplier * os,
+      sleeperDensity: 0,
+      foxfireDensity: 0,
+      thatchDensity: 0,
+      iceDensity: 0,
       alarmDensity: extras.alarmDensity * pace.obstacleMultiplier * os,
-      hardpanDensity: extras.hardpanDensity * pace.obstacleMultiplier * os,
-      overgrowthDensity:
-          extras.overgrowthDensity * pace.obstacleMultiplier * os,
-      eddyDensity: extras.eddyDensity * pace.obstacleMultiplier * os,
-      scaffoldDensity: extras.scaffoldDensity * pace.obstacleMultiplier * os,
-      magnetDensity: extras.magnetDensity * pace.obstacleMultiplier * os,
+      hardpanDensity: 0,
+      overgrowthDensity: 0,
+      eddyDensity: 0,
+      scaffoldDensity: 0,
+      magnetDensity: 0,
       thornDensity: extras.thornDensity * pace.obstacleMultiplier * os,
-      tremorDensity: extras.tremorDensity * os,
-      gatePairs: extras.gatePairs,
-      mirrorPairs: extras.mirrorPairs,
+      tremorDensity: 0,
+      gatePairs: 0,
+      mirrorPairs: 0,
       gloom: extras.gloom,
       // The exotic lights stay authored on both modes. Hard's extra lights were
       // applied to every family, so the finale asked for sixteen exotic lamps
@@ -1555,31 +1572,18 @@ class Campaign {
     if (level == mireFrom ||
         level == springsFrom ||
         level == thicketFrom ||
-        level == sleeperFrom ||
-        level == foxfireFrom ||
         level == guardsFrom ||
         level == faultsFrom ||
-        level == thatchFrom ||
-        level == iceFrom ||
         level == alarmFrom ||
-        level == hardpanFrom ||
-        level == overgrowthFrom ||
         level == sentriesFrom ||
-        level == eddyFrom ||
-        level == scaffoldFrom ||
-        level == slopesFrom ||
-        level == magnetFrom ||
         level == spinnerFrom ||
         level == blinkerFrom ||
         level == beaconFrom ||
-        level == gateFrom ||
         level == runnerFrom ||
         level == sunkenFrom ||
-        level == mirrorFrom ||
         level == thornFrom ||
         level == wardenFrom ||
-        level == gloomFrom ||
-        level == tremorFrom) {
+        level == gloomFrom) {
       return LevelPace.introduction;
     }
     // A practice beat follows every new *hazard* — springs, patrols, cracked
@@ -1592,31 +1596,18 @@ class Campaign {
         level == mireFrom + 1 ||
         level == springsFrom + 1 ||
         level == thicketFrom + 1 ||
-        level == sleeperFrom + 1 ||
-        level == foxfireFrom + 1 ||
         level == guardsFrom + 1 ||
         level == faultsFrom + 1 ||
-        level == thatchFrom + 1 ||
-        level == iceFrom + 1 ||
         level == alarmFrom + 1 ||
-        level == hardpanFrom + 1 ||
-        level == overgrowthFrom + 1 ||
         level == sentriesFrom + 1 ||
-        level == eddyFrom + 1 ||
-        level == scaffoldFrom + 1 ||
-        level == slopesFrom + 1 ||
-        level == magnetFrom + 1 ||
         level == spinnerFrom + 1 ||
         level == blinkerFrom + 1 ||
         level == beaconFrom + 1 ||
-        level == gateFrom + 1 ||
         level == runnerFrom + 1 ||
         level == sunkenFrom + 1 ||
-        level == mirrorFrom + 1 ||
         level == thornFrom + 1 ||
         level == wardenFrom + 1 ||
-        level == gloomFrom + 1 ||
-        level == tremorFrom + 1) {
+        level == gloomFrom + 1) {
       return LevelPace.practice;
     }
     if (level == foundationEnd ||
@@ -1677,28 +1668,28 @@ class Campaign {
       heavyDensity: math.min(0.34 * os, (0.32 + 0.02 * t) * os),
       springDensity: 0.10 * os,
       faultDensity: math.min(0.25 * os, (0.22 + 0.03 * t) * os),
-      slopeDensity: math.min(0.15 * os, (0.12 + 0.03 * t) * os),
+      slopeDensity: 0,
       sunkenDensity: math.min(0.16 * os, (0.13 + 0.03 * t) * os),
       // The rebuilt families carry on past the campaign, capped rather than
       // approached so the arithmetic cannot drift past a real limit — same
       // discipline as the classic six, and for the same reason: an endless
       // mode that becomes arithmetically impossible is not difficulty.
-      hardpanDensity: math.min(0.06 * os, (0.05 + 0.01 * t) * os),
-      thatchDensity: 0.05 * os,
-      overgrowthDensity: 0.012 * os,
-      tremorDensity: 0.010 * os,
-      iceDensity: 0.035 * os,
+      hardpanDensity: 0,
+      thatchDensity: 0,
+      overgrowthDensity: 0,
+      tremorDensity: 0,
+      iceDensity: 0,
       mireDensity: 0.075 * os,
-      eddyDensity: 0.03 * os,
-      magnetDensity: 0.03 * os,
+      eddyDensity: 0,
+      magnetDensity: 0,
       thicketDensity: 0.05 * os,
-      sleeperDensity: 0.04 * os,
-      foxfireDensity: 0.03 * os,
-      scaffoldDensity: 0.028 * os,
+      sleeperDensity: 0,
+      foxfireDensity: 0,
+      scaffoldDensity: 0,
       thornDensity: math.min(0.032 * os, (0.028 + 0.004 * t) * os),
       alarmDensity: 0.012 * os,
-      gatePairs: 2,
-      mirrorPairs: 2,
+      gatePairs: 0,
+      mirrorPairs: 0,
       gloom: true,
       spinners: 1,
       blinkers: 1,
@@ -1764,40 +1755,19 @@ class Campaign {
   /// STAKE could not drop one. A gate is the single fact about when a tool
   /// exists, so this asks the gates.
   ///
-  /// After the rebuild the pool is the whole thirty eventually: each kind
-  /// lands on its own gate and stays in the bag from then on. Resources
-  /// (`treat`, `ration`) are filtered out of the *powerup* draws downstream —
-  /// they feed the economy through their own counts.
+  /// The active pool grows to ten powers; treats are placed separately by
+  /// count. Older pickup kinds remain implemented but do not enter the bag.
   static List<PickupKind> poolFor(int level) => [
     PickupKind.freeze,
     PickupKind.radiusPlus,
     PickupKind.sprint,
-    if (level >= rationFrom) PickupKind.ration,
-    if (level >= lanternFrom) PickupKind.lantern,
     if (level >= pairworkFrom) PickupKind.pairwork,
     if (level > foundationEnd) ...[PickupKind.scent, PickupKind.blast],
-    if (level >= slowbeatFrom) PickupKind.slowbeat,
     if (level >= cloakFrom) PickupKind.cloak,
     if (level >= stakeFrom) PickupKind.stake,
-    if (level >= trowelFrom) PickupKind.trowel,
-    if (level >= harvestFrom) PickupKind.harvest,
-    if (level >= whistleFrom) PickupKind.whistle,
     if (level >= digFrom) PickupKind.dig,
-    if (level >= maulFrom) PickupKind.maul,
-    if (level >= rewindFrom) PickupKind.rewind,
-    if (level >= surepawsFrom) PickupKind.surepaws,
     if (level >= wardownFrom) PickupKind.wardown,
-    if (level >= heelFrom) PickupKind.heel,
-    if (level >= echoFrom) PickupKind.echo,
-    if (level >= seedFrom) PickupKind.seed,
-    if (level >= moleFrom) PickupKind.mole,
-    if (level >= waystoneFrom) PickupKind.waystone,
-    if (level >= beaconDropFrom) PickupKind.beacon,
-    if (level >= nightEyesFrom) PickupKind.nightEyes,
-    if (level >= pouchFrom) PickupKind.pouch,
-    if (level >= ironpawFrom) PickupKind.ironpaw,
-    if (level >= keepsakeFrom) PickupKind.keepsake,
-  ];
+  ].where(MechanicRoster.powerups.contains).toList();
 
   /// The banner for a level, or null on the great majority that introduce
   /// nothing.
@@ -1805,80 +1775,110 @@ class Campaign {
   /// Hazards say what they do to her or to you; tools say where to arm them.
   /// One sentence each, and the level that carries it is the gate that spawned
   /// it, so the two can never disagree.
-  static String? introductionAt(int level) => switch (level) {
-    // Fog arrived silently when the tutorial was five levels long — it was
-    // simply switched on and never mentioned. It is the first thing the real
-    // game does that the guided levels did not.
-    fogFrom => 'You see only what she is near. Carve to look around',
-    mireFrom => 'Mire is slow ground. It charges the clock, not your taps',
-    springsFrom => 'Springs throw her the way she was already walking',
-    thicketFrom =>
-      'Thicket hides whatever stands behind it. Cut through to see',
-    rationFrom => 'RATION pays taps back, nothing else',
-    sleeperFrom => 'Some tiles stay disguised until she is right beside them',
-    lanternFrom => 'LANTERN pushes the fog back for a while',
-    foxfireFrom => 'Foxfire glows like a prize and is nothing. Look twice',
-    pairworkFrom => 'PAIRWORK makes every tap strike twice',
-    guardsFrom => 'Patrols sweep the field. She will not walk into the light',
-    slowbeatFrom => 'SLOWBEAT halves every light on the board',
-    cloakFrom => 'CLOAK lets her cross lit ground untouched',
-    faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
-    stakeFrom => 'STAKE pins one open tile open for good. Arm it from the HUD',
-    thatchFrom =>
-      'One-cross braid: it stays open until she has crossed it once',
-    trowelFrom => 'TROWEL clears three in a line. Arm it from the HUD',
-    iceFrom => 'Ice keeps her heading. Aim the entry; there are no corrections',
-    harvestFrom => 'HARVEST fetches the nearest prize. Arm it from the HUD',
-    alarmFrom => 'Alarm tiles wake every light. The shortcut has a siren on it',
-    whistleFrom => 'WHISTLE walks her back along her own trail. Arm it above',
-    digFrom => 'DIG breaks a riveted tile or a heart. Arm it from the HUD',
-    maulFrom => 'MAUL breaks any tile in one tap. Arm it from the HUD',
-    hardpanFrom => 'Slab ground takes three taps. MAUL answers it in one',
-    rewindFrom => 'REWIND reopens what the field just closed. Arm it above',
-    overgrowthFrom =>
-      'A heart of bramble doubles the closing nearby. DIG answers it',
-    surepawsFrom => 'SUREPAWS — no ground can throw, drag or slide her',
-    sentriesFrom =>
-      'Warded lights refuse your taps. Wait for the sweep to pass',
-    wardownFrom => 'WARDOWN lets your taps land inside the light',
-    heelFrom => 'HEEL holds her still for a moment. Arm it from the HUD',
-    eddyFrom => 'Eddies push her off her line as she crosses. Mind the drift',
-    echoFrom => 'ECHO strikes the mirrored tile too. Arm it from the HUD',
-    scaffoldFrom =>
-      'Scaffolds refuse taps from too close. Clear them from range',
-    seedFrom => 'SEED walls one plain tile for good. Arm it from the HUD',
-    slopesFrom =>
-      'Arrows push her the way they point. Read one before you open it',
-    moleFrom => 'MOLE opens any revealed tile, anywhere. Arm it from the HUD',
-    magnetFrom => 'Blooms pull her in as she crosses. Choose which to open',
-    spinnerFrom => 'Ring lights circle their pivot. The window swings round',
-    waystoneFrom => 'WAYSTONE — the bearing home, always quietly shown',
-    blinkerFrom =>
-      'Blinker patches are dark half the time. Tap on the off-beat',
-    beaconFrom =>
-      'A beacon never moves and never relents. Work around its light',
-    gateFrom =>
-      'A gate opens only from its switch tile, somewhere off the route',
-    beaconDropFrom =>
-      'BEACON plants a lamp where she stands. Arm it from the HUD',
-    runnerFrom =>
-      'Runners dash a straight line, then breathe. Cross on the breath',
-    nightEyesFrom =>
-      'OWL EYES — she sees a little further for the rest of the run',
-    sunkenFrom => 'Sunken ground only clears from beside it. Carve up to it',
-    mirrorFrom =>
-      'Mirrored tiles open together or not at all. ECHO answers them',
-    pouchFrom => 'POUCH doubles the next treat you find',
-    thornFrom => 'Thorns cost two seconds underfoot. Step or steer around',
-    ironpawFrom => 'IRONPAW — thorns and alarms stop minding her crossing',
-    wardenFrom => 'Wardens close every open tile they pass. Keep ahead of it',
-    gloomFrom =>
-      'The middle of this field sits in gloom. Sight is halved there',
-    tremorFrom =>
-      'Vents fire closing surges on a rhythm. Two taps silences one',
-    keepsakeFrom => 'KEEPSAKE — one mercy, spent when all is lost',
-    _ => null,
-  };
+  static String? introductionAt(int level) {
+    if (!{
+      fogFrom,
+      mireFrom,
+      springsFrom,
+      thicketFrom,
+      pairworkFrom,
+      guardsFrom,
+      faultsFrom,
+      cloakFrom,
+      stakeFrom,
+      alarmFrom,
+      digFrom,
+      wardownFrom,
+      sentriesFrom,
+      spinnerFrom,
+      blinkerFrom,
+      beaconFrom,
+      runnerFrom,
+      sunkenFrom,
+      thornFrom,
+      wardenFrom,
+      gloomFrom,
+    }.contains(level)) {
+      return null;
+    }
+    return switch (level) {
+      // Fog arrived silently when the tutorial was five levels long — it was
+      // simply switched on and never mentioned. It is the first thing the real
+      // game does that the guided levels did not.
+      fogFrom => 'You see only what she is near. Carve to look around',
+      mireFrom => 'Mire is slow ground. It charges the clock, not your taps',
+      springsFrom => 'Springs throw her the way she was already walking',
+      thicketFrom =>
+        'Thicket hides whatever stands behind it. Cut through to see',
+      rationFrom => 'RATION pays taps back, nothing else',
+      sleeperFrom => 'Some tiles stay disguised until she is right beside them',
+      lanternFrom => 'LANTERN pushes the fog back for a while',
+      foxfireFrom => 'Foxfire glows like a prize and is nothing. Look twice',
+      pairworkFrom => 'PAIRWORK makes every tap strike twice',
+      guardsFrom => 'Patrols sweep the field. She will not walk into the light',
+      slowbeatFrom => 'SLOWBEAT halves every light on the board',
+      cloakFrom => 'CLOAK lets her cross lit ground untouched',
+      faultsFrom => 'Cracked tiles close on their own. Carve late, keep moving',
+      stakeFrom =>
+        'STAKE pins one open tile open for good. Arm it from the HUD',
+      thatchFrom =>
+        'One-cross braid: it stays open until she has crossed it once',
+      trowelFrom => 'TROWEL clears three in a line. Arm it from the HUD',
+      iceFrom =>
+        'Ice keeps her heading. Aim the entry; there are no corrections',
+      harvestFrom => 'HARVEST fetches the nearest prize. Arm it from the HUD',
+      alarmFrom =>
+        'Alarm tiles wake every light. The shortcut has a siren on it',
+      whistleFrom => 'WHISTLE walks her back along her own trail. Arm it above',
+      digFrom => 'DIG breaks a riveted tile or a heart. Arm it from the HUD',
+      maulFrom => 'MAUL breaks any tile in one tap. Arm it from the HUD',
+      hardpanFrom => 'Slab ground takes three taps. MAUL answers it in one',
+      rewindFrom => 'REWIND reopens what the field just closed. Arm it above',
+      overgrowthFrom =>
+        'A heart of bramble doubles the closing nearby. DIG answers it',
+      surepawsFrom => 'SUREPAWS — no ground can throw, drag or slide her',
+      sentriesFrom =>
+        'Warded lights refuse your taps. Wait for the sweep to pass',
+      wardownFrom => 'WARDOWN lets your taps land inside the light',
+      heelFrom => 'HEEL holds her still for a moment. Arm it from the HUD',
+      eddyFrom => 'Eddies push her off her line as she crosses. Mind the drift',
+      echoFrom => 'ECHO strikes the mirrored tile too. Arm it from the HUD',
+      scaffoldFrom =>
+        'Scaffolds refuse taps from too close. Clear them from range',
+      seedFrom => 'SEED walls one plain tile for good. Arm it from the HUD',
+      slopesFrom =>
+        'Arrows push her the way they point. Read one before you open it',
+      moleFrom => 'MOLE opens any revealed tile, anywhere. Arm it from the HUD',
+      magnetFrom => 'Blooms pull her in as she crosses. Choose which to open',
+      spinnerFrom => 'Ring lights circle their pivot. The window swings round',
+      waystoneFrom => 'WAYSTONE — the bearing home, always quietly shown',
+      blinkerFrom =>
+        'Blinker patches are dark half the time. Tap on the off-beat',
+      beaconFrom =>
+        'A beacon never moves and never relents. Work around its light',
+      gateFrom =>
+        'A gate opens only from its switch tile, somewhere off the route',
+      beaconDropFrom =>
+        'BEACON plants a lamp where she stands. Arm it from the HUD',
+      runnerFrom =>
+        'Runners dash a straight line, then breathe. Cross on the breath',
+      nightEyesFrom =>
+        'OWL EYES — she sees a little further for the rest of the run',
+      sunkenFrom => 'Sunken ground only clears from beside it. Carve up to it',
+      mirrorFrom =>
+        'Mirrored tiles open together or not at all. ECHO answers them',
+      pouchFrom => 'POUCH doubles the next treat you find',
+      thornFrom => 'Thorns cost two seconds underfoot. Step or steer around',
+      ironpawFrom => 'IRONPAW — thorns and alarms stop minding her crossing',
+      wardenFrom => 'Wardens close every open tile they pass. Keep ahead of it',
+      gloomFrom =>
+        'The middle of this field sits in gloom. Sight is halved there',
+      tremorFrom =>
+        'Vents fire closing surges on a rhythm. Two taps silences one',
+      keepsakeFrom => 'KEEPSAKE — one mercy, spent when all is lost',
+      _ => null,
+    };
+  }
 
   static List<PickupKind> _powerupsFor(LevelSignature signature, int level) {
     final pool = poolFor(level);
@@ -2169,9 +2169,7 @@ extension on LevelPace {
     // and the new sentry, three lit routes moving at once, on the largest
     // board of its band. "Meet one new hazard" cannot mean meeting it behind
     // two of the old one.
-    LevelPace.introduction ||
-    LevelPace.practice ||
-    LevelPace.breather => 1,
+    LevelPace.introduction || LevelPace.practice || LevelPace.breather => 1,
     _ => 0,
   };
 

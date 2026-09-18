@@ -20,10 +20,9 @@
 ///
 /// **Hard is the steeper parallel trail.** Stages 1–20 retain the original
 /// brutal tuning. The paid campaign then opens at one quarter of the full
-/// Normal-to-Hard gap and grows through authored milestones until stage 100 is
-/// exactly as hard as it was before the gradual-curve rebuild. This keeps Hard
-/// distinct without making the first patrol board carry the whole endgame
-/// penalty at once.
+/// Normal-to-Hard gap and grows through authored milestones. From stage 71,
+/// [Campaign] also grants both modes extra reading time while Hard retains
+/// denser ground, more lights and a leaner tap budget.
 ///
 /// **Difficulty moves the board now.** The old invariant ("one seeded board,
 /// only pressure changes") is retired from stage 4 onward: the same seed under
@@ -61,7 +60,8 @@ enum Difficulty {
   /// Warded light arrives at 50 and its answer arrives at 52. Past that point
   /// the campaign keeps adding position, rhythm and lock mechanics; continuing
   /// to tighten every numeric axis as well made the second half exhausting
-  /// rather than satisfyingly hard. Hard deliberately does not use this relief.
+  /// rather than satisfyingly hard. Hard does not use this stage-52 relief;
+  /// both modes get a separate late readability pass from stage 71.
   static const lateCampaignReliefFrom = 52;
 
   bool _hasLateNormalRelief(int level) =>

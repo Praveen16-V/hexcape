@@ -68,6 +68,18 @@ void main() {
   });
 
   group('Holding a tile', () {
+    test('the visible identify control inspects without spending a tap', () {
+      final game = makeGame();
+      final coord = game.dog.cell;
+      game.grid.at(coord)!.revealed = true;
+      final taps = game.taps;
+      game.toggleInspectMode();
+      game.handleBoardTapAt(game.layout.toPixel(coord));
+      expect(game.inspectMode, isFalse);
+      expect(game.inspecting?.hex, game.grid.at(coord)!.type);
+      expect(game.taps, taps);
+    });
+
     test('names a tile she has already seen', () {
       final game = makeGame();
       final coord = game.dog.cell;
@@ -137,12 +149,12 @@ void main() {
       expect(game.inspectFor, lessThanOrEqualTo(0));
     });
 
-    test('a player who turned nudges off is not nudged', () {
+    test('a player who turned nudges off can still inspect', () {
       final game = makeGame();
       game.tuning.hintsEnabled = false;
       game.grid.at(game.dog.cell)!.revealed = true;
       holdOn(game, game.dog.cell);
-      expect(game.inspecting, isNull);
+      expect(game.inspecting, isNotNull);
     });
   });
 
@@ -154,11 +166,11 @@ void main() {
       expect(referenceForPickup(PickupKind.stake), isNotNull);
     });
 
-    test('respects the nudges setting too', () {
+    test('works without nudges too', () {
       final game = makeGame();
       game.tuning.hintsEnabled = false;
       game.inspectPickup(PickupKind.stake);
-      expect(game.inspecting, isNull);
+      expect(game.inspecting, isNotNull);
     });
   });
 

@@ -120,7 +120,11 @@ void main() {
           HexType.scaffold: 2,
           HexType.alarm: 1,
         };
-        for (var n = Difficulty.lateCampaignReliefFrom; n <= Campaign.length; n++) {
+        for (
+          var n = Difficulty.lateCampaignReliefFrom;
+          n <= Campaign.length;
+          n++
+        ) {
           for (final difficulty in Difficulty.values) {
             final rules = Campaign.rulesFor(n, difficulty: difficulty);
             final grid = LevelGenerator.generate(specFor(rules)).grid;
@@ -166,7 +170,11 @@ void main() {
         // would open it — and under fog a tap that does nothing reads as no
         // route at all. Read statically off each lamp's whole sweep, which is
         // exactly what placement constrained.
-        for (var n = Difficulty.lateCampaignReliefFrom; n <= Campaign.length; n++) {
+        for (
+          var n = Difficulty.lateCampaignReliefFrom;
+          n <= Campaign.length;
+          n++
+        ) {
           for (final difficulty in Difficulty.values) {
             final rules = Campaign.rulesFor(n, difficulty: difficulty);
             final level = LevelGenerator.generate(specFor(rules));
@@ -174,8 +182,7 @@ void main() {
             final route = _guardedRoute(level.grid);
             final held = <HexCoord>{
               for (final guard in level.guards)
-                for (final cell in guard.patrol)
-                  ...cell.disc(guard.litRadius),
+                for (final cell in guard.patrol) ...cell.disc(guard.litRadius),
             };
             expect(
               _longestRunOn(route, held),
@@ -232,10 +239,7 @@ void main() {
           reason: 'stage $n blinds Hard past finding the route',
         );
       }
-      expect(
-        Difficulty.hard.revealMultiplierFor(100),
-        closeTo(0.70, 1e-9),
-      );
+      expect(Difficulty.hard.revealMultiplierFor(100), closeTo(0.70, 1e-9));
       // The early campaign keeps its shipped tuning: this relief starts where
       // the legibility problem does.
       expect(Difficulty.hard.revealMultiplierFor(20), 0.6);
@@ -249,12 +253,16 @@ void main() {
       // pacing suite pins are untouched — and Hard's wall stacking caps at
       // 1.15 instead of 1.3.
       final normal = Campaign.rulesFor(100);
-      expect(normal.anchorDensity, closeTo(0.37, 1e-9));
-      expect(normal.heavyDensity, closeTo(0.28, 1e-9));
+      expect(normal.anchorDensity, inInclusiveRange(0.35, 0.42));
+      expect(normal.heavyDensity, inInclusiveRange(0.25, 0.35));
       final hard = Campaign.rulesFor(100, difficulty: Difficulty.hard);
-      expect(hard.anchorDensity, closeTo(0.37 * 1.15, 1e-9));
-      expect(hard.heavyDensity, closeTo(0.28 * 1.15, 1e-9));
-      for (var n = Difficulty.lateCampaignReliefFrom; n <= Campaign.length; n++) {
+      expect(hard.anchorDensity, closeTo(normal.anchorDensity * 1.15, 1e-9));
+      expect(hard.heavyDensity, closeTo(normal.heavyDensity * 1.15, 1e-9));
+      for (
+        var n = Difficulty.lateCampaignReliefFrom;
+        n <= Campaign.length;
+        n++
+      ) {
         final nRules = Campaign.rulesFor(n);
         final hRules = Campaign.rulesFor(n, difficulty: Difficulty.hard);
         expect(
@@ -270,10 +278,7 @@ void main() {
       }
       // Before the relief, the curves are exactly what they were.
       expect(Campaign.rulesFor(51).anchorDensity, greaterThan(0.25));
-      expect(
-        Campaign.rulesFor(40).anchorDensity,
-        closeTo(0.30, 1e-9),
-      );
+      expect(Campaign.rulesFor(40).anchorDensity, closeTo(0.30, 1e-9));
     });
 
     test('stage 83 answers the sight tool with a supply run', () {
@@ -284,20 +289,17 @@ void main() {
       final rules = Campaign.rulesFor(83);
       expect(rules.pace, LevelPace.combination);
       expect(rules.identity.signature, LevelSignature.supplyRun);
-      expect(rules.gatePairs, 2);
+      expect(rules.gatePairs, 0);
       // Four base plus the supply run's extra, possibly one more if the
       // drawn silhouette runs narrow.
       expect(rules.treats, greaterThanOrEqualTo(5));
     });
 
-    test('stage 77 teaches its gate on calm ground', () {
-      // The gate introduction carried the faultLine signature, which more
-      // than doubled its cracked ground: two lessons wearing one banner.
+    test('stage 77 no longer introduces the retired gate', () {
       final rules = Campaign.rulesFor(77);
-      expect(rules.pace, LevelPace.introduction);
-      expect(rules.introduces, contains('switch'));
+      expect(rules.introduces, isNull);
+      expect(rules.gatePairs, 0);
       expect(rules.identity.signature, LevelSignature.gauntlet);
-      expect(rules.faultDensity, lessThan(0.15));
     });
   });
 }

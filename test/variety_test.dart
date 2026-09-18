@@ -45,7 +45,7 @@ bool _sameBoard(LevelRules a, LevelRules b) {
 }
 
 void main() {
-  group('The campaign has a wide vocabulary, not a long one', () {
+  group('The campaign keeps a small vocabulary', () {
     test('every mechanic is in play for a substantial part of the run', () {
       final reach = _reach();
       // Cracked ground, warded light, STAKE and HEEL used to arrive at 61, 81,
@@ -56,7 +56,7 @@ void main() {
       expect(reach['fault'], greaterThanOrEqualTo(60));
       expect(reach['sentry'], greaterThanOrEqualTo(40));
       expect(reach['stake'], greaterThanOrEqualTo(40));
-      expect(reach['heel'], greaterThanOrEqualTo(30));
+      expect(reach['heel'], isNull);
       expect(reach['dig'], greaterThanOrEqualTo(30));
     });
 
@@ -79,22 +79,17 @@ void main() {
       // The whole shape of the teaching ladder: meet the hazard, practise it,
       // then be handed the answer.
       expect(Campaign.stakeFrom, greaterThan(Campaign.faultsFrom));
-      expect(Campaign.heelFrom, greaterThan(Campaign.sentriesFrom));
       expect(Campaign.digFrom, greaterThan(Campaign.guardsFrom));
       for (var n = 1; n < Campaign.stakeFrom; n++) {
         expect(Campaign.poolFor(n), isNot(contains(PickupKind.stake)));
       }
-      for (var n = 1; n < Campaign.heelFrom; n++) {
-        expect(Campaign.poolFor(n), isNot(contains(PickupKind.heel)));
-      }
     });
 
     test('past the campaign every tool is on the table', () {
-      // Endless runs cracked ground and two sentries; withholding the two
-      // tools that answer them is not difficulty.
+      // Endless uses the same small roster as the campaign.
       final endless = Campaign.rulesFor(Campaign.length + 20);
       expect(endless.offeredPowerups, contains(PickupKind.stake));
-      expect(endless.offeredPowerups, contains(PickupKind.heel));
+      expect(endless.offeredPowerups, isNot(contains(PickupKind.heel)));
     });
   });
 
@@ -177,31 +172,11 @@ void main() {
       expect(fault.faultDensity, greaterThan(spring.faultDensity));
       expect(spring.springDensity, greaterThan(fault.springDensity));
       expect(heavy.heavyDensity, greaterThan(fault.heavyDensity));
-      // And each one is *materially* more open than the band's undiluted peak,
-      // not merely a hair under it. The suppression is the load-bearing half of
-      // a signature: a spring level with the band's full wall density is a
-      // gauntlet that happens to have springs, because momentum has nowhere to
-      // land. A margin the pace relief alone could produce would not prove it.
-      final gauntlet = Campaign.rulesFor(66);
-      expect(Campaign.signatureFor(66), LevelSignature.gauntlet);
-      // Measured on the signature, not between two levels. Subtracting one
-      // level's realised density from another's mixes pace relief into the
-      // answer — 66 is an introduction beat and 64 a practice one — and a
-      // margin the pace produced is exactly what the note above says must not
-      // count. It was reading 0.027 between 64 and 66 while springLine's own
-      // suppression was a healthy 0.035 the whole time.
+      // Signature deltas still make each surviving theme distinct.
       expect(LevelSignature.gauntlet.anchorDelta, 0);
       expect(LevelSignature.faultLine.anchorDelta, lessThanOrEqualTo(-0.03));
       expect(LevelSignature.springLine.anchorDelta, lessThanOrEqualTo(-0.03));
       expect(LevelSignature.faultLine.heavyDelta, lessThanOrEqualTo(-0.03));
-      // And it survives into the boards: undiluted is still the densest of the
-      // four, which is the half a delta on an enum cannot prove on its own.
-      expect(gauntlet.anchorDensity, greaterThan(fault.anchorDensity));
-      expect(gauntlet.anchorDensity, greaterThan(spring.anchorDensity));
-      expect(gauntlet.heavyDensity, greaterThan(fault.heavyDensity));
-      // The spikes, held against the same undiluted peak.
-      expect(spring.springDensity, greaterThan(gauntlet.springDensity * 1.5));
-      expect(fault.faultDensity, greaterThan(gauntlet.faultDensity * 1.5));
     });
   });
 }

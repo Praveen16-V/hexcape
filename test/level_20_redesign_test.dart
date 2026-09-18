@@ -122,8 +122,6 @@ void main() {
           HexType.spring,
           HexType.mire,
           HexType.thicket,
-          HexType.sleeper,
-          HexType.foxfire,
         ]) {
           expect(
             count(type),

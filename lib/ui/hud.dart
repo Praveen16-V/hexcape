@@ -220,17 +220,42 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
                 // was on it. Here they take flexible space, which the insets
                 // do not count, so picking one up costs the map nothing.
                 Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: _ChargeRail(
-                      held: game.powerups.heldCharges,
-                      passives: game.powerups.heldPassives,
-                      selected: game.powerups.selectedCharge,
-                      isFresh: game.powerups.isFresh,
-                      pulse: game.tuning.reducedMotion ? 0 : _ticker.value,
-                      onToggle: game.toggleCharge,
-                      onInspect: game.inspectPickup,
-                    ),
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: IconButton(
+                          onPressed: game.toggleInspectMode,
+                          constraints: const BoxConstraints(
+                            minWidth: _controlSize,
+                            minHeight: _controlSize,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            game.inspectMode
+                                ? Icons.help_rounded
+                                : Icons.help_outline_rounded,
+                            size: 22,
+                          ),
+                          color: game.inspectMode
+                              ? Palette.goalGlow
+                              : Palette.hudDim,
+                          tooltip: 'Identify a tile without clearing it',
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _ChargeRail(
+                          held: game.powerups.heldCharges,
+                          passives: game.powerups.heldPassives,
+                          selected: game.powerups.selectedCharge,
+                          isFresh: game.powerups.isFresh,
+                          pulse: game.tuning.reducedMotion ? 0 : _ticker.value,
+                          onToggle: game.toggleCharge,
+                          onInspect: game.inspectPickup,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 // The card takes the hint's slot rather than stacking above it.
@@ -369,7 +394,11 @@ class _HudState extends State<Hud> with SingleTickerProviderStateMixin {
     if (firstRegrowth != null && game.elapsed - firstRegrowth < 5.5) {
       return Strings.hintRegrowth;
     }
-    return null;
+    return game.inspectMode
+        ? 'Tap a tile to identify it without clearing it'
+        : game.tuning.hintsEnabled
+        ? 'Tap ? then a tile to identify it. Hold a tool to identify it'
+        : null;
   }
 
   static String _formatTime(double seconds) {

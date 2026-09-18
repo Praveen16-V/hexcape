@@ -316,6 +316,11 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// withhold (see [HexCell.revealed]).
   ({HexCoord coord, PickupKind? pickup, HexType? hex})? inspecting;
 
+  /// The next board tap reads a symbol without carving or spending a charge.
+  bool inspectMode = false;
+
+  void toggleInspectMode() => inspectMode = !inspectMode;
+
   /// Seconds the inspector card has left. It fades on its own rather than
   /// needing to be dismissed: her clock is running, and a card that has to be
   /// closed is a card that costs the player time to have opened.
@@ -642,6 +647,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// Builds a level and resets everything that belongs to a run.
   void startLevel({int? level, bool reuseSeed = false}) {
     levelNumber = level ?? levelNumber;
+    inspectMode = false;
     // The daily is difficulty-less by construction: its rules are precomputed
     // for the day, and one board for everyone is the whole promise.
     difficultyForRun = isDaily ? Difficulty.normal : tuning.difficulty;
@@ -2837,7 +2843,7 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// the tap the player already spent by touching it.
   @override
   void onLongTapDown(TapDownEvent event) {
-    if (!_ready || isOver || tutorialReading || !tuning.hintsEnabled) {
+    if (!_ready || isOver || tutorialReading) {
       return;
     }
     final point = Offset(event.canvasPosition.x, event.canvasPosition.y);
@@ -2873,9 +2879,6 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// the first place, and "what does STAKE actually do" is the question a
   /// player holding one is most likely to have.
   void inspectPickup(PickupKind kind) {
-    if (!tuning.hintsEnabled) {
-      return;
-    }
     inspecting = (coord: dog.cell, pickup: kind, hex: null);
     inspectFor = inspectSeconds;
   }
@@ -2893,6 +2896,27 @@ class HexcapeGame extends FlameGame with TapCallbacks {
   /// were the one part of the game with no direct test.
   void handleBoardTapAt(Offset point) {
     if (!_ready || isOver || tutorialReading) {
+      return;
+    }
+
+    if (inspectMode) {
+      final coord = layout.toHex(point);
+      final cell = grid.at(coord);
+      if (cell == null) return;
+      PickupKind? pickup;
+      for (final p in pickups) {
+        if (!p.collected && p.coord == coord) {
+          pickup = p.kind;
+          break;
+        }
+      }
+      inspecting = (
+        coord: coord,
+        pickup: pickup,
+        hex: cell.revealed ? cell.type : null,
+      );
+      inspectFor = inspectSeconds;
+      inspectMode = false;
       return;
     }
 

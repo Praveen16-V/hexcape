@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hexcape/entities/pickup.dart';
 import 'package:hexcape/game/daily.dart';
+import 'package:hexcape/game/difficulty.dart';
 import 'package:hexcape/game/hexcape_game.dart';
 import 'package:hexcape/game/level_rules.dart';
 import 'package:hexcape/game/tuning.dart';
@@ -28,15 +29,19 @@ class _Tap extends TapDownEvent {
 Map<String, Object?> runFoodRoute(
   int number,
   DailyChallenge? daily,
-  bool food,
-) {
-  final game = HexcapeGame(tuning: TuningConfig())
+  bool food, {
+  Difficulty difficulty = Difficulty.normal,
+}) {
+  final game = HexcapeGame(tuning: TuningConfig()..difficulty = difficulty)
     ..onGameResize(Vector2(390, 844));
   game.overlays.addEntry(Overlays.result, (_, _) => const SizedBox());
   // Initialize the daily synchronously; startDailyRun queues a Flutter frame.
   game.daily = daily;
   game.startLevel(level: number);
-  expect(game.seed, daily?.rules.seed ?? Campaign.rulesFor(number).seed);
+  expect(
+    game.seed,
+    daily?.rules.seed ?? Campaign.rulesFor(number, difficulty: difficulty).seed,
+  );
   game.tutorial?.skip();
   final costs = PickupSystem.detourCosts(game.grid);
   final treats = game.pickups.where((p) => p.kind == PickupKind.treat).toList();

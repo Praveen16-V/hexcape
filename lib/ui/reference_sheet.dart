@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../components/glyphs.dart';
 import '../entities/pickup.dart';
 import '../game/level_rules.dart';
+import '../game/mechanic_roster.dart';
 import '../hex/hex_cell.dart';
 import '../hex/hex_layout.dart';
 import '../theme/palette.dart';
@@ -135,7 +136,10 @@ class ReferenceEntry {
 /// arrive without an explanation.
 List<ReferenceEntry> referenceFor(int unlocked) => [
   for (final e in allReferenceEntries)
-    if (e.unlocksAt <= unlocked) e,
+    if (e.unlocksAt <= unlocked &&
+        (e.hex == null || MechanicRoster.tiles.contains(e.hex)) &&
+        (e.pickup == null || MechanicRoster.pickups.contains(e.pickup)))
+      e,
 ];
 
 /// What a tile is, for the in-place inspector.
@@ -238,6 +242,14 @@ const allReferenceEntries = <ReferenceEntry>[
         'unspent. Holding one costs nothing.',
     icon: Icons.backpack,
     unlocksAt: Campaign.foundationEnd + 1,
+  ),
+  ReferenceEntry(
+    section: ReferenceSection.rules,
+    name: 'Look closer',
+    blurb:
+        'Tap ? then a visible tile to identify it without clearing it. Hold a '
+        'tool to identify it. Hidden tiles stay unknown until she can see them.',
+    icon: Icons.help_outline,
   ),
   ReferenceEntry(
     section: ReferenceSection.rules,
@@ -514,7 +526,7 @@ const allReferenceEntries = <ReferenceEntry>[
     blurb:
         'A pale light that sweeps like a patrol, but does the opposite: she '
         'walks through it freely and it never bites — your taps are what it '
-        'refuses. Wait for it to pass, or HEEL and time the gap.',
+        'refuses. Wait for it to pass before carving.',
     icon: Icons.highlight,
     unlocksAt: Campaign.sentriesFrom,
   ),
@@ -568,7 +580,7 @@ const allReferenceEntries = <ReferenceEntry>[
     name: 'The gloom',
     blurb:
         'Sundown on a whole band: beyond the lamps, everything sits at half '
-        'reach. LANTERN is a window; NIGHT EYES is forever.',
+        'reach. Move closer before choosing the next tile.',
     icon: Icons.nightlight,
     unlocksAt: Campaign.gloomFrom,
   ),
@@ -676,7 +688,7 @@ const allReferenceEntries = <ReferenceEntry>[
     name: 'Trowel',
     blurb:
         'The next tap opens the tapped tile and the two straight beyond it — '
-        'a corridor carved with one decision. BLAST\’s line-minded cousin.',
+        'a corridor carved with one decision. BLAST’s line-minded cousin.',
     pickup: PickupKind.trowel,
     unlocksAt: Campaign.trowelFrom,
   ),
@@ -815,7 +827,7 @@ const allReferenceEntries = <ReferenceEntry>[
     name: 'Night eyes',
     blurb:
         'The pool of light around her stays wider for the rest of the run. '
-        'The gloom\’s answer that does not switch off.',
+        'The gloom’s answer that does not switch off.',
     pickup: PickupKind.nightEyes,
     unlocksAt: Campaign.nightEyesFrom,
   ),

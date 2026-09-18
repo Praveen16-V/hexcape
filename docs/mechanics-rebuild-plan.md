@@ -1,5 +1,8 @@
 # Mechanics Rebuild Plan — 30 Obstacles + 30 Powerups
 
+> Historical plan. The current player-facing campaign roster is documented in
+> [mechanic-roster.md](mechanic-roster.md): ten tiles and ten powers, plus treats.
+
 Status: **implemented** (all six sections code-complete; `flutter analyze` +
 the full test run still owed — the sandbox has no Flutter toolchain).
 This document is the full list of what was built, where each piece enters

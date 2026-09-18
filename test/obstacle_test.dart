@@ -448,13 +448,8 @@ void main() {
       // when a mechanic is added, and a banner on a level that introduces
       // nothing is the failure this is watching for.
       //
-      // It read 10 for a long time after the rebuild took the campaign to
-      // fifty-three gates, which is the failure mode of a tripwire nobody
-      // resets: it stopped saying anything about the game and only said that
-      // it was out of date. Duplicates cannot hide in here — `introductionAt`
-      // switches on these constants, so two gates on one level would be an
-      // unreachable_switch_case at compile time.
-      expect(announced, 53);
+      // The active roster announces only the ideas players can still meet.
+      expect(announced, 21);
     });
 
     test('the powerup pool only ever widens', () {

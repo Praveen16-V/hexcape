@@ -291,8 +291,7 @@ void main() {
           final level = LevelGenerator.generate(specFor(rules));
           final budget = (level.par * rules.budgetMultiplier).ceil();
           final room =
-              (budget - level.par + rules.treats * rules.treatTaps) /
-              level.par;
+              (budget - level.par + rules.treats * rules.treatTaps) / level.par;
           final isNarrow =
               rules.shape == FieldShape.key ||
               rules.shape == FieldShape.crescent;
@@ -329,7 +328,7 @@ void main() {
           // Level 52 deliberately starts Normal's late-campaign safety margin.
           // Compare peaks inside that revised curve; requiring 53 to stay below
           // the pre-relief level-40 peak would erase the relaxation entirely.
-          if (n == Difficulty.lateCampaignReliefFrom) {
+          if (n == Difficulty.lateCampaignReliefFrom || n == 71) {
             budget = double.infinity;
             clock = double.infinity;
           }

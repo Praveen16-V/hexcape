@@ -31,31 +31,18 @@ void main() {
         Campaign.mireFrom,
         Campaign.springsFrom,
         Campaign.thicketFrom,
-        Campaign.sleeperFrom,
-        Campaign.foxfireFrom,
         Campaign.guardsFrom,
         Campaign.faultsFrom,
-        Campaign.thatchFrom,
-        Campaign.iceFrom,
         Campaign.alarmFrom,
-        Campaign.hardpanFrom,
-        Campaign.overgrowthFrom,
         Campaign.sentriesFrom,
-        Campaign.eddyFrom,
-        Campaign.scaffoldFrom,
-        Campaign.slopesFrom,
-        Campaign.magnetFrom,
         Campaign.spinnerFrom,
         Campaign.blinkerFrom,
         Campaign.beaconFrom,
-        Campaign.gateFrom,
         Campaign.runnerFrom,
         Campaign.sunkenFrom,
-        Campaign.mirrorFrom,
         Campaign.thornFrom,
         Campaign.wardenFrom,
         Campaign.gloomFrom,
-        Campaign.tremorFrom,
       ]) {
         final intro = Campaign.rulesFor(level);
         final practice = Campaign.rulesFor(level + 1);
@@ -94,61 +81,47 @@ void main() {
       }
     });
 
-    test('an introduction never sweeps harder than the beat that practises it', () {
-      // The asymmetry that made level 50 a wall. An introduction takes more
-      // relief than its practice beat on every numeric axis — budget, clock,
-      // regrowth, walls, obstacle density — and patrol count was the one place
-      // it took *less*, because only practice and breather claimed a guard
-      // relief. It went unnoticed while the gates were early and the band
-      // carried one patrol anyway, and it landed hardest on the sentry
-      // introduction: level 50 met the game's first tap-refusing light behind
-      // two patrols, three lit routes moving at once on the largest board of
-      // its band, while the practice level after it had only two.
-      //
-      // Both counts, because the subject here is how much of the board is lit
-      // and moving, not patrols specifically.
-      for (var level = 4; level < Campaign.length; level++) {
-        if (Campaign.paceFor(level) != LevelPace.introduction) continue;
-        final intro = Campaign.rulesFor(level);
-        final practice = Campaign.rulesFor(level + 1);
-        expect(
-          intro.guards,
-          lessThanOrEqualTo(practice.guards),
-          reason: 'patrols at intro $level',
-        );
-        expect(
-          _lightFamilies(intro).fold<int>(0, (a, b) => a + b),
-          lessThanOrEqualTo(
-            _lightFamilies(practice).fold<int>(0, (a, b) => a + b),
-          ),
-          reason: 'lights at intro $level',
-        );
-      }
-    });
+    test(
+      'an introduction never sweeps harder than the beat that practises it',
+      () {
+        // The asymmetry that made level 50 a wall. An introduction takes more
+        // relief than its practice beat on every numeric axis — budget, clock,
+        // regrowth, walls, obstacle density — and patrol count was the one place
+        // it took *less*, because only practice and breather claimed a guard
+        // relief. It went unnoticed while the gates were early and the band
+        // carried one patrol anyway, and it landed hardest on the sentry
+        // introduction: level 50 met the game's first tap-refusing light behind
+        // two patrols, three lit routes moving at once on the largest board of
+        // its band, while the practice level after it had only two.
+        //
+        // Both counts, because the subject here is how much of the board is lit
+        // and moving, not patrols specifically.
+        for (var level = 4; level < Campaign.length; level++) {
+          if (Campaign.paceFor(level) != LevelPace.introduction) continue;
+          final intro = Campaign.rulesFor(level);
+          final practice = Campaign.rulesFor(level + 1);
+          expect(
+            intro.guards,
+            lessThanOrEqualTo(practice.guards),
+            reason: 'patrols at intro $level',
+          );
+          expect(
+            _lightFamilies(intro).fold<int>(0, (a, b) => a + b),
+            lessThanOrEqualTo(
+              _lightFamilies(practice).fold<int>(0, (a, b) => a + b),
+            ),
+            reason: 'lights at intro $level',
+          );
+        }
+      },
+    );
 
     test('post-20 tools are banner-only rather than artificial easy beats', () {
       for (final level in [
-        Campaign.slowbeatFrom,
         Campaign.cloakFrom,
         Campaign.stakeFrom,
-        Campaign.trowelFrom,
-        Campaign.harvestFrom,
-        Campaign.whistleFrom,
         Campaign.digFrom,
-        Campaign.maulFrom,
-        Campaign.rewindFrom,
-        Campaign.surepawsFrom,
         Campaign.wardownFrom,
-        Campaign.heelFrom,
-        Campaign.echoFrom,
-        Campaign.seedFrom,
-        Campaign.moleFrom,
-        Campaign.waystoneFrom,
-        Campaign.beaconDropFrom,
-        Campaign.nightEyesFrom,
-        Campaign.pouchFrom,
-        Campaign.ironpawFrom,
-        Campaign.keepsakeFrom,
       ]) {
         expect(Campaign.introductionAt(level), isNotNull);
         expect(
@@ -243,9 +216,9 @@ void main() {
         level <= Campaign.length;
         level++
       ) {
-        if (level == Difficulty.lateCampaignReliefFrom) {
-          // The late Normal safety margin is a deliberate curve reset. Peaks
-          // must keep climbing on each side of it, not erase the reset.
+        if (level == Difficulty.lateCampaignReliefFrom || level == 71) {
+          // Both safety margins deliberately reset the pressure curve. Peaks
+          // must keep climbing on each side of each reset.
           previous = null;
         }
         final current = Campaign.rulesFor(level);
@@ -355,9 +328,9 @@ void main() {
       var regrow = double.infinity;
       for (final band in CampaignBand.values) {
         if (band == CampaignBand.endless) continue;
-        if (band == CampaignBand.mastery) {
-          // Relief begins inside Mastery. Start a new comparison curve and
-          // measure this band only on the relaxed side of that boundary.
+        if (band == CampaignBand.mastery || band == CampaignBand.vigil) {
+          // Normal gets another readability reset from level 71 onward.
+          // Compare each band within one side of that reset.
           budget = double.infinity;
           clock = double.infinity;
           regrow = double.infinity;
