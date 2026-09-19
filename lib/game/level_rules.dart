@@ -1641,53 +1641,58 @@ class Campaign {
     return LevelPace.combination;
   }
 
-  /// Past the campaign, Collapse's slope keeps going — but every value has a
-  /// floor.
+  /// A new run gets room to settle in before the pressure builds again.
   ///
-  /// An unbounded ramp reaches a point no play can survive, and an endless mode
-  /// that becomes arithmetically impossible is not difficulty, it is a wall with
-  /// a number on it. These floors sit just beyond the hardest campaign level, so
-  /// the climb is still felt without becoming a lie.
+  /// Endless used to bypass the late campaign's readability relief: depth one
+  /// abruptly lost time, regrowth delay, discovery taps and half its food value.
+  /// Hard also lost the wall-density cap and gained two lights. A restartable
+  /// run should build toward that challenge, not open with all of it at once.
+  /// Keep this curve separate from the authored campaign and bound both modes
+  /// at margins that still allow reading fog and recovering from a wrong turn.
   static LevelRules _endless(
     int level, {
     int? seed,
     Difficulty difficulty = Difficulty.normal,
   }) {
-    final beyond = level - length;
-    final t = 1 - math.pow(0.97, beyond).toDouble();
+    final depth = level - length;
+    // Depth one is the actual opening value. Half the numeric ramp takes
+    // roughly 35 depths, rather than starting near its limit and tightening.
+    final t = 1 - math.pow(0.98, depth - 1).toDouble();
+    double ramp(double opening, double limit) {
+      final value = _lerp((opening, limit), t);
+      return value.clamp(math.min(opening, limit), math.max(opening, limit));
+    }
+
+    final hard = difficulty == Difficulty.hard;
     final os = difficulty.obstacleDensityScaleFor(level);
+    // Carry forward the campaign's wall cap; Hard still has denser hazards.
+    final osWalls = math.min(os, 1.15);
+    final extraLights = math.max(0, difficulty.guardDelta(level) - 1);
     return LevelRules(
       level: level,
       seed: seed ?? seedFor(level),
       columns: 12,
-      rows: math.min(29, 27 + (beyond ~/ 12)),
-      // Capped rather than merely approached. `t` tends to 1 without reaching
-      // it, so these land a rounding error above their ceiling instead of on
-      // it — and the ceiling is a real limit, not a decoration.
-      anchorDensity: math.min(0.44 * os, (0.42 + 0.02 * t) * os),
-      heavyDensity: math.min(0.34 * os, (0.32 + 0.02 * t) * os),
-      springDensity: 0.10 * os,
-      faultDensity: math.min(0.25 * os, (0.22 + 0.03 * t) * os),
+      rows: math.min(29, 27 + (depth ~/ 12)),
+      anchorDensity: ramp(0.34, 0.40) * osWalls,
+      heavyDensity: ramp(0.25, 0.30) * osWalls,
+      springDensity: ramp(0.08, 0.10) * os,
+      faultDensity: ramp(0.16, 0.22) * os,
       slopeDensity: 0,
-      sunkenDensity: math.min(0.16 * os, (0.13 + 0.03 * t) * os),
-      // The rebuilt families carry on past the campaign, capped rather than
-      // approached so the arithmetic cannot drift past a real limit — same
-      // discipline as the classic six, and for the same reason: an endless
-      // mode that becomes arithmetically impossible is not difficulty.
+      sunkenDensity: ramp(0.10, 0.14) * os,
       hardpanDensity: 0,
       thatchDensity: 0,
       overgrowthDensity: 0,
       tremorDensity: 0,
       iceDensity: 0,
-      mireDensity: 0.075 * os,
+      mireDensity: ramp(0.05, 0.075) * os,
       eddyDensity: 0,
       magnetDensity: 0,
-      thicketDensity: 0.05 * os,
+      thicketDensity: ramp(0.035, 0.05) * os,
       sleeperDensity: 0,
       foxfireDensity: 0,
       scaffoldDensity: 0,
-      thornDensity: math.min(0.032 * os, (0.028 + 0.004 * t) * os),
-      alarmDensity: 0.012 * os,
+      thornDensity: ramp(0.020, 0.028) * os,
+      alarmDensity: ramp(0.008, 0.012) * os,
       gatePairs: 0,
       mirrorPairs: 0,
       gloom: true,
@@ -1696,48 +1701,28 @@ class Campaign {
       beacons: 1,
       runners: 1,
       wardens: 1,
-      // Endless keeps its own floors and ceilings — they sit just past the
-      // hardest campaign level rather than at the campaign's limits — and
-      // difficulty moves inside them, shifting the patrol ceiling by its own
-      // step exactly as the bands do.
-      sentries: math.max(1, 2 + difficulty.guardDelta(level)),
-      guards: math.max(1, 3 + difficulty.guardDelta(level)),
-      guardSpeed: math.max(
-        0.75,
-        math.min(
-          1.25 + difficulty.guardSpeedDelta(level),
-          1.10 + 0.15 * t + difficulty.guardSpeedDelta(level),
-        ),
-      ),
-      treats: math.max(1, 4 + difficulty.supplyDeltaFor(level)),
-      powerups: math.max(1, 3 + difficulty.powerupDeltaFor(level)),
-      // Everything, which past level a hundred it always should have been.
-      // This used to name Mastery's pool, so endless ran cracked ground at 0.22
-      // and two sentries while offering neither STAKE nor HEEL — the two tools
-      // that answer them. A pressure with its answer withheld is not difficulty.
+      // Add one light at a time, away from the board-size steps at 12 and 24.
+      // The five specialist lights remain available from the first depth.
+      guards: (depth < 16 ? 2 : 3) + extraLights,
+      sentries: (depth < 32 ? 1 : 2) + extraLights,
+      guardSpeed: ramp(1.0, 1.15) + difficulty.guardSpeedDelta(level),
+      treats: 5 + difficulty.supplyDeltaFor(level),
+      powerups: 4 + difficulty.powerupDeltaFor(level),
       offeredPowerups: poolFor(level),
       powerupRotation: level,
-      treatSeconds: 1.3,
-      treatTaps: math.max(1, 1 + difficulty.treatTapDeltaFor(level)),
+      // A snack should pay for a short detour, not lose half its value just
+      // because the campaign ended. Hard keeps the smaller tap refund.
+      treatSeconds: ramp(3.5, 2.8),
+      treatTaps: 2 + difficulty.treatTapDeltaFor(level),
       regrowth: true,
-      regrowDelay: math.max(
-        difficulty.regrowFloor,
-        3.8 - 0.6 * t + difficulty.regrowRelief(level),
-      ),
+      regrowDelay: hard ? ramp(5.6, 4.4) : ramp(7.0, 5.8),
       fog: true,
       budget: true,
-      // Endless's own floor under Hard is par, exactly where the campaign's
-      // 1.0 Hard floor leaves it — the mode's promise does not bend just
-      // because the campaign ran out of levels.
-      budgetMultiplier: math.max(
-        math.max(1.03, difficulty.budgetFloorFor(level)),
-        1.06 - 0.03 * t + difficulty.budgetRelief(level),
-      ),
+      // Explicit per-mode limits avoid Hard's campaign offsets immediately
+      // pinning the entire run to a floor, as the previous curve did.
+      budgetMultiplier: hard ? ramp(1.22, 1.10) : ramp(1.38, 1.22),
       hunger: true,
-      hungerSecondsPerCell: math.max(
-        math.max(0.78, difficulty.hungerFloor),
-        0.85 - 0.07 * t + difficulty.hungerRelief(level),
-      ),
+      hungerSecondsPerCell: hard ? ramp(1.30, 1.10) : ramp(1.50, 1.25),
       pace: LevelPace.endless,
     );
   }
